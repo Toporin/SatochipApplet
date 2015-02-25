@@ -6,7 +6,7 @@
  * 					-simple Bitcoin transaction signatures 
  * 					-Bitcoin message signatures
  * 					
- * 
+ *  
  * Based on the M.US.C.L.E framework:
  * see http://pcsclite.alioth.debian.org/musclecard.com/musclecard/
  * see https://github.com/martinpaljak/MuscleApplet/blob/d005f36209bdd7020bac0d783b228243126fd2f8/src/com/musclecard/CardEdge/CardEdge.java
