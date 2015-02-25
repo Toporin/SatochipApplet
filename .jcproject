@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+<properties>
+<comment>Java Card project properties</comment>
+<entry key="org.satochip.applet">0x53:0x61:0x74:0x6f:0x43:0x68:0x69:0x70</entry>
+<entry key="org.satochip.applet.CardEdge">0x53:0x61:0x74:0x6f:0x43:0x68:0x69:0x70:0x00</entry>
+</properties>
