@@ -1033,7 +1033,14 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 					else
 						ISOException.throwIt(SW_INVALID_PARAMETER);
 					break;
-				// to do: support AES
+				case KeyBuilder.TYPE_AES:
+					if (ciph_mode == Cipher.ALG_AES_BLOCK_128_CBC_NOPAD)
+						ciph_alg_id = Cipher.ALG_AES_BLOCK_128_CBC_NOPAD;
+					else if (ciph_mode == Cipher.ALG_AES_BLOCK_128_ECB_NOPAD)
+						ciph_alg_id = Cipher.ALG_AES_BLOCK_128_ECB_NOPAD;
+					else
+						ISOException.throwIt(SW_INVALID_PARAMETER);
+					break;
 				default:
 					ISOException.throwIt(SW_INTERNAL_ERROR);
 					return; // Compiler warning (ciph_alg_id unset)
@@ -1169,6 +1176,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 					else // FIXED
 						ISOException.throwIt(SW_UNSUPPORTED_FEATURE);
 					break;
+// For elliptic curves, use signTransaction and signMessage instead					
 //				case KeyBuilder.TYPE_EC_FP_PUBLIC:
 //				case KeyBuilder.TYPE_EC_FP_PRIVATE:
 //					if (ciph_mode == ALG_ECDSA_SHA_256)
@@ -1415,7 +1423,37 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			ISOException.throwIt(SW_UNSPECIFIED_ERROR);
 		}		
 	}	
-
+	
+	/** 
+	 * This function generates a symmetric key using the card's on board key generation
+	 * process. The key number, algorithm
+	 * type, and algorithm parameters are specified by arguments P1 and P2 and by
+	 * provided DATA.
+	 * 
+	 * ins: 0x30
+	 * p1: private key number (0x00-0x0F)
+	 * p2: public key number (0x00-0x0F)
+	 * data: [Key Generation Parameters] 
+	 * return: none
+	 */
+	private void GenerateSymmetricKey(APDU apdu, byte[] buffer) {
+		short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+		if (bytesLeft != apdu.setIncomingAndReceive())
+			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+		byte alg_id = buffer[OFFSET_GENKEY_ALG];
+		switch (alg_id) {
+			case KeyPair.ALG_RSA:
+			case KeyPair.ALG_RSA_CRT:
+				GenerateKeyPairRSA(buffer);
+				break;
+			case KeyPair.ALG_EC_FP:
+				GenerateKeyPairECFP(buffer);
+				break;
+			default:
+				ISOException.throwIt(SW_INCORRECT_ALG);
+		}
+	}
+	
 	/** 
 	 * This function allows the import of a key into the card.
 	 * The exact key blob contents depend on the key’s algorithm, type and actual
