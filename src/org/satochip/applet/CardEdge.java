@@ -176,9 +176,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 
 	// Keys' use and management
 	private final static byte INS_GEN_KEYPAIR = (byte) 0x30;
-	private final static byte INS_GEN_SYMKEY = (byte) 0x31;
+	private final static byte INS_GEN_KEYSYM = (byte) 0x31;
 	private final static byte INS_IMPORT_KEY = (byte) 0x32;
-	private final static byte INS_EXPORT_KEY = (byte) 0x34;
+	//private final static byte INS_EXPORT_KEY = (byte) 0x34;
 	private final static byte INS_GET_PUBLIC_FROM_PRIVATE= (byte)0x35;
 	private final static byte INS_COMPUTE_CRYPT = (byte) 0x36;
 	private final static byte INS_COMPUTE_SIGN = (byte) 0x37; // added
@@ -522,6 +522,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			break;
 		case INS_GEN_KEYPAIR:
 			GenerateKeyPair(apdu, buffer);
+			break;
+		case INS_GEN_KEYSYM:
+			GenerateSymmetricKey(apdu, buffer);
 			break;
 		case INS_IMPORT_KEY:
 			ImportKey(apdu, buffer);
@@ -1275,7 +1278,8 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 				GenerateKeyPairRSA(buffer);
 				break;
 			case KeyPair.ALG_EC_FP:
-				GenerateKeyPairECFP(buffer);
+				//GenerateKeyPairECFP(buffer);
+				GeneratePrivateKeyECFP(buffer);
 				break;
 			default:
 				ISOException.throwIt(SW_INCORRECT_ALG);
@@ -1340,37 +1344,118 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		kp.genKeyPair();
 	}
 	
+//	// Bitcoin
+//	// not supported by current chips?
+//	// Data has already been received
+//	private void GenerateKeyPairECFP(byte[] buffer){
+//		byte prv_key_nb = buffer[ISO7816.OFFSET_P1];
+//		if ((prv_key_nb < 0) || (prv_key_nb >= MAX_NUM_KEYS))
+//			ISOException.throwIt(SW_INCORRECT_P1);
+//		byte pub_key_nb = buffer[ISO7816.OFFSET_P2];
+//		if ((pub_key_nb < 0) || (pub_key_nb >= MAX_NUM_KEYS))
+//			ISOException.throwIt(SW_INCORRECT_P2);
+//		if (pub_key_nb == prv_key_nb)
+//			ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
+//		short key_size = Util.getShort(buffer, OFFSET_GENKEY_SIZE);
+//		byte options = buffer[OFFSET_GENKEY_OPTIONS];
+//		ECPublicKey pub_key = (ECPublicKey) getKey(pub_key_nb, KeyBuilder.TYPE_EC_FP_PUBLIC, key_size);
+//		ECPrivateKey prv_key = (ECPrivateKey) getKey(prv_key_nb, KeyBuilder.TYPE_EC_FP_PRIVATE, key_size);
+//		/* If we're going to overwrite a keyPair's contents, check ACL */
+//		if (pub_key.isInitialized() && !authorizeKeyOp(pub_key_nb,ACL_WRITE))
+//			ISOException.throwIt(SW_UNAUTHORIZED);
+//		if (prv_key.isInitialized() && !authorizeKeyOp(prv_key_nb,ACL_WRITE))
+//			ISOException.throwIt(SW_UNAUTHORIZED);
+//		/* Store private key ACL */
+//		Util.arrayCopy(buffer, OFFSET_GENKEY_PRV_ACL, keyACLs, (short) (prv_key_nb * KEY_ACL_SIZE), KEY_ACL_SIZE);
+//		/* Store public key ACL */
+//		Util.arrayCopy(buffer, OFFSET_GENKEY_PUB_ACL, keyACLs, (short) (pub_key_nb * KEY_ACL_SIZE), KEY_ACL_SIZE);
+//		switch (options) {
+//        	case OPT_DEFAULT:
+//	            // As default params were specified, we have to clear the public key
+//        		// if already initialized, otherwise their params would be used.
+//				if (pub_key.isInitialized())
+//					pub_key.clearKey();
+//				if (prv_key.isInitialized())
+//					prv_key.clearKey();
+//                break;
+//        	case OPT_EC_SECP256k1:
+//        		// Bitcoin uses 256-bit keysize!
+//        		if (key_size!=256)
+//        			ISOException.throwIt(SW_INVALID_PARAMETER);
+//	            // As default params were specified, we have to clear the public key
+//        		// if already initialized, otherwise their params would be used.
+//				if (pub_key.isInitialized())
+//					pub_key.clearKey();
+//				if (prv_key.isInitialized())
+//					prv_key.clearKey();
+//				// PINCOIN default is secp256k1 (over Fp)
+//				pub_key.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
+//				prv_key.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
+//				pub_key.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
+//				prv_key.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
+//				pub_key.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
+//				prv_key.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
+//				pub_key.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
+//				prv_key.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
+//				pub_key.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
+//				prv_key.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
+//				pub_key.setK( SECP256K1_K);
+//				prv_key.setK( SECP256K1_K);
+//				break;
+//            default:
+//            	ISOException.throwIt(SW_INVALID_PARAMETER);
+//		}
+//		/* TODO: Migrate checks on KeyPair on the top, so we avoid resource
+//		 * allocation on error conditions		 */
+//		/* If no keypair was previously used, ok. If different keypairs were
+//		 * used, or for 1 key there is a keypair but the other key not, then
+//		 * error If the same keypair object was used previously, check keypair
+//		 * size & type							*/
+//		if ((keyPairs[pub_key_nb] == null) && (keyPairs[prv_key_nb] == null)) {
+//			keyPairs[pub_key_nb] = new KeyPair(pub_key, prv_key);
+//			keyPairs[prv_key_nb] = keyPairs[pub_key_nb];
+//		} else if (keyPairs[pub_key_nb] != keyPairs[prv_key_nb])
+//			ISOException.throwIt(SW_OPERATION_NOT_ALLOWED);
+//		KeyPair kp = keyPairs[pub_key_nb];
+//		if ((kp.getPublic() != pub_key) || (kp.getPrivate() != prv_key))
+//			// This should never happen with this Applet policies
+//			ISOException.throwIt(SW_INTERNAL_ERROR);
+//		// We Rely on genKeyPair() to make all necessary checks about types
+//		try {
+//			kp.genKeyPair();
+//		} catch (Exception e) {
+//			ISOException.throwIt(SW_UNSPECIFIED_ERROR);
+//		}		
+//	}	
+
 	// Bitcoin
-	// not supported by current chips?
-	// Data has already been received
-	private void GenerateKeyPairECFP(byte[] buffer){
+	// Generate only a random private key
+	// the corresponding public key can be recovered externally using getPublicKeyFromPrivate()
+	private void GeneratePrivateKeyECFP(byte[] buffer){
 		byte prv_key_nb = buffer[ISO7816.OFFSET_P1];
 		if ((prv_key_nb < 0) || (prv_key_nb >= MAX_NUM_KEYS))
 			ISOException.throwIt(SW_INCORRECT_P1);
-		byte pub_key_nb = buffer[ISO7816.OFFSET_P2];
-		if ((pub_key_nb < 0) || (pub_key_nb >= MAX_NUM_KEYS))
-			ISOException.throwIt(SW_INCORRECT_P2);
-		if (pub_key_nb == prv_key_nb)
-			ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
+//		byte pub_key_nb = buffer[ISO7816.OFFSET_P2];
+//		if ((pub_key_nb < 0) || (pub_key_nb >= MAX_NUM_KEYS))
+//			ISOException.throwIt(SW_INCORRECT_P2);
+//		if (pub_key_nb == prv_key_nb)
+//			ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
 		short key_size = Util.getShort(buffer, OFFSET_GENKEY_SIZE);
 		byte options = buffer[OFFSET_GENKEY_OPTIONS];
-		ECPublicKey pub_key = (ECPublicKey) getKey(pub_key_nb, KeyBuilder.TYPE_EC_FP_PUBLIC, key_size);
 		ECPrivateKey prv_key = (ECPrivateKey) getKey(prv_key_nb, KeyBuilder.TYPE_EC_FP_PRIVATE, key_size);
 		/* If we're going to overwrite a keyPair's contents, check ACL */
-		if (pub_key.isInitialized() && !authorizeKeyOp(pub_key_nb,ACL_WRITE))
-			ISOException.throwIt(SW_UNAUTHORIZED);
 		if (prv_key.isInitialized() && !authorizeKeyOp(prv_key_nb,ACL_WRITE))
 			ISOException.throwIt(SW_UNAUTHORIZED);
 		/* Store private key ACL */
 		Util.arrayCopy(buffer, OFFSET_GENKEY_PRV_ACL, keyACLs, (short) (prv_key_nb * KEY_ACL_SIZE), KEY_ACL_SIZE);
-		/* Store public key ACL */
-		Util.arrayCopy(buffer, OFFSET_GENKEY_PUB_ACL, keyACLs, (short) (pub_key_nb * KEY_ACL_SIZE), KEY_ACL_SIZE);
+		
+		if (randomData == null)
+			randomData = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
+		
 		switch (options) {
         	case OPT_DEFAULT:
 	            // As default params were specified, we have to clear the public key
         		// if already initialized, otherwise their params would be used.
-				if (pub_key.isInitialized())
-					pub_key.clearKey();
 				if (prv_key.isInitialized())
 					prv_key.clearKey();
                 break;
@@ -1380,48 +1465,23 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
         			ISOException.throwIt(SW_INVALID_PARAMETER);
 	            // As default params were specified, we have to clear the public key
         		// if already initialized, otherwise their params would be used.
-				if (pub_key.isInitialized())
-					pub_key.clearKey();
 				if (prv_key.isInitialized())
 					prv_key.clearKey();
 				// PINCOIN default is secp256k1 (over Fp)
-				pub_key.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
 				prv_key.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
-				pub_key.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
 				prv_key.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
-				pub_key.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
 				prv_key.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
-				pub_key.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
 				prv_key.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
-				pub_key.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
 				prv_key.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
-				pub_key.setK( SECP256K1_K);
 				prv_key.setK( SECP256K1_K);
+				// Set secret value from random 
+				randomData.generateData(recvBuffer,(short)0,(short)(key_size/8));
+				prv_key.setS(recvBuffer, (short)0, (short)(key_size/8));
+				Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)(key_size/8), (byte)0);
 				break;
             default:
             	ISOException.throwIt(SW_INVALID_PARAMETER);
 		}
-		/* TODO: Migrate checks on KeyPair on the top, so we avoid resource
-		 * allocation on error conditions		 */
-		/* If no keypair was previously used, ok. If different keypairs were
-		 * used, or for 1 key there is a keypair but the other key not, then
-		 * error If the same keypair object was used previously, check keypair
-		 * size & type							*/
-		if ((keyPairs[pub_key_nb] == null) && (keyPairs[prv_key_nb] == null)) {
-			keyPairs[pub_key_nb] = new KeyPair(pub_key, prv_key);
-			keyPairs[prv_key_nb] = keyPairs[pub_key_nb];
-		} else if (keyPairs[pub_key_nb] != keyPairs[prv_key_nb])
-			ISOException.throwIt(SW_OPERATION_NOT_ALLOWED);
-		KeyPair kp = keyPairs[pub_key_nb];
-		if ((kp.getPublic() != pub_key) || (kp.getPrivate() != prv_key))
-			// This should never happen with this Applet policies
-			ISOException.throwIt(SW_INTERNAL_ERROR);
-		// We Rely on genKeyPair() to make all necessary checks about types
-		try {
-			kp.genKeyPair();
-		} catch (Exception e) {
-			ISOException.throwIt(SW_UNSPECIFIED_ERROR);
-		}		
 	}	
 	
 	/** 
