@@ -89,7 +89,7 @@ import javacard.security.KeyPair;
 import javacard.security.RSAPrivateCrtKey;
 import javacard.security.RSAPrivateKey;
 import javacard.security.RSAPublicKey;
-//import javacard.security.RandomData;
+import javacard.security.RandomData;
 import javacard.security.Signature;
 import javacard.security.MessageDigest;
 import javacardx.apdu.ExtendedLength; //debugXL
@@ -176,6 +176,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 
 	// Keys' use and management
 	private final static byte INS_GEN_KEYPAIR = (byte) 0x30;
+	private final static byte INS_GEN_SYMKEY = (byte) 0x31;
 	private final static byte INS_IMPORT_KEY = (byte) 0x32;
 	private final static byte INS_EXPORT_KEY = (byte) 0x34;
 	private final static byte INS_GET_PUBLIC_FROM_PRIVATE= (byte)0x35;
@@ -356,7 +357,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	// Says if we are using a signature or a cipher object
 	private byte[] ciph_dirs;
 	private KeyPair[] keyPairs;
-	//private RandomData randomData; // RandomData class instance
+	private RandomData randomData; // RandomData class instance
 
 	// PIN and PUK objects, allocated on demand
 	private OwnerPIN[] pins, ublk_pins;
@@ -729,7 +730,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 
 		logged_ids = 0x00; // No identities logged in
 		//getChallengeDone = false; // No GetChallenge() issued so far
-		//randomData = null; // Will be created on demand when needed
+		randomData = null; // Will be created on demand when needed
 
 		STD_PUBLIC_ACL = new byte[KEY_ACL_SIZE];
 		for (byte i = (byte) 0; i < (byte) KEY_ACL_SIZE; i += (short) 2)
@@ -856,7 +857,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 *         SW_OPERATION_NOT_ALLOWED
 	 */
 	private Key getKey(byte key_nb, byte key_type, short key_size) {
-		//byte jc_key_type = keyType2JCType(key_type); // to remove
 		
 		if (keys[key_nb] == null) {
 			// We have to create the Key
@@ -1426,32 +1426,63 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	
 	/** 
 	 * This function generates a symmetric key using the card's on board key generation
-	 * process. The key number, algorithm
-	 * type, and algorithm parameters are specified by arguments P1 and P2 and by
-	 * provided DATA.
+	 * process. The key number, key type, and key size (in bits) are specified 
+	 * by arguments P1 and P2 and by provided DATA.
 	 * 
-	 * ins: 0x30
-	 * p1: private key number (0x00-0x0F)
-	 * p2: public key number (0x00-0x0F)
-	 * data: [Key Generation Parameters] 
+	 * ins: 0x31
+	 * p1: symmetric key number (0x00-0x0F)
+	 * p2: 0x00
+	 * data: [key_type(1) | key_size(2) | key_ACL(6)] 
 	 * return: none
 	 */
 	private void GenerateSymmetricKey(APDU apdu, byte[] buffer) {
 		short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
 		if (bytesLeft != apdu.setIncomingAndReceive())
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-		byte alg_id = buffer[OFFSET_GENKEY_ALG];
-		switch (alg_id) {
-			case KeyPair.ALG_RSA:
-			case KeyPair.ALG_RSA_CRT:
-				GenerateKeyPairRSA(buffer);
+		
+		byte key_nb = buffer[ISO7816.OFFSET_P1];
+		if ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS))
+			ISOException.throwIt(SW_INCORRECT_P1);
+		/* If we're going to overwrite a key contents, check ACL */
+		if ((keys[key_nb] != null) && keys[key_nb].isInitialized() && !authorizeKeyOp(key_nb,ACL_WRITE))
+			ISOException.throwIt(SW_UNAUTHORIZED);
+		
+		/*** Start reading key blob header***/
+		// blob header= [ key_type(1) | key_size(2) | key_ACL(6)]
+		// Check entire blob header
+		if (bytesLeft < 4)
+			ISOException.throwIt(SW_INVALID_PARAMETER);
+		
+		short dataOffset= ISO7816.OFFSET_CDATA;
+		byte key_type = buffer[dataOffset];
+		dataOffset++; // Skip Key Type
+		bytesLeft--;
+		short key_size = Util.getShort(buffer, dataOffset);
+		dataOffset += (short) 2; // Skip Key Size
+		bytesLeft -= (short) 2;
+		Util.arrayCopy(buffer, dataOffset, keyACLs, (short) (key_nb * KEY_ACL_SIZE), KEY_ACL_SIZE);
+		dataOffset += (short) 6; // Skip ACL
+		bytesLeft -= (short) 6;
+		
+		if (randomData == null)
+			randomData = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
+		
+		switch (key_type) {		
+			case KeyBuilder.TYPE_AES:
+				AESKey aes_key = (AESKey) getKey(key_nb, key_type, key_size);
+				randomData.generateData(recvBuffer,(short)0,(short)(key_size/8));
+				aes_key.setKey(recvBuffer, (short)0);
 				break;
-			case KeyPair.ALG_EC_FP:
-				GenerateKeyPairECFP(buffer);
+			case KeyBuilder.TYPE_DES:
+				DESKey des_key = (DESKey) getKey(key_nb, key_type, key_size);
+				randomData.generateData(recvBuffer,(short)0,(short)(key_size/8));
+				des_key.setKey(recvBuffer, (short)0);
 				break;
 			default:
-				ISOException.throwIt(SW_INCORRECT_ALG);
+				ISOException.throwIt(SW_INCORRECT_ALG);		
 		}
+		// clear recvBuffer
+		Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)(key_size/8), (byte)0);
 	}
 	
 	/** 
