@@ -1017,6 +1017,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			if (bytesLeft < (short) (2 + size))
 				ISOException.throwIt(SW_INVALID_PARAMETER);
 			
+			short IVlength=0;
 			switch (key.getType()) {
 				case KeyBuilder.TYPE_RSA_PUBLIC:
 				case KeyBuilder.TYPE_RSA_PRIVATE:
@@ -1029,16 +1030,20 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 						ISOException.throwIt(SW_INVALID_PARAMETER);
 					break;
 				case KeyBuilder.TYPE_DES:
-					if (ciph_mode == Cipher.ALG_DES_CBC_NOPAD)
+					if (ciph_mode == Cipher.ALG_DES_CBC_NOPAD){
+						IVlength= (short)(8);
 						ciph_alg_id = Cipher.ALG_DES_CBC_NOPAD;
+					}
 					else if (ciph_mode == Cipher.ALG_DES_ECB_NOPAD)
 						ciph_alg_id = Cipher.ALG_DES_ECB_NOPAD;
 					else
 						ISOException.throwIt(SW_INVALID_PARAMETER);
 					break;
 				case KeyBuilder.TYPE_AES:
-					if (ciph_mode == Cipher.ALG_AES_BLOCK_128_CBC_NOPAD)
+					if (ciph_mode == Cipher.ALG_AES_BLOCK_128_CBC_NOPAD){
+						IVlength= (short)(16);
 						ciph_alg_id = Cipher.ALG_AES_BLOCK_128_CBC_NOPAD;
+					}
 					else if (ciph_mode == Cipher.ALG_AES_BLOCK_128_ECB_NOPAD)
 						ciph_alg_id = Cipher.ALG_AES_BLOCK_128_ECB_NOPAD;
 					else
@@ -1048,11 +1053,27 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 					ISOException.throwIt(SW_INTERNAL_ERROR);
 					return; // Compiler warning (ciph_alg_id unset)
 			}
+			// init cipher
+			// encrypt
+			// 		IV=0 (rsa, ecb)
+			//		IV!=0 generateOnCard (des/aes cbc)
+			// decrypt
+			// 		IV=0 (rsa, ecb)
+			// 		IV!=0 getFromBuffer (des/aes cbc)
 			ciph = getCipher(key_nb, ciph_alg_id);
-			if (size == (short) 0)
+			if (IVlength == (short) 0)
 				ciph.init(key, (ciph_dir == Cipher.MODE_ENCRYPT) ? Cipher.MODE_ENCRYPT : Cipher.MODE_DECRYPT);
-			else
-				ciph.init(key, (ciph_dir == Cipher.MODE_ENCRYPT) ? Cipher.MODE_ENCRYPT : Cipher.MODE_DECRYPT, buffer,	(short) (dataOffset + 2), size);
+			else if (ciph_dir== Cipher.MODE_ENCRYPT){
+				if (randomData == null)
+					randomData = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
+				randomData.generateData(buffer,(short)0,IVlength);
+				ciph.init(key, Cipher.MODE_ENCRYPT, buffer,	(short)0, IVlength);
+				apdu.setOutgoingAndSend((short) 0, IVlength);
+			}
+			else if (ciph_dir== Cipher.MODE_DECRYPT){
+				ciph.init(key, Cipher.MODE_DECRYPT, buffer,	(short) (dataOffset + 2), IVlength);
+				// ciph.init(key, (ciph_dir == Cipher.MODE_ENCRYPT) ? Cipher.MODE_ENCRYPT : Cipher.MODE_DECRYPT, buffer,	(short) (dataOffset + 2), size);
+			}
 			ciph_dirs[key_nb] = ciph_dir;
 			break;
 
@@ -1090,7 +1111,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			// Also copies the Short size information
 			Util.setShort(buffer,(short)0,  size);
 			sendData(apdu, buffer, (short) 0, (short) (size + 2));
-					
 			break;
 
 		default:
@@ -1510,7 +1530,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		/*** Start reading key blob header***/
 		// blob header= [ key_type(1) | key_size(2) | key_ACL(6)]
 		// Check entire blob header
-		if (bytesLeft < 4)
+		if (bytesLeft < 9)
 			ISOException.throwIt(SW_INVALID_PARAMETER);
 		
 		short dataOffset= ISO7816.OFFSET_CDATA;
