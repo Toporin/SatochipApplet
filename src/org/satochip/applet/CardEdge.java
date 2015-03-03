@@ -960,7 +960,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * data(Init): [cipher_mode(1b)|cipher_direction(1b)|cipher_location(1b)|option_data_size(1b)|option_data]
 	 * data(Update/Final): [data_location(1b)|data_size(2b)|data]
 	 * 
-	 * return(init): none
+	 * return(init): [IV(blocksize)] or none (ECB mode or RSA)
 	 * return(Update/Final): [data_size(2b)|processed_data]
 	 */
 	private void ComputeCrypt(APDU apdu, byte[] apduBuffer) {
@@ -1103,14 +1103,15 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			if (bytesLeft < (short) (2 + size))
 				ISOException.throwIt(SW_INVALID_PARAMETER);
 			
+			short sizeout=0;
 			if (op == OP_PROCESS)
-				ciph.update(buffer, (short) (dataOffset + 2), size, buffer, (short) 2);
+				sizeout=ciph.update(buffer, (short) (dataOffset + 2), size, buffer, (short) 2);
 			else /* op == OP_FINAL */
-				ciph.doFinal(buffer, (short) (dataOffset + 2), size, buffer, (short) 2);
+				sizeout=ciph.doFinal(buffer, (short) (dataOffset + 2), size, buffer, (short) 2);
 			
 			// Also copies the Short size information
-			Util.setShort(buffer,(short)0,  size);
-			sendData(apdu, buffer, (short) 0, (short) (size + 2));
+			Util.setShort(buffer,(short)0,  sizeout);
+			sendData(apdu, buffer, (short) 0, (short) (sizeout + 2));
 			break;
 
 		default:
@@ -1455,11 +1456,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		byte prv_key_nb = buffer[ISO7816.OFFSET_P1];
 		if ((prv_key_nb < 0) || (prv_key_nb >= MAX_NUM_KEYS))
 			ISOException.throwIt(SW_INCORRECT_P1);
-//		byte pub_key_nb = buffer[ISO7816.OFFSET_P2];
-//		if ((pub_key_nb < 0) || (pub_key_nb >= MAX_NUM_KEYS))
-//			ISOException.throwIt(SW_INCORRECT_P2);
-//		if (pub_key_nb == prv_key_nb)
-//			ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
 		short key_size = Util.getShort(buffer, OFFSET_GENKEY_SIZE);
 		byte options = buffer[OFFSET_GENKEY_OPTIONS];
 		ECPrivateKey prv_key = (ECPrivateKey) getKey(prv_key_nb, KeyBuilder.TYPE_EC_FP_PRIVATE, key_size);
@@ -1483,11 +1479,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
         		// Bitcoin uses 256-bit keysize!
         		if (key_size!=256)
         			ISOException.throwIt(SW_INVALID_PARAMETER);
-	            // As default params were specified, we have to clear the public key
-        		// if already initialized, otherwise their params would be used.
-				if (prv_key.isInitialized())
-					prv_key.clearKey();
-				// PINCOIN default is secp256k1 (over Fp)
+	            // PINCOIN default is secp256k1 (over Fp)
 				prv_key.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
 				prv_key.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
 				prv_key.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
@@ -1650,7 +1642,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 				ec_pub_key.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
 				ec_pub_key.setK( SECP256K1_K);
 				// set public point
-				ec_pub_key.setW(buffer, dataOffset, blob_size);
+				ec_pub_key.setW(buffer, dataOffset, (short)(blob_size));
 				// https://javacard.kenai.com/javadocs/classic/javacard/security/ECPrivateKey.html
 				// The plain text data format is big-endian and right-aligned (the least significant bit is the least significant bit of last byte)
 				dataOffset += blob_size; 
@@ -1664,7 +1656,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	            if (bytesLeft < 2)
 	                    ISOException.throwIt(SW_INVALID_PARAMETER);
 	            blob_size = Util.getShort(buffer, dataOffset);
-	            if (blob_size != 33) // only bitcoin
+	            if (blob_size != 32) // only bitcoin
 	            	ISOException.throwIt(blob_size);
 	            dataOffset += (short) 2; 
 	            bytesLeft -= (short) 2;
@@ -3362,46 +3354,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     	short sign_size= sigECDSA.sign(recvBuffer, (short)0, (short)32, buffer, (short)0);
         apdu.setOutgoingAndSend((short) 0, sign_size);
     	
-    }
-    
-//    /* Encode a short into Bitcoin's VarInt format and return number of byte set */
-//    private short encodeShortToVarInt(short value, byte[] buffer, short offset) {
-//        
-//    	//if (value<((short)253)) { // signed comparison!!
-//        if (Biginteger.isStrictlyLessThanUnsigned(value,(short)253)){
-//    		buffer[offset]=(byte)(value & 0xFF);
-//            return (short)1;
-//        } else {
-//        	buffer[offset++]= (byte)253;
-//        	buffer[offset++]= (byte)(value & 0xff);
-//        	buffer[offset++]= (byte)(value>>>8);
-//        	return (short)3; 
-//        } 
-//    }
-//    
-//    /* Encode a 4-byte int into Bitcoin's VarInt format and return number of byte set */
-//    private short encodeVarInt(byte[] src, short src_offset, byte[] dst, short dst_offset) {
-//        if (src[src_offset]!=0 | 
-//        	src[(short)(src_offset+1)]!=0){ // 4-bytes integer
-//        	dst[dst_offset]= (byte)0xfe;
-//        	dst[(short)(dst_offset+1)]= src[(short)(src_offset+3)]; // little endian
-//        	dst[(short)(dst_offset+2)]= src[(short)(src_offset+2)]; 
-//        	dst[(short)(dst_offset+3)]= src[(short)(src_offset+1)]; 
-//        	dst[(short)(dst_offset+4)]= src[src_offset]; 
-//        	return (short)5;
-//        }
-//        else if (src[(short)(src_offset+2)]!=0 | 
-//        		 (src[(short)(src_offset+3)] & 0xff)>=0xfd){ // short integer
-//        	dst[dst_offset]= (byte)0xfd;
-//        	dst[(short)(dst_offset+1)]= src[(short)(src_offset+3)]; // little endian
-//        	dst[(short)(dst_offset+2)]= src[(short)(src_offset+2)]; 
-//        	return (short)3;
-//        }
-//        else{
-//        	dst[dst_offset]=src[(short)(src_offset+3)];
-//            return (short)1;
-//        }
-//    }
+    }    
     
 //    // mainly for testing...
 //    private void setBIP32ExtendedKey(APDU apdu, byte[] buffer){

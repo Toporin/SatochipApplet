@@ -1,5 +1,5 @@
 // converted by version 1.3
-// on Thu Feb 26 21:32:49 CET 2015
+// on Tue Mar 03 12:00:02 CET 2015
 
 .package org/satochip/applet {
 	.aid 0x53:0x61:0x74:0x6F:0x43:0x68:0x69:0x70;
@@ -313,88 +313,88 @@
 			.descriptor	Ljavacard/security/Key;	3.0;
 
 		// 131
+		staticMethodRef 3.14.0(B)Ljavacard/security/RandomData;;		// javacard/security/RandomData.getInstance(B)Ljavacard/security/RandomData;
+			.descriptor	Ljavacard/security/RandomData;	3.14;
+
+		// 132
+		virtualMethodRef 3.14.1([BSS)V;		// generateData([BSS)V
+		// 133
 		virtualMethodRef 4.1.4(Ljavacard/security/Key;B[BSS)V;		// init(Ljavacard/security/Key;B[BSS)V
 			.descriptor	Ljavacard/security/Key;	3.0;
 
-		// 132
-		virtualMethodRef 4.1.5([BSS[BS)S;		// update([BSS[BS)S
-		// 133
-		virtualMethodRef 4.1.1([BSS[BS)S;		// doFinal([BSS[BS)S
 		// 134
+		virtualMethodRef 1.10.8(SS)V;		// setOutgoingAndSend(SS)V
+		// 135
+		virtualMethodRef 4.1.5([BSS[BS)S;		// update([BSS[BS)S
+		// 136
+		virtualMethodRef 4.1.1([BSS[BS)S;		// doFinal([BSS[BS)S
+		// 137
 		staticMethodRef CardEdge/sendData(Ljavacard/framework/APDU;[BSS)V;
 			.descriptor	Ljavacard/framework/APDU;	1.10;
 
-		// 135
+		// 138
 		staticMethodRef CardEdge/getSignature(BB)Ljavacard/security/Signature;;
 			.descriptor	Ljavacard/security/Signature;	3.15;
 
-		// 136
+		// 139
 		virtualMethodRef 3.15.3(Ljavacard/security/Key;B)V;		// init(Ljavacard/security/Key;B)V
 			.descriptor	Ljavacard/security/Key;	3.0;
 
-		// 137
+		// 140
 		virtualMethodRef 3.15.4(Ljavacard/security/Key;B[BSS)V;		// init(Ljavacard/security/Key;B[BSS)V
 			.descriptor	Ljavacard/security/Key;	3.0;
 
-		// 138
-		virtualMethodRef 3.15.6([BSS)V;		// update([BSS)V
-		// 139
-		virtualMethodRef 3.15.5([BSS[BS)S;		// sign([BSS[BS)S
-		// 140
-		virtualMethodRef 3.15.2()S;		// getLength()S
 		// 141
-		virtualMethodRef 3.15.7([BSS[BSS)Z;		// verify([BSS[BSS)Z
+		virtualMethodRef 3.15.6([BSS)V;		// update([BSS)V
 		// 142
-		staticMethodRef CardEdge/GenerateKeyPairRSA([B)V;
+		virtualMethodRef 3.15.5([BSS[BS)S;		// sign([BSS[BS)S
 		// 143
-		staticMethodRef CardEdge/GeneratePrivateKeyECFP([B)V;
+		virtualMethodRef 3.15.2()S;		// getLength()S
 		// 144
+		virtualMethodRef 3.15.7([BSS[BSS)Z;		// verify([BSS[BSS)Z
+		// 145
+		staticMethodRef CardEdge/GenerateKeyPairRSA([B)V;
+		// 146
+		staticMethodRef CardEdge/GeneratePrivateKeyECFP([B)V;
+		// 147
 		staticMethodRef CardEdge/getKey(BBS)Ljavacard/security/Key;;
 			.descriptor	Ljavacard/security/Key;	3.0;
 
-		// 145
-		classRef 3.9;		// javacard/security/RSAPublicKey
-		// 146
-		classRef 3.8;		// javacard/security/RSAPrivateKey
-		// 147
-		staticMethodRef 1.16.1([BS[BSS)S;		// javacard/framework/Util.arrayCopy([BS[BSS)S
 		// 148
+		classRef 3.9;		// javacard/security/RSAPublicKey
+		// 149
+		classRef 3.8;		// javacard/security/RSAPrivateKey
+		// 150
+		staticMethodRef 1.16.1([BS[BSS)S;		// javacard/framework/Util.arrayCopy([BS[BSS)S
+		// 151
 		staticMethodRef 3.16.1(Ljavacard/security/PublicKey;Ljavacard/security/PrivateKey;)V;		// javacard/security/KeyPair.<init>(Ljavacard/security/PublicKey;Ljavacard/security/PrivateKey;)V
 			.descriptor	Ljavacard/security/PublicKey;	3.3;
 			.descriptor	Ljavacard/security/PrivateKey;	3.2;
 
-		// 149
+		// 152
 		virtualMethodRef 3.16.3()Ljavacard/security/PublicKey;;		// getPublic()Ljavacard/security/PublicKey;
 			.descriptor	Ljavacard/security/PublicKey;	3.3;
 
-		// 150
+		// 153
 		virtualMethodRef 3.16.2()Ljavacard/security/PrivateKey;;		// getPrivate()Ljavacard/security/PrivateKey;
 			.descriptor	Ljavacard/security/PrivateKey;	3.2;
 
-		// 151
-		virtualMethodRef 3.16.1()V;		// genKeyPair()V
-		// 152
-		staticMethodRef 3.14.0(B)Ljavacard/security/RandomData;;		// javacard/security/RandomData.getInstance(B)Ljavacard/security/RandomData;
-			.descriptor	Ljavacard/security/RandomData;	3.14;
-
-		// 153
-		virtualMethodRef 3.14.1([BSS)V;		// generateData([BSS)V
 		// 154
-		classRef 3.10;		// javacard/security/DESKey
+		virtualMethodRef 3.16.1()V;		// genKeyPair()V
 		// 155
-		classRef 3.19;		// javacard/security/ECPublicKey
+		classRef 3.10;		// javacard/security/DESKey
 		// 156
-		classRef 3.7;		// javacard/security/RSAPrivateCrtKey
+		classRef 3.19;		// javacard/security/ECPublicKey
 		// 157
-		staticMethodRef 1.16.0([BS[BSS)B;		// javacard/framework/Util.arrayCompare([BS[BSS)B
+		classRef 3.7;		// javacard/security/RSAPrivateCrtKey
 		// 158
+		staticMethodRef 1.16.0([BS[BSS)B;		// javacard/framework/Util.arrayCompare([BS[BSS)B
+		// 159
 		virtualMethodRef 3.22.1(Ljavacard/security/PrivateKey;)V;		// init(Ljavacard/security/PrivateKey;)V
 			.descriptor	Ljavacard/security/PrivateKey;	3.2;
 
-		// 159
-		virtualMethodRef 3.22.3([BSS[BS)S;		// generateSecret([BSS[BS)S
 		// 160
-		virtualMethodRef 1.10.8(SS)V;		// setOutgoingAndSend(SS)V
+		virtualMethodRef 3.22.3([BSS[BS)S;		// generateSecret([BSS[BS)S
 		// 161
 		staticMethodRef CardEdge/LogoutIdentity(B)V;
 		// 162
@@ -2612,7 +2612,7 @@
 
 		.method private ComputeCrypt(Ljavacard/framework/APDU;[B)V {
 			.stack 6;
-			.locals 13;
+			.locals 15;
 
 			.descriptor	Ljavacard/framework/APDU;	1.10;
 
@@ -2682,7 +2682,7 @@
 					sconst_0;
 					sstore 12;
 					sload 8;
-					stableswitch L64 1 3 L11 L49 L49;
+					stableswitch L66 1 3 L11 L51 L51;
 				L11:	sload 4;
 					sconst_3;
 					if_scmpge L13;
@@ -2735,7 +2735,9 @@
 					if_scmpge L22;
 				L21:	sspush -25585;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
-				L22:	aload 9;
+				L22:	sconst_0;
+					sstore 16;
+					aload 9;
 					invokeinterface 1 72 2;		// javacard/security/Key
 					slookupswitch L38 5 3 L28 4 L23 5 L23 6 L23 15 L33;
 				L23:	sload 10;
@@ -2756,7 +2758,9 @@
 				L28:	sload 10;
 					sconst_1;
 					if_scmpne L30;
-				L29:	sconst_1;
+				L29:	bspush 8;
+					sstore 16;
+					sconst_1;
 					sstore 12;
 					goto L39;
 				L30:	sload 10;
@@ -2771,7 +2775,9 @@
 				L33:	sload 10;
 					bspush 13;
 					if_scmpne L35;
-				L34:	bspush 13;
+				L34:	bspush 16;
+					sstore 16;
+					bspush 13;
 					sstore 12;
 					goto L39;
 				L35:	sload 10;
@@ -2791,7 +2797,7 @@
 					sload 12;
 					invokespecial 129;		// org/satochip/applet/CardEdge.getCipher(BB)Ljavacardx/crypto/Cipher;
 					astore 15;
-					sload 14;
+					sload 16;
 					ifne L44;
 				L40:	aload 15;
 					aload 9;
@@ -2802,63 +2808,87 @@
 					goto L43;
 				L42:	sconst_1;
 				L43:	invokevirtual 130;		// init(Ljavacard/security/Key;B)V
-					goto L48;
-				L44:	aload 15;
-					aload 9;
-					sload 11;
+					goto L50;
+				L44:	sload 11;
 					sconst_2;
-					if_scmpne L46;
-				L45:	sconst_2;
-					goto L47;
-				L46:	sconst_1;
-				L47:	aload_3;
+					if_scmpne L48;
+				L45:	getfield_a_this 22;		// reference org/satochip/applet/CardEdge.randomData
+					ifnonnull L47;
+				L46:	aload_0;
+					sconst_2;
+					invokestatic 131;		// javacard/security/RandomData.getInstance(B)Ljavacard/security/RandomData;
+					putfield_a 22;		// reference org/satochip/applet/CardEdge.randomData
+				L47:	getfield_a_this 22;		// reference org/satochip/applet/CardEdge.randomData
+					aload_3;
+					sconst_0;
+					sload 16;
+					invokevirtual 132;		// generateData([BSS)V
+					aload 15;
+					aload 9;
+					sconst_2;
+					aload_3;
+					sconst_0;
+					sload 16;
+					invokevirtual 133;		// init(Ljavacard/security/Key;B[BSS)V
+					aload_1;
+					sconst_0;
+					sload 16;
+					invokevirtual 134;		// setOutgoingAndSend(SS)V
+					goto L50;
+				L48:	sload 11;
+					sconst_1;
+					if_scmpne L50;
+				L49:	aload 15;
+					aload 9;
+					sconst_1;
+					aload_3;
 					sload 6;
 					sconst_2;
 					sadd;
-					sload 14;
-					invokevirtual 131;		// init(Ljavacard/security/Key;B[BSS)V
-				L48:	getfield_a_this 20;		// reference org/satochip/applet/CardEdge.ciph_dirs
+					sload 16;
+					invokevirtual 133;		// init(Ljavacard/security/Key;B[BSS)V
+				L50:	getfield_a_this 20;		// reference org/satochip/applet/CardEdge.ciph_dirs
 					sload 7;
 					sload 11;
 					bastore;
-					goto_w L65;
-				L49:	getfield_a_this 20;		// reference org/satochip/applet/CardEdge.ciph_dirs
+					goto_w L67;
+				L51:	getfield_a_this 20;		// reference org/satochip/applet/CardEdge.ciph_dirs
 					sload 7;
 					baload;
 					sstore 11;
 					sload 11;
 					sconst_2;
-					if_scmpeq L52;
-				L50:	sload 11;
+					if_scmpeq L54;
+				L52:	sload 11;
 					sconst_1;
-					if_scmpeq L52;
-				L51:	sspush -25345;
+					if_scmpeq L54;
+				L53:	sspush -25345;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
-				L52:	getfield_a_this 18;		// reference org/satochip/applet/CardEdge.ciphers
+				L54:	getfield_a_this 18;		// reference org/satochip/applet/CardEdge.ciphers
 					sload 7;
 					aaload;
 					astore 15;
 					aload 15;
-					ifnonnull L54;
-				L53:	sspush 27270;
+					ifnonnull L56;
+				L55:	sspush 27270;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
-				L54:	aload_3;
+				L56:	aload_3;
 					sload 6;
 					baload;
 					sstore 13;
 					sload 13;
 					sconst_1;
-					if_scmpeq L56;
-				L55:	sspush -25585;
+					if_scmpeq L58;
+				L57:	sspush -25585;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
-				L56:	sinc 6 1;
+				L58:	sinc 6 1;
 					sinc 4 -1;
 					sload 4;
 					sconst_2;
-					if_scmpge L58;
-				L57:	sspush -25585;
+					if_scmpge L60;
+				L59:	sspush -25585;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
-				L58:	aload_3;
+				L60:	aload_3;
 					sload 6;
 					invokestatic 61;		// javacard/framework/Util.getShort([BS)S
 					sstore 14;
@@ -2866,13 +2896,15 @@
 					sconst_2;
 					sload 14;
 					sadd;
-					if_scmpge L60;
-				L59:	sspush -25585;
+					if_scmpge L62;
+				L61:	sspush -25585;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
-				L60:	sload 8;
+				L62:	sconst_0;
+					sstore 17;
+					sload 8;
 					sconst_2;
-					if_scmpne L62;
-				L61:	aload 15;
+					if_scmpne L64;
+				L63:	aload 15;
 					aload_3;
 					sload 6;
 					sconst_2;
@@ -2880,10 +2912,10 @@
 					sload 14;
 					aload_3;
 					sconst_2;
-					invokevirtual 132;		// update([BSS[BS)S
-					pop;
-					goto L63;
-				L62:	aload 15;
+					invokevirtual 135;		// update([BSS[BS)S
+					sstore 17;
+					goto L65;
+				L64:	aload 15;
 					aload_3;
 					sload 6;
 					sconst_2;
@@ -2891,25 +2923,25 @@
 					sload 14;
 					aload_3;
 					sconst_2;
-					invokevirtual 133;		// doFinal([BSS[BS)S
-					pop;
-				L63:	aload_3;
+					invokevirtual 136;		// doFinal([BSS[BS)S
+					sstore 17;
+				L65:	aload_3;
 					sconst_0;
-					sload 14;
+					sload 17;
 					invokestatic 113;		// javacard/framework/Util.setShort([BSS)S
 					pop;
 					aload_0;
 					aload_1;
 					aload_3;
 					sconst_0;
-					sload 14;
+					sload 17;
 					sconst_2;
 					sadd;
-					invokespecial 134;		// org/satochip/applet/CardEdge.sendData(Ljavacard/framework/APDU;[BSS)V
-					goto L65;
-				L64:	sspush -25583;
+					invokespecial 137;		// org/satochip/applet/CardEdge.sendData(Ljavacard/framework/APDU;[BSS)V
+					goto L67;
+				L66:	sspush -25583;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
-				L65:	return;
+				L67:	return;
 		}
 
 		.method private ComputeSign(Ljavacard/framework/APDU;[B)V {
@@ -3055,7 +3087,7 @@
 				L27:	aload_0;
 					sload 7;
 					sload 12;
-					invokespecial 135;		// org/satochip/applet/CardEdge.getSignature(BB)Ljavacard/security/Signature;
+					invokespecial 138;		// org/satochip/applet/CardEdge.getSignature(BB)Ljavacard/security/Signature;
 					astore 15;
 					sload 14;
 					ifne L32;
@@ -3067,7 +3099,7 @@
 				L29:	sconst_1;
 					goto L31;
 				L30:	sconst_2;
-				L31:	invokevirtual 136;		// init(Ljavacard/security/Key;B)V
+				L31:	invokevirtual 139;		// init(Ljavacard/security/Key;B)V
 					goto L36;
 				L32:	aload 15;
 					aload 9;
@@ -3082,7 +3114,7 @@
 					sconst_2;
 					sadd;
 					sload 14;
-					invokevirtual 137;		// init(Ljavacard/security/Key;B[BSS)V
+					invokevirtual 140;		// init(Ljavacard/security/Key;B[BSS)V
 				L36:	getfield_a_this 20;		// reference org/satochip/applet/CardEdge.ciph_dirs
 					sload 7;
 					sload 11;
@@ -3144,7 +3176,7 @@
 					sconst_2;
 					sadd;
 					sload 14;
-					invokevirtual 138;		// update([BSS)V
+					invokevirtual 141;		// update([BSS)V
 					goto_w L61;
 				L50:	sload 11;
 					sconst_1;
@@ -3157,11 +3189,11 @@
 					sload 14;
 					aload_3;
 					sconst_0;
-					invokevirtual 139;		// sign([BSS[BS)S
+					invokevirtual 142;		// sign([BSS[BS)S
 					sstore 16;
 					sload 16;
 					aload 15;
-					invokevirtual 140;		// getLength()S
+					invokevirtual 143;		// getLength()S
 					if_scmple L53;
 				L52:	sspush -25345;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
@@ -3170,7 +3202,7 @@
 					aload_3;
 					sconst_0;
 					sload 16;
-					invokespecial 134;		// org/satochip/applet/CardEdge.sendData(Ljavacard/framework/APDU;[BSS)V
+					invokespecial 137;		// org/satochip/applet/CardEdge.sendData(Ljavacard/framework/APDU;[BSS)V
 					goto L61;
 				L54:	sload 4;
 					sconst_2;
@@ -3215,7 +3247,7 @@
 					sconst_2;
 					sadd;
 					sload 16;
-					invokevirtual 141;		// verify([BSS[BSS)Z
+					invokevirtual 144;		// verify([BSS[BSS)Z
 					ifne L61;
 				L59:	sspush -25589;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
@@ -3251,11 +3283,11 @@
 					stableswitch L5 1 5 L3 L3 L5 L5 L4;
 				L3:	aload_0;
 					aload_2;
-					invokespecial 142;		// org/satochip/applet/CardEdge.GenerateKeyPairRSA([B)V
+					invokespecial 145;		// org/satochip/applet/CardEdge.GenerateKeyPairRSA([B)V
 					goto L6;
 				L4:	aload_0;
 					aload_2;
-					invokespecial 143;		// org/satochip/applet/CardEdge.GeneratePrivateKeyECFP([B)V
+					invokespecial 146;		// org/satochip/applet/CardEdge.GeneratePrivateKeyECFP([B)V
 					goto L6;
 				L5:	sspush -25591;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
@@ -3309,8 +3341,8 @@
 					sload_3;
 					sconst_4;
 					sload 5;
-					invokespecial 144;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
-					checkcast 0 145;		// T_CLASSORINTERFACE javacard/security/RSAPublicKey
+					invokespecial 147;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
+					checkcast 0 148;		// T_CLASSORINTERFACE javacard/security/RSAPublicKey
 					astore 7;
 					aload_0;
 					sload_2;
@@ -3321,11 +3353,11 @@
 					goto L11;
 				L10:	bspush 6;
 				L11:	sload 5;
-					invokespecial 144;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
-					checkcast 0 146;		// T_CLASSORINTERFACE javacard/security/RSAPrivateKey
+					invokespecial 147;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
+					checkcast 0 149;		// T_CLASSORINTERFACE javacard/security/RSAPrivateKey
 					astore 8;
 					aload 7;
-					invokeinterface 1 145 3;		// javacard/security/RSAPublicKey
+					invokeinterface 1 148 3;		// javacard/security/RSAPublicKey
 					ifeq L14;
 				L12:	aload_0;
 					sload_3;
@@ -3335,7 +3367,7 @@
 				L13:	sspush -25594;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
 				L14:	aload 8;
-					invokeinterface 1 146 3;		// javacard/security/RSAPrivateKey
+					invokeinterface 1 149 3;		// javacard/security/RSAPrivateKey
 					ifeq L17;
 				L15:	aload_0;
 					sload_2;
@@ -3351,7 +3383,7 @@
 					bspush 6;
 					smul;
 					bspush 6;
-					invokestatic 147;		// javacard/framework/Util.arrayCopy([BS[BSS)S
+					invokestatic 150;		// javacard/framework/Util.arrayCopy([BS[BSS)S
 					pop;
 					aload_1;
 					bspush 14;
@@ -3360,15 +3392,15 @@
 					bspush 6;
 					smul;
 					bspush 6;
-					invokestatic 147;		// javacard/framework/Util.arrayCopy([BS[BSS)S
+					invokestatic 150;		// javacard/framework/Util.arrayCopy([BS[BSS)S
 					pop;
 					sload 6;
 					stableswitch L21 0 1 L18 L20;
 				L18:	aload 7;
-					invokeinterface 1 145 3;		// javacard/security/RSAPublicKey
+					invokeinterface 1 148 3;		// javacard/security/RSAPublicKey
 					ifeq L22;
 				L19:	aload 7;
-					invokeinterface 1 145 0;		// javacard/security/RSAPublicKey
+					invokeinterface 1 148 0;		// javacard/security/RSAPublicKey
 					goto L22;
 				L20:	aload_1;
 					bspush 21;
@@ -3378,7 +3410,7 @@
 					aload_1;
 					bspush 23;
 					sload 9;
-					invokeinterface 4 145 6;		// javacard/security/RSAPublicKey
+					invokeinterface 4 148 6;		// javacard/security/RSAPublicKey
 					goto L22;
 				L21:	sspush -25585;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
@@ -3396,7 +3428,7 @@
 					dup;
 					aload 7;
 					aload 8;
-					invokespecial 148;		// javacard/security/KeyPair.<init>(Ljavacard/security/PublicKey;Ljavacard/security/PrivateKey;)V
+					invokespecial 151;		// javacard/security/KeyPair.<init>(Ljavacard/security/PublicKey;Ljavacard/security/PrivateKey;)V
 					aastore;
 					getfield_a_this 17;		// reference org/satochip/applet/CardEdge.keyPairs
 					sload_2;
@@ -3419,17 +3451,17 @@
 					aaload;
 					astore 9;
 					aload 9;
-					invokevirtual 149;		// getPublic()Ljavacard/security/PublicKey;
+					invokevirtual 152;		// getPublic()Ljavacard/security/PublicKey;
 					aload 7;
 					if_acmpne L29;
 				L28:	aload 9;
-					invokevirtual 150;		// getPrivate()Ljavacard/security/PrivateKey;
+					invokevirtual 153;		// getPrivate()Ljavacard/security/PrivateKey;
 					aload 8;
 					if_acmpeq L30;
 				L29:	sspush -25345;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
 				L30:	aload 9;
-					invokevirtual 151;		// genKeyPair()V
+					invokevirtual 154;		// genKeyPair()V
 					return;
 		}
 
@@ -3460,7 +3492,7 @@
 					sload_2;
 					bspush 12;
 					sload_3;
-					invokespecial 144;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
+					invokespecial 147;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
 					checkcast 0 99;		// T_CLASSORINTERFACE javacard/security/ECPrivateKey
 					astore 5;
 					aload 5;
@@ -3480,33 +3512,28 @@
 					bspush 6;
 					smul;
 					bspush 6;
-					invokestatic 147;		// javacard/framework/Util.arrayCopy([BS[BSS)S
+					invokestatic 150;		// javacard/framework/Util.arrayCopy([BS[BSS)S
 					pop;
 					getfield_a_this 22;		// reference org/satochip/applet/CardEdge.randomData
 					ifnonnull L8;
 				L7:	aload_0;
 					sconst_2;
-					invokestatic 152;		// javacard/security/RandomData.getInstance(B)Ljavacard/security/RandomData;
+					invokestatic 131;		// javacard/security/RandomData.getInstance(B)Ljavacard/security/RandomData;
 					putfield_a 22;		// reference org/satochip/applet/CardEdge.randomData
 				L8:	sload 4;
-					stableswitch L16 0 3 L9 L16 L16 L11;
+					stableswitch L14 0 3 L9 L14 L14 L11;
 				L9:	aload 5;
 					invokeinterface 1 99 3;		// javacard/security/ECPrivateKey
-					ifeq_w L17;
+					ifeq_w L15;
 				L10:	aload 5;
 					invokeinterface 1 99 0;		// javacard/security/ECPrivateKey
-					goto_w L17;
+					goto_w L15;
 				L11:	sload_3;
 					sspush 256;
 					if_scmpeq L13;
 				L12:	sspush -25585;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
 				L13:	aload 5;
-					invokeinterface 1 99 3;		// javacard/security/ECPrivateKey
-					ifeq L15;
-				L14:	aload 5;
-					invokeinterface 1 99 0;		// javacard/security/ECPrivateKey
-				L15:	aload 5;
 					getstatic_a 101;		// reference org/satochip/applet/CardEdge.SECP256K1_P
 					sconst_0;
 					getstatic_a 101;		// reference org/satochip/applet/CardEdge.SECP256K1_P
@@ -3545,7 +3572,7 @@
 					sload_3;
 					bspush 8;
 					sdiv;
-					invokevirtual 153;		// generateData([BSS)V
+					invokevirtual 132;		// generateData([BSS)V
 					aload 5;
 					getfield_a_this 35;		// reference org/satochip/applet/CardEdge.recvBuffer
 					sconst_0;
@@ -3561,10 +3588,10 @@
 					sconst_0;
 					invokestatic 83;		// javacard/framework/Util.arrayFillNonAtomic([BSSB)S
 					pop;
-					goto L17;
-				L16:	sspush -25585;
+					goto L15;
+				L14:	sspush -25585;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
-				L17:	return;
+				L15:	return;
 		}
 
 		.method private GenerateSymmetricKey(Ljavacard/framework/APDU;[B)V {
@@ -3613,7 +3640,7 @@
 				L8:	sspush -25594;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
 				L9:	sload_3;
-					sconst_4;
+					bspush 9;
 					if_scmpge L11;
 				L10:	sspush -25585;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
@@ -3638,7 +3665,7 @@
 					bspush 6;
 					smul;
 					bspush 6;
-					invokestatic 147;		// javacard/framework/Util.arrayCopy([BS[BSS)S
+					invokestatic 150;		// javacard/framework/Util.arrayCopy([BS[BSS)S
 					pop;
 					sinc 5 6;
 					sinc 3 -6;
@@ -3646,7 +3673,7 @@
 					ifnonnull L13;
 				L12:	aload_0;
 					sconst_2;
-					invokestatic 152;		// javacard/security/RandomData.getInstance(B)Ljavacard/security/RandomData;
+					invokestatic 131;		// javacard/security/RandomData.getInstance(B)Ljavacard/security/RandomData;
 					putfield_a 22;		// reference org/satochip/applet/CardEdge.randomData
 				L13:	sload 6;
 					slookupswitch L16 2 3 L15 15 L14;
@@ -3654,7 +3681,7 @@
 					sload 4;
 					sload 6;
 					sload 7;
-					invokespecial 144;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
+					invokespecial 147;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
 					checkcast 0 87;		// T_CLASSORINTERFACE javacard/security/AESKey
 					astore 8;
 					getfield_a_this 22;		// reference org/satochip/applet/CardEdge.randomData
@@ -3663,7 +3690,7 @@
 					sload 7;
 					bspush 8;
 					sdiv;
-					invokevirtual 153;		// generateData([BSS)V
+					invokevirtual 132;		// generateData([BSS)V
 					aload 8;
 					getfield_a_this 35;		// reference org/satochip/applet/CardEdge.recvBuffer
 					sconst_0;
@@ -3673,8 +3700,8 @@
 					sload 4;
 					sload 6;
 					sload 7;
-					invokespecial 144;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
-					checkcast 0 154;		// T_CLASSORINTERFACE javacard/security/DESKey
+					invokespecial 147;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
+					checkcast 0 155;		// T_CLASSORINTERFACE javacard/security/DESKey
 					astore 9;
 					getfield_a_this 22;		// reference org/satochip/applet/CardEdge.randomData
 					getfield_a_this 35;		// reference org/satochip/applet/CardEdge.recvBuffer
@@ -3682,11 +3709,11 @@
 					sload 7;
 					bspush 8;
 					sdiv;
-					invokevirtual 153;		// generateData([BSS)V
+					invokevirtual 132;		// generateData([BSS)V
 					aload 9;
 					getfield_a_this 35;		// reference org/satochip/applet/CardEdge.recvBuffer
 					sconst_0;
-					invokeinterface 3 154 5;		// javacard/security/DESKey
+					invokeinterface 3 155 5;		// javacard/security/DESKey
 					goto L17;
 				L16:	sspush -25591;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
@@ -3805,7 +3832,7 @@
 					bspush 6;
 					smul;
 					bspush 6;
-					invokestatic 147;		// javacard/framework/Util.arrayCopy([BS[BSS)S
+					invokestatic 150;		// javacard/framework/Util.arrayCopy([BS[BSS)S
 					pop;
 					sinc 6 6;
 					sinc 4 -6;
@@ -3820,8 +3847,8 @@
 					sload 7;
 					sload 8;
 					sload 9;
-					invokespecial 144;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
-					checkcast 0 155;		// T_CLASSORINTERFACE javacard/security/ECPublicKey
+					invokespecial 147;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
+					checkcast 0 156;		// T_CLASSORINTERFACE javacard/security/ECPublicKey
 					astore 11;
 					sload 4;
 					sconst_2;
@@ -3849,39 +3876,39 @@
 					sconst_0;
 					getstatic_a 101;		// reference org/satochip/applet/CardEdge.SECP256K1_P
 					arraylength;
-					invokeinterface 4 155 4;		// javacard/security/ECPublicKey
+					invokeinterface 4 156 4;		// javacard/security/ECPublicKey
 					aload 11;
 					getstatic_a 102;		// reference org/satochip/applet/CardEdge.SECP256K1_a
 					sconst_0;
 					getstatic_a 102;		// reference org/satochip/applet/CardEdge.SECP256K1_a
 					arraylength;
-					invokeinterface 4 155 7;		// javacard/security/ECPublicKey
+					invokeinterface 4 156 7;		// javacard/security/ECPublicKey
 					aload 11;
 					getstatic_a 103;		// reference org/satochip/applet/CardEdge.SECP256K1_b
 					sconst_0;
 					getstatic_a 103;		// reference org/satochip/applet/CardEdge.SECP256K1_b
 					arraylength;
-					invokeinterface 4 155 8;		// javacard/security/ECPublicKey
+					invokeinterface 4 156 8;		// javacard/security/ECPublicKey
 					aload 11;
 					getstatic_a 104;		// reference org/satochip/applet/CardEdge.SECP256K1_G
 					sconst_0;
 					getstatic_a 104;		// reference org/satochip/applet/CardEdge.SECP256K1_G
 					arraylength;
-					invokeinterface 4 155 9;		// javacard/security/ECPublicKey
+					invokeinterface 4 156 9;		// javacard/security/ECPublicKey
 					aload 11;
 					getstatic_a 105;		// reference org/satochip/applet/CardEdge.SECP256K1_R
 					sconst_0;
 					getstatic_a 105;		// reference org/satochip/applet/CardEdge.SECP256K1_R
 					arraylength;
-					invokeinterface 4 155 10;		// javacard/security/ECPublicKey
+					invokeinterface 4 156 10;		// javacard/security/ECPublicKey
 					aload 11;
 					sconst_1;
-					invokeinterface 2 155 11;		// javacard/security/ECPublicKey
+					invokeinterface 2 156 11;		// javacard/security/ECPublicKey
 					aload 11;
 					aload_3;
 					sload 6;
 					sload 10;
-					invokeinterface 4 155 18;		// javacard/security/ECPublicKey
+					invokeinterface 4 156 18;		// javacard/security/ECPublicKey
 					sload 6;
 					sload 10;
 					sadd;
@@ -3900,7 +3927,7 @@
 					sload 7;
 					sload 8;
 					sload 9;
-					invokespecial 144;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
+					invokespecial 147;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
 					checkcast 0 99;		// T_CLASSORINTERFACE javacard/security/ECPrivateKey
 					astore 12;
 					sload 4;
@@ -3913,7 +3940,7 @@
 					invokestatic 61;		// javacard/framework/Util.getShort([BS)S
 					sstore 10;
 					sload 10;
-					bspush 33;
+					bspush 32;
 					if_scmpeq L33;
 				L32:	sload 10;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
@@ -3975,8 +4002,8 @@
 					sload 7;
 					sload 8;
 					sload 9;
-					invokespecial 144;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
-					checkcast 0 145;		// T_CLASSORINTERFACE javacard/security/RSAPublicKey
+					invokespecial 147;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
+					checkcast 0 148;		// T_CLASSORINTERFACE javacard/security/RSAPublicKey
 					astore 13;
 					sload 4;
 					sconst_2;
@@ -4000,7 +4027,7 @@
 					aload_3;
 					sload 6;
 					sload 10;
-					invokeinterface 4 145 7;		// javacard/security/RSAPublicKey
+					invokeinterface 4 148 7;		// javacard/security/RSAPublicKey
 					sload 6;
 					sload 10;
 					sadd;
@@ -4024,7 +4051,7 @@
 					aload_3;
 					sload 6;
 					sload 10;
-					invokeinterface 4 145 6;		// javacard/security/RSAPublicKey
+					invokeinterface 4 148 6;		// javacard/security/RSAPublicKey
 					sload 6;
 					sload 10;
 					sadd;
@@ -4038,8 +4065,8 @@
 					sload 7;
 					sload 8;
 					sload 9;
-					invokespecial 144;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
-					checkcast 0 146;		// T_CLASSORINTERFACE javacard/security/RSAPrivateKey
+					invokespecial 147;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
+					checkcast 0 149;		// T_CLASSORINTERFACE javacard/security/RSAPrivateKey
 					astore 14;
 					sload 4;
 					sconst_2;
@@ -4063,7 +4090,7 @@
 					aload_3;
 					sload 6;
 					sload 10;
-					invokeinterface 4 146 7;		// javacard/security/RSAPrivateKey
+					invokeinterface 4 149 7;		// javacard/security/RSAPrivateKey
 					sload 6;
 					sload 10;
 					sadd;
@@ -4087,7 +4114,7 @@
 					aload_3;
 					sload 6;
 					sload 10;
-					invokeinterface 4 146 6;		// javacard/security/RSAPrivateKey
+					invokeinterface 4 149 6;		// javacard/security/RSAPrivateKey
 					sload 6;
 					sload 10;
 					sadd;
@@ -4101,8 +4128,8 @@
 					sload 7;
 					sload 8;
 					sload 9;
-					invokespecial 144;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
-					checkcast 0 156;		// T_CLASSORINTERFACE javacard/security/RSAPrivateCrtKey
+					invokespecial 147;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
+					checkcast 0 157;		// T_CLASSORINTERFACE javacard/security/RSAPrivateCrtKey
 					astore 15;
 					sload 4;
 					sconst_2;
@@ -4126,7 +4153,7 @@
 					aload_3;
 					sload 6;
 					sload 10;
-					invokeinterface 4 156 11;		// javacard/security/RSAPrivateCrtKey
+					invokeinterface 4 157 11;		// javacard/security/RSAPrivateCrtKey
 					sload 6;
 					sload 10;
 					sadd;
@@ -4152,7 +4179,7 @@
 					aload_3;
 					sload 6;
 					sload 10;
-					invokeinterface 4 156 13;		// javacard/security/RSAPrivateCrtKey
+					invokeinterface 4 157 13;		// javacard/security/RSAPrivateCrtKey
 					sload 6;
 					sload 10;
 					sadd;
@@ -4178,7 +4205,7 @@
 					aload_3;
 					sload 6;
 					sload 10;
-					invokeinterface 4 156 12;		// javacard/security/RSAPrivateCrtKey
+					invokeinterface 4 157 12;		// javacard/security/RSAPrivateCrtKey
 					sload 6;
 					sload 10;
 					sadd;
@@ -4204,7 +4231,7 @@
 					aload_3;
 					sload 6;
 					sload 10;
-					invokeinterface 4 156 9;		// javacard/security/RSAPrivateCrtKey
+					invokeinterface 4 157 9;		// javacard/security/RSAPrivateCrtKey
 					sload 6;
 					sload 10;
 					sadd;
@@ -4228,7 +4255,7 @@
 					aload_3;
 					sload 6;
 					sload 10;
-					invokeinterface 4 156 10;		// javacard/security/RSAPrivateCrtKey
+					invokeinterface 4 157 10;		// javacard/security/RSAPrivateCrtKey
 					sload 6;
 					sload 10;
 					sadd;
@@ -4242,8 +4269,8 @@
 					sload 7;
 					sload 8;
 					sload 9;
-					invokespecial 144;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
-					checkcast 0 154;		// T_CLASSORINTERFACE javacard/security/DESKey
+					invokespecial 147;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
+					checkcast 0 155;		// T_CLASSORINTERFACE javacard/security/DESKey
 					astore 16;
 					sload 4;
 					sconst_2;
@@ -4264,7 +4291,7 @@
 				L67:	aload 16;
 					aload_3;
 					sload 6;
-					invokeinterface 3 154 5;		// javacard/security/DESKey
+					invokeinterface 3 155 5;		// javacard/security/DESKey
 					sload 6;
 					sload 10;
 					sadd;
@@ -4278,7 +4305,7 @@
 					sload 7;
 					sload 8;
 					sload 9;
-					invokespecial 144;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
+					invokespecial 147;		// org/satochip/applet/CardEdge.getKey(BBS)Ljavacard/security/Key;
 					checkcast 0 87;		// T_CLASSORINTERFACE javacard/security/AESKey
 					astore 17;
 					sload 4;
@@ -4391,7 +4418,7 @@
 					sconst_0;
 					getstatic_a 102;		// reference org/satochip/applet/CardEdge.SECP256K1_a
 					arraylength;
-					invokestatic 157;		// javacard/framework/Util.arrayCompare([BS[BSS)B
+					invokestatic 158;		// javacard/framework/Util.arrayCompare([BS[BSS)B
 					ifeq L17;
 				L16:	sspush -25591;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
@@ -4407,7 +4434,7 @@
 					sconst_0;
 					getstatic_a 103;		// reference org/satochip/applet/CardEdge.SECP256K1_b
 					arraylength;
-					invokestatic 157;		// javacard/framework/Util.arrayCompare([BS[BSS)B
+					invokestatic 158;		// javacard/framework/Util.arrayCompare([BS[BSS)B
 					ifeq L19;
 				L18:	sspush -25591;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
@@ -4423,7 +4450,7 @@
 					sconst_0;
 					getstatic_a 104;		// reference org/satochip/applet/CardEdge.SECP256K1_G
 					arraylength;
-					invokestatic 157;		// javacard/framework/Util.arrayCompare([BS[BSS)B
+					invokestatic 158;		// javacard/framework/Util.arrayCompare([BS[BSS)B
 					ifeq L21;
 				L20:	sspush -25591;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
@@ -4439,7 +4466,7 @@
 					sconst_0;
 					getstatic_a 105;		// reference org/satochip/applet/CardEdge.SECP256K1_R
 					arraylength;
-					invokestatic 157;		// javacard/framework/Util.arrayCompare([BS[BSS)B
+					invokestatic 158;		// javacard/framework/Util.arrayCompare([BS[BSS)B
 					ifeq L23;
 				L22:	sspush -25591;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
@@ -4455,7 +4482,7 @@
 					sconst_0;
 					getstatic_a 101;		// reference org/satochip/applet/CardEdge.SECP256K1_P
 					arraylength;
-					invokestatic 157;		// javacard/framework/Util.arrayCompare([BS[BSS)B
+					invokestatic 158;		// javacard/framework/Util.arrayCompare([BS[BSS)B
 					ifeq L25;
 				L24:	sspush -25591;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
@@ -4469,7 +4496,7 @@
 				L27:	getfield_a_this 28;		// reference org/satochip/applet/CardEdge.keyAgreement
 					aload 5;
 					checkcast 0 99;		// T_CLASSORINTERFACE javacard/security/ECPrivateKey
-					invokevirtual 158;		// init(Ljavacard/security/PrivateKey;)V
+					invokevirtual 159;		// init(Ljavacard/security/PrivateKey;)V
 					getfield_a_this 28;		// reference org/satochip/applet/CardEdge.keyAgreement
 					getstatic_a 104;		// reference org/satochip/applet/CardEdge.SECP256K1_G
 					sconst_0;
@@ -4477,7 +4504,7 @@
 					arraylength;
 					aload_2;
 					sconst_2;
-					invokevirtual 159;		// generateSecret([BSS[BS)S
+					invokevirtual 160;		// generateSecret([BSS[BS)S
 					sstore 7;
 					aload_2;
 					sconst_0;
@@ -4487,7 +4514,7 @@
 					getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					aload 5;
 					sconst_1;
-					invokevirtual 136;		// init(Ljavacard/security/Key;B)V
+					invokevirtual 139;		// init(Ljavacard/security/Key;B)V
 					getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					aload_2;
 					sconst_0;
@@ -4498,7 +4525,7 @@
 					sload 7;
 					sconst_4;
 					sadd;
-					invokevirtual 139;		// sign([BSS[BS)S
+					invokevirtual 142;		// sign([BSS[BS)S
 					sstore 8;
 					aload_2;
 					sload 7;
@@ -4516,7 +4543,7 @@
 					sadd;
 					sload 8;
 					sadd;
-					invokevirtual 160;		// setOutgoingAndSend(SS)V
+					invokevirtual 134;		// setOutgoingAndSend(SS)V
 					goto L29;
 				L28:	sspush -25591;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
@@ -5218,7 +5245,7 @@
 					sload 6;
 					sadd;
 					sload 7;
-					invokespecial 134;		// org/satochip/applet/CardEdge.sendData(Ljavacard/framework/APDU;[BSS)V
+					invokespecial 137;		// org/satochip/applet/CardEdge.sendData(Ljavacard/framework/APDU;[BSS)V
 					return;
 		}
 
@@ -5389,7 +5416,7 @@
 					aload_1;
 					sconst_0;
 					sconst_2;
-					invokevirtual 160;		// setOutgoingAndSend(SS)V
+					invokevirtual 134;		// setOutgoingAndSend(SS)V
 					return;
 		}
 
@@ -5444,7 +5471,7 @@
 				L10:	aload_1;
 					sconst_0;
 					bspush 14;
-					invokevirtual 160;		// setOutgoingAndSend(SS)V
+					invokevirtual 134;		// setOutgoingAndSend(SS)V
 					goto L12;
 				L11:	sspush -25582;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
@@ -5554,7 +5581,7 @@
 					aload_1;
 					sconst_0;
 					bspush 11;
-					invokevirtual 160;		// setOutgoingAndSend(SS)V
+					invokevirtual 134;		// setOutgoingAndSend(SS)V
 				L14:	return;
 		}
 
@@ -5703,7 +5730,7 @@
 					aload_1;
 					sconst_0;
 					sload_3;
-					invokevirtual 160;		// setOutgoingAndSend(SS)V
+					invokevirtual 134;		// setOutgoingAndSend(SS)V
 					return;
 		}
 
@@ -5838,7 +5865,7 @@
 					pop;
 					getfield_a_this 28;		// reference org/satochip/applet/CardEdge.keyAgreement
 					getfield_a_this 32;		// reference org/satochip/applet/CardEdge.bip32_authentikey
-					invokevirtual 158;		// init(Ljavacard/security/PrivateKey;)V
+					invokevirtual 159;		// init(Ljavacard/security/PrivateKey;)V
 					getfield_a_this 28;		// reference org/satochip/applet/CardEdge.keyAgreement
 					getstatic_a 104;		// reference org/satochip/applet/CardEdge.SECP256K1_G
 					sconst_0;
@@ -5846,7 +5873,7 @@
 					arraylength;
 					aload_2;
 					sconst_2;
-					invokevirtual 159;		// generateSecret([BSS[BS)S
+					invokevirtual 160;		// generateSecret([BSS[BS)S
 					sstore 6;
 					aload_2;
 					sconst_0;
@@ -5856,7 +5883,7 @@
 					getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					getfield_a_this 32;		// reference org/satochip/applet/CardEdge.bip32_authentikey
 					sconst_1;
-					invokevirtual 136;		// init(Ljavacard/security/Key;B)V
+					invokevirtual 139;		// init(Ljavacard/security/Key;B)V
 					getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					aload_2;
 					sconst_0;
@@ -5867,7 +5894,7 @@
 					sload 6;
 					sconst_4;
 					sadd;
-					invokevirtual 139;		// sign([BSS[BS)S
+					invokevirtual 142;		// sign([BSS[BS)S
 					sstore 7;
 					aload_2;
 					sconst_2;
@@ -5898,7 +5925,7 @@
 					sadd;
 					sconst_2;
 					sadd;
-					invokevirtual 160;		// setOutgoingAndSend(SS)V
+					invokevirtual 134;		// setOutgoingAndSend(SS)V
 					return;
 		}
 
@@ -5915,7 +5942,7 @@
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
 				L2:	getfield_a_this 28;		// reference org/satochip/applet/CardEdge.keyAgreement
 					getfield_a_this 32;		// reference org/satochip/applet/CardEdge.bip32_authentikey
-					invokevirtual 158;		// init(Ljavacard/security/PrivateKey;)V
+					invokevirtual 159;		// init(Ljavacard/security/PrivateKey;)V
 					getfield_a_this 28;		// reference org/satochip/applet/CardEdge.keyAgreement
 					getstatic_a 104;		// reference org/satochip/applet/CardEdge.SECP256K1_G
 					sconst_0;
@@ -5923,7 +5950,7 @@
 					arraylength;
 					aload_2;
 					sconst_2;
-					invokevirtual 159;		// generateSecret([BSS[BS)S
+					invokevirtual 160;		// generateSecret([BSS[BS)S
 					sstore_3;
 					aload_2;
 					sconst_0;
@@ -5933,7 +5960,7 @@
 					getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					getfield_a_this 32;		// reference org/satochip/applet/CardEdge.bip32_authentikey
 					sconst_1;
-					invokevirtual 136;		// init(Ljavacard/security/Key;B)V
+					invokevirtual 139;		// init(Ljavacard/security/Key;B)V
 					getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					aload_2;
 					sconst_0;
@@ -5944,7 +5971,7 @@
 					sload_3;
 					sconst_4;
 					sadd;
-					invokevirtual 139;		// sign([BSS[BS)S
+					invokevirtual 142;		// sign([BSS[BS)S
 					sstore 4;
 					aload_2;
 					sload_3;
@@ -5960,7 +5987,7 @@
 					sadd;
 					sconst_4;
 					sadd;
-					invokevirtual 160;		// setOutgoingAndSend(SS)V
+					invokevirtual 134;		// setOutgoingAndSend(SS)V
 					return;
 		}
 
@@ -6102,7 +6129,7 @@
 					getfield_a_this 35;		// reference org/satochip/applet/CardEdge.recvBuffer
 					bspush 93;
 					sconst_4;
-					invokestatic 157;		// javacard/framework/Util.arrayCompare([BS[BSS)B
+					invokestatic 158;		// javacard/framework/Util.arrayCompare([BS[BSS)B
 					ifne L20;
 				L19:	getfield_a_this 12;		// reference org/satochip/applet/CardEdge.secmem
 					getfield_a_this 35;		// reference org/satochip/applet/CardEdge.recvBuffer
@@ -6214,7 +6241,7 @@
 					bspush 64;
 					getfield_a_this 35;		// reference org/satochip/applet/CardEdge.recvBuffer
 					bspush 97;
-					invokevirtual 133;		// doFinal([BSS[BS)S
+					invokevirtual 136;		// doFinal([BSS[BS)S
 					pop;
 					getfield_a_this 13;		// reference org/satochip/applet/CardEdge.secom
 					sload 8;
@@ -6248,7 +6275,7 @@
 					bspush 64;
 					getfield_a_this 35;		// reference org/satochip/applet/CardEdge.recvBuffer
 					bspush 97;
-					invokevirtual 133;		// doFinal([BSS[BS)S
+					invokevirtual 136;		// doFinal([BSS[BS)S
 					pop;
 					getfield_a_this 35;		// reference org/satochip/applet/CardEdge.recvBuffer
 					sspush 129;
@@ -6292,7 +6319,7 @@
 					pop;
 					getfield_a_this 28;		// reference org/satochip/applet/CardEdge.keyAgreement
 					getfield_a_this 31;		// reference org/satochip/applet/CardEdge.bip32_extendedkey
-					invokevirtual 158;		// init(Ljavacard/security/PrivateKey;)V
+					invokevirtual 159;		// init(Ljavacard/security/PrivateKey;)V
 					getfield_a_this 28;		// reference org/satochip/applet/CardEdge.keyAgreement
 					getstatic_a 104;		// reference org/satochip/applet/CardEdge.SECP256K1_G
 					sconst_0;
@@ -6300,7 +6327,7 @@
 					arraylength;
 					aload_2;
 					sconst_2;
-					invokevirtual 159;		// generateSecret([BSS[BS)S
+					invokevirtual 160;		// generateSecret([BSS[BS)S
 					sstore 6;
 					aload_2;
 					sconst_0;
@@ -6310,7 +6337,7 @@
 					getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					getfield_a_this 31;		// reference org/satochip/applet/CardEdge.bip32_extendedkey
 					sconst_1;
-					invokevirtual 136;		// init(Ljavacard/security/Key;B)V
+					invokevirtual 139;		// init(Ljavacard/security/Key;B)V
 					getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					aload_2;
 					sconst_0;
@@ -6321,7 +6348,7 @@
 					sload 6;
 					sconst_4;
 					sadd;
-					invokevirtual 139;		// sign([BSS[BS)S
+					invokevirtual 142;		// sign([BSS[BS)S
 					sstore 7;
 					aload_2;
 					sload 6;
@@ -6333,7 +6360,7 @@
 					getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					getfield_a_this 32;		// reference org/satochip/applet/CardEdge.bip32_authentikey
 					sconst_1;
-					invokevirtual 136;		// init(Ljavacard/security/Key;B)V
+					invokevirtual 139;		// init(Ljavacard/security/Key;B)V
 					getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					aload_2;
 					sconst_0;
@@ -6348,7 +6375,7 @@
 					sadd;
 					bspush 6;
 					sadd;
-					invokevirtual 139;		// sign([BSS[BS)S
+					invokevirtual 142;		// sign([BSS[BS)S
 					sstore 8;
 					aload_2;
 					sload 6;
@@ -6368,7 +6395,7 @@
 					sadd;
 					bspush 6;
 					sadd;
-					invokevirtual 160;		// setOutgoingAndSend(SS)V
+					invokevirtual 134;		// setOutgoingAndSend(SS)V
 					return;
 		}
 
@@ -6555,7 +6582,7 @@
 				L26:	getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					getfield_a_this 31;		// reference org/satochip/applet/CardEdge.bip32_extendedkey
 					sconst_1;
-					invokevirtual 136;		// init(Ljavacard/security/Key;B)V
+					invokevirtual 139;		// init(Ljavacard/security/Key;B)V
 					goto L30;
 				L27:	getfield_a_this 14;		// reference org/satochip/applet/CardEdge.keys
 					sload_3;
@@ -6570,19 +6597,19 @@
 				L29:	getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					aload 9;
 					sconst_1;
-					invokevirtual 136;		// init(Ljavacard/security/Key;B)V
+					invokevirtual 139;		// init(Ljavacard/security/Key;B)V
 				L30:	getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					aload_2;
 					sconst_0;
 					bspush 32;
 					aload_2;
 					sconst_0;
-					invokevirtual 139;		// sign([BSS[BS)S
+					invokevirtual 142;		// sign([BSS[BS)S
 					sstore 9;
 					aload_1;
 					sconst_0;
 					sload 9;
-					invokevirtual 160;		// setOutgoingAndSend(SS)V
+					invokevirtual 134;		// setOutgoingAndSend(SS)V
 				L31:	return;
 		}
 
@@ -6708,7 +6735,7 @@
 				L18:	getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					getfield_a_this 31;		// reference org/satochip/applet/CardEdge.bip32_extendedkey
 					sconst_1;
-					invokevirtual 136;		// init(Ljavacard/security/Key;B)V
+					invokevirtual 139;		// init(Ljavacard/security/Key;B)V
 					goto L22;
 				L19:	getfield_a_this 14;		// reference org/satochip/applet/CardEdge.keys
 					sload_3;
@@ -6723,19 +6750,19 @@
 				L21:	getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					aload 8;
 					sconst_1;
-					invokevirtual 136;		// init(Ljavacard/security/Key;B)V
+					invokevirtual 139;		// init(Ljavacard/security/Key;B)V
 				L22:	getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					getfield_a_this 35;		// reference org/satochip/applet/CardEdge.recvBuffer
 					sconst_0;
 					bspush 32;
 					aload_2;
 					sconst_0;
-					invokevirtual 139;		// sign([BSS[BS)S
+					invokevirtual 142;		// sign([BSS[BS)S
 					sstore 8;
 					aload_1;
 					sconst_0;
 					sload 8;
-					invokevirtual 160;		// setOutgoingAndSend(SS)V
+					invokevirtual 134;		// setOutgoingAndSend(SS)V
 					return;
 		}
 
@@ -6816,7 +6843,7 @@
 					aload_1;
 					sconst_0;
 					sload 8;
-					invokevirtual 160;		// setOutgoingAndSend(SS)V
+					invokevirtual 134;		// setOutgoingAndSend(SS)V
 					return;
 				L6:	sload 7;
 					bspush 19;
@@ -6848,14 +6875,14 @@
 				L8:	getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					getfield_a_this 32;		// reference org/satochip/applet/CardEdge.bip32_authentikey
 					sconst_1;
-					invokevirtual 136;		// init(Ljavacard/security/Key;B)V
+					invokevirtual 139;		// init(Ljavacard/security/Key;B)V
 					getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					aload_2;
 					sconst_0;
 					bspush 32;
 					aload_2;
 					bspush 34;
-					invokevirtual 139;		// sign([BSS[BS)S
+					invokevirtual 142;		// sign([BSS[BS)S
 					sstore 9;
 					aload_2;
 					bspush 32;
@@ -6911,7 +6938,7 @@
 					aload_1;
 					sconst_0;
 					sload 8;
-					invokevirtual 160;		// setOutgoingAndSend(SS)V
+					invokevirtual 134;		// setOutgoingAndSend(SS)V
 				L11:	return;
 		}
 
@@ -6995,7 +7022,7 @@
 					getfield_a_this 35;		// reference org/satochip/applet/CardEdge.recvBuffer
 					sconst_0;
 					bspush 32;
-					invokestatic 157;		// javacard/framework/Util.arrayCompare([BS[BSS)B
+					invokestatic 158;		// javacard/framework/Util.arrayCompare([BS[BSS)B
 					ifeq L19;
 				L18:	sspush -25579;
 					invokestatic 64;		// javacard/framework/ISOException.throwIt(S)V
@@ -7005,7 +7032,7 @@
 				L20:	getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					getfield_a_this 31;		// reference org/satochip/applet/CardEdge.bip32_extendedkey
 					sconst_1;
-					invokevirtual 136;		// init(Ljavacard/security/Key;B)V
+					invokevirtual 139;		// init(Ljavacard/security/Key;B)V
 					goto L24;
 				L21:	getfield_a_this 14;		// reference org/satochip/applet/CardEdge.keys
 					sload_3;
@@ -7020,19 +7047,19 @@
 				L23:	getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					aload 5;
 					sconst_1;
-					invokevirtual 136;		// init(Ljavacard/security/Key;B)V
+					invokevirtual 139;		// init(Ljavacard/security/Key;B)V
 				L24:	getfield_a_this 29;		// reference org/satochip/applet/CardEdge.sigECDSA
 					getfield_a_this 34;		// reference org/satochip/applet/CardEdge.transactionHash
 					sconst_0;
 					bspush 32;
 					aload_2;
 					sconst_0;
-					invokevirtual 139;		// sign([BSS[BS)S
+					invokevirtual 142;		// sign([BSS[BS)S
 					sstore 5;
 					aload_1;
 					sconst_0;
 					sload 5;
-					invokevirtual 160;		// setOutgoingAndSend(SS)V
+					invokevirtual 134;		// setOutgoingAndSend(SS)V
 					return;
 		}
 
@@ -8024,7 +8051,7 @@
 					sload_2;
 					sadd;
 					sload 5;
-					invokestatic 147;		// javacard/framework/Util.arrayCopy([BS[BSS)S
+					invokestatic 150;		// javacard/framework/Util.arrayCopy([BS[BSS)S
 					pop;
 					return;
 		}
@@ -8040,7 +8067,7 @@
 					aload_1;
 					sload_2;
 					sload 5;
-					invokestatic 147;		// javacard/framework/Util.arrayCopy([BS[BSS)S
+					invokestatic 150;		// javacard/framework/Util.arrayCopy([BS[BSS)S
 					pop;
 					return;
 		}
@@ -8556,7 +8583,7 @@
 					aload_2;
 					sconst_0;
 					bspush 6;
-					invokestatic 157;		// javacard/framework/Util.arrayCompare([BS[BSS)B
+					invokestatic 158;		// javacard/framework/Util.arrayCompare([BS[BSS)B
 					ifne L2;
 				L1:	sconst_1;
 					sreturn;
