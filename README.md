@@ -68,9 +68,9 @@ An example of application is the [BitcoinWallet](https://github.com/Toporin/Bitc
 
 # Credits
 
-The CardEdge javacard applet is based on the [MUSCLE framework](http://pcsclite.alioth.debian.org/musclecard.com/info.html).
-The [HMAC-SHA512](http://www.fi.muni.cz/~xsvenda/jcalgs.html#sha2) implementation is from [Petr Svenda](http://www.fi.muni.cz/~xsvenda/).
-The Bitcoin transaction parser is derived from [Btchip](https://github.com/LedgerHQ/btchipJC.
-The BitcoinWallet application is based on ScripterRon [BitcoinWallet](https://github.com/ScripterRon/BitcoinWallet) client and [BitcoinCore](https://github.com/ScripterRon/BitcoinCore) library.
+- The CardEdge javacard applet is based on the [MUSCLE framework](http://pcsclite.alioth.debian.org/musclecard.com/info.html).
+- The [HMAC-SHA512](http://www.fi.muni.cz/~xsvenda/jcalgs.html#sha2) implementation is from [Petr Svenda](http://www.fi.muni.cz/~xsvenda/).
+- The Bitcoin transaction parser is derived from [Btchip](https://github.com/LedgerHQ/btchipJC).
+- The BitcoinWallet application is based on ScripterRon [BitcoinWallet](https://github.com/ScripterRon/BitcoinWallet) client and [BitcoinCore](https://github.com/ScripterRon/BitcoinCore) library.
 
 
