@@ -197,6 +197,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static byte INS_DELETE_OBJ = (byte) 0x52;
 	private final static byte INS_READ_OBJ = (byte) 0x56;
 	private final static byte INS_WRITE_OBJ = (byte) 0x54;
+	private final static byte INS_SIZE_OBJ = (byte) 0x57;
 
 	// Status information
 	private final static byte INS_LIST_OBJECTS = (byte) 0x58;
@@ -573,6 +574,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			break;
 		case INS_WRITE_OBJ:
 			WriteObject(apdu, buffer);
+			break;
+		case INS_SIZE_OBJ:	
+			GetObjectSize(apdu, buffer);
 			break;
 		case INS_LIST_PINS:
 			ListPINs(apdu, buffer);
@@ -2278,18 +2282,19 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	}
 
 	/**
-	 * This function deletes the object identified by the provided object ID. The object’s
-	 * space and name will be removed from the heap and made available for other objects.
-	 * The zero flag denotes whether the object’s memory should be zeroed after
-	 * deletion. This kind of deletion is recommended if object was storing sensitive data.
-	 * Object will be effectively deleted only if logged in identity(ies) have sufficient
-	 * privileges for the operation, according to the object’s ACL.
+	 * This function reads data from an object that has been previously created with 
+	 * MSCCreateObject. Object data is read starting from the byte specified by the
+	 * Offset parameter. Up to 255 bytes can be transferred with a single APDU. 
+	 * If more bytes need to be transferred, then multiple ReadObject commands must 
+	 * be used with different offsets. 
+	 * Object data will be effectively read only if logged in identity(ies) have 
+	 * sufficient privileges for the operation, according to the object’s ACL.
 	 *   
-	 * ins: 0x52
+ 	 * ins: 0x56
 	 * p1: 0x00
-	 * p2: 0x00 or 0x01 for secure erasure 
-	 * data: [object_id(4b)] 
-	 * return: none
+	 * p2: 0x00 
+	 * data: [object_id(4b) | object_offset(4b) | chunk_length(1b)] 
+	 * return: [object_data(chunk_length)]
 	 */
 	private void ReadObject(APDU apdu, byte[] buffer) {
 		// Checking P1 & P2
@@ -2324,6 +2329,41 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		sendData(apdu, mem.getBuffer(), (short) (base + offset), size);
 	}
 
+	/**
+	 * This function returns the size of an object that has been previously created with 
+	 * MSCCreateObject.  
+	 *   
+ 	 * ins: 0x57
+	 * p1: 0x00
+	 * p2: 0x00 
+	 * data: [object_id(4b)] 
+	 * return: [object_size(2b)]
+	 */
+	private void GetObjectSize(APDU apdu, byte[] buffer) {
+		// Checking P1 & P2
+		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
+			ISOException.throwIt(SW_INCORRECT_P1);
+		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
+			ISOException.throwIt(SW_INCORRECT_P2);
+		short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+		if (bytesLeft != apdu.setIncomingAndReceive())
+			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+		if (bytesLeft != (short) 4)
+			ISOException.throwIt(SW_INVALID_PARAMETER);
+		short obj_class = Util.getShort(buffer, ISO7816.OFFSET_CDATA);
+		short obj_id = Util.getShort(buffer, (short) (ISO7816.OFFSET_CDATA + (short) 2));
+		short base = om.getBaseAddress(obj_class, obj_id);
+		// Verify that object exists
+		if (base == MemoryManager.NULL_OFFSET)
+			ISOException.throwIt(SW_INVALID_PARAMETER);
+		// get object size
+		short obj_size= om.getSizeFromAddress(base);
+		// Fill the buffer
+		Util.setShort(buffer, (short) 0, obj_size);
+		// Send response
+		apdu.setOutgoingAndSend((short) 0, (short) 2);
+	}
+	
 	/**
 	 * This function (over-)writes data to an object that has been previously created with
 	 * CreateObject. Provided Object Data is stored starting from the byte specified
