@@ -34,7 +34,14 @@ Disadvantages:
 - Although transactions are parsed by the applet, not much is currently done to protect against MITM attacks
 - The software implementation of HMAC-SHA512 could have an potential impact on the physical security against side-channel attacks (for attackers with physical access to the chip).
 
-# build
+# Supported hardware
+
+**Important remark:** the Yubikeys currently sold by Yubico are configured for production only and it is not possible to load the applet on these dongles (see [this link](https://www.yubico.com/2014/07/yubikey-neo-updates/) for more details). Only the development Yubikeys (with serial number below 3,000,000) are suitable for our use! 
+
+To support Bitcoin signatures, the javacard must support ALG_ECDSA_SHA_256, which in practice requires a javacard compliant with the JavaCard 3.0.1 specification. Note that this is a necessary but not sufficient condition since javacards typically implements only a subset of the specification.
+
+
+# Build
 
 You can build the javacard CAP files or use the last [version built](https://github.com/Toporin/SatoChipApplet/blob/master/src/org/satochip/applet/javacard/applet.cap).
 
@@ -49,7 +56,7 @@ Here is an [alternative description](https://github.com/Yubico/ykneo-openpgp/blo
 
 In principle, you could also use Netbeans and the more appropriate JCDK 3.0.3 to build the CAP file. However, I had a hard time setting this up and use it with the Yubikey, so I ended up using Eclipse with some workaround instead. 
 
-# install
+# Install
 
 Once you have a CAP file, you have to download it on the chip card. You can use GPJ to do this:
 
