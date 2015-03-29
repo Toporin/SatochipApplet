@@ -30,6 +30,7 @@ USAGE:
 */
 
 package org.satochip.applet;
+
 import javacard.framework.*;
 import javacard.security.*;
 
@@ -218,7 +219,7 @@ private void int64Set(short[] array, short offset, Int_64 template) {
 }
 
 private void int64Set(short[] array, short offset, byte[] srcArray, short srcOffset) {
-  array[(short) offset] = (short) (srcArray[srcOffset] << 8 | (short) ( srcArray[(short) (srcOffset + 1)] & 0xff));
+  array[offset] = (short) (srcArray[srcOffset] << 8 | (short) ( srcArray[(short) (srcOffset + 1)] & 0xff));
   array[(short) (offset + 1)] = (short) (srcArray[(short) (srcOffset + 2)] << 8 |(short) ( srcArray[(short) (srcOffset + 3)] & 0xff));
   array[(short) (offset + 2)] = (short) (srcArray[(short) (srcOffset + 4)] << 8 | (short) ( srcArray[(short) (srcOffset + 5)] & 0xff));
   array[(short) (offset + 3)] = (short) (srcArray[(short) (srcOffset + 6)] << 8 | (short) ( srcArray[(short) (srcOffset + 7)] & 0xff));
@@ -710,7 +711,7 @@ short Sum0(short offset_x, short offset_result)  {
   rotl(offset_x,(byte)25,OFFSET_rotl_3);
   rotr(offset_x,(byte)39,OFFSET_rotr_3);
 
-  int64Variables[offset_result] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotr_1)] | int64Variables[(short) (OFFSET_rotl_1)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2)] | int64Variables[(short) (OFFSET_rotr_2)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_3)] | int64Variables[(short) (OFFSET_rotr_3)])));
+  int64Variables[offset_result] = (short) ((short) ((short) (int64Variables[(OFFSET_rotr_1)] | int64Variables[(OFFSET_rotl_1)])) ^ (short) ((short) (int64Variables[(OFFSET_rotl_2)] | int64Variables[(OFFSET_rotr_2)])) ^ (short) ((short) (int64Variables[(OFFSET_rotl_3)] | int64Variables[(OFFSET_rotr_3)])));
   int64Variables[(short) (offset_result + 1)] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotl_1 + 1)] | int64Variables[(short) (OFFSET_rotr_1 + 1)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2 + 1)] | int64Variables[(short) (OFFSET_rotr_2 + 1)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_3 + 1)] | int64Variables[(short) (OFFSET_rotr_3 + 1)])));
   int64Variables[(short) (offset_result + 2)] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotl_1 + 2)] | int64Variables[(short) (OFFSET_rotr_1 + 2)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2 + 2)] | int64Variables[(short) (OFFSET_rotr_2 + 2)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_3 + 2)] | int64Variables[(short) (OFFSET_rotr_3 + 2)])));
   int64Variables[(short) (offset_result + 3)] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotl_1 + 3)] | int64Variables[(short) (OFFSET_rotr_1 + 3)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2 + 3)] | int64Variables[(short) (OFFSET_rotr_2 + 3)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_3 + 3)] | int64Variables[(short) (OFFSET_rotr_3 + 3)])));
@@ -731,7 +732,7 @@ short Sum1(short offset_x, short offset_result) {
   rotl(offset_x,(byte)23,OFFSET_rotl_3);
   rotr(offset_x,(byte)41,OFFSET_rotr_3);
 
-  int64Variables[offset_result] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotl_1)] | int64Variables[(short) (OFFSET_rotr_1)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2)] | int64Variables[(short) (OFFSET_rotr_2)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_3)] | int64Variables[(short) (OFFSET_rotr_3)])));
+  int64Variables[offset_result] = (short) ((short) ((short) (int64Variables[(OFFSET_rotl_1)] | int64Variables[(OFFSET_rotr_1)])) ^ (short) ((short) (int64Variables[(OFFSET_rotl_2)] | int64Variables[(OFFSET_rotr_2)])) ^ (short) ((short) (int64Variables[(OFFSET_rotl_3)] | int64Variables[(OFFSET_rotr_3)])));
   int64Variables[(short) (offset_result + 1)] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotl_1 + 1)] | int64Variables[(short) (OFFSET_rotr_1 + 1)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2 + 1)] | int64Variables[(short) (OFFSET_rotr_2 + 1)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_3 + 1)] | int64Variables[(short) (OFFSET_rotr_3 + 1)])));
   int64Variables[(short) (offset_result + 2)] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotl_1 + 2)] | int64Variables[(short) (OFFSET_rotr_1 + 2)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2 + 2)] | int64Variables[(short) (OFFSET_rotr_2 + 2)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_3 + 2)] | int64Variables[(short) (OFFSET_rotr_3 + 2)])));
   int64Variables[(short) (offset_result + 3)] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotl_1 + 3)] | int64Variables[(short) (OFFSET_rotr_1 + 3)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2 + 3)] | int64Variables[(short) (OFFSET_rotr_2 + 3)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_3 + 3)] | int64Variables[(short) (OFFSET_rotr_3 + 3)])));
@@ -758,7 +759,7 @@ short Sigma0(short offset_x, short offset_result) {
 
   rotr(offset_x,(byte)7,OFFSET_rotr_3);
 
-  int64Variables[offset_result] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotl_1)] | int64Variables[(short) (OFFSET_rotr_1)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2)] | int64Variables[(short) (OFFSET_rotr_2)])) ^ int64Variables[(short) (OFFSET_rotr_3)]);
+  int64Variables[offset_result] = (short) ((short) ((short) (int64Variables[(OFFSET_rotl_1)] | int64Variables[(OFFSET_rotr_1)])) ^ (short) ((short) (int64Variables[(OFFSET_rotl_2)] | int64Variables[(OFFSET_rotr_2)])) ^ int64Variables[(OFFSET_rotr_3)]);
   int64Variables[(short) (offset_result + 1)] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotl_1 + 1)] | int64Variables[(short) (OFFSET_rotr_1 + 1)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2 + 1)] | int64Variables[(short) (OFFSET_rotr_2 + 1)])) ^ int64Variables[(short) (OFFSET_rotr_3 + 1)]);
   int64Variables[(short) (offset_result + 2)] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotl_1 + 2)] | int64Variables[(short) (OFFSET_rotr_1 + 2)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2 + 2)] | int64Variables[(short) (OFFSET_rotr_2 + 2)])) ^ int64Variables[(short) (OFFSET_rotr_3 + 2)]);
   int64Variables[(short) (offset_result + 3)] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotl_1 + 3)] | int64Variables[(short) (OFFSET_rotr_1 + 3)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2 + 3)] | int64Variables[(short) (OFFSET_rotr_2 + 3)])) ^ int64Variables[(short) (OFFSET_rotr_3 + 3)]);
@@ -788,7 +789,7 @@ short Sigma1(short offset_x, short offset_result) {
 
   rotr(offset_x,(byte)6,OFFSET_rotr_3);
 
-  int64Variables[offset_result] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotl_1)] | int64Variables[(short) (OFFSET_rotr_1)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2)] | int64Variables[(short) (OFFSET_rotr_2)])) ^ int64Variables[(short) (OFFSET_rotr_3)]);
+  int64Variables[offset_result] = (short) ((short) ((short) (int64Variables[(OFFSET_rotl_1)] | int64Variables[(OFFSET_rotr_1)])) ^ (short) ((short) (int64Variables[(OFFSET_rotl_2)] | int64Variables[(OFFSET_rotr_2)])) ^ int64Variables[(OFFSET_rotr_3)]);
   int64Variables[(short) (offset_result + 1)] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotl_1 + 1)] | int64Variables[(short) (OFFSET_rotr_1 + 1)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2 + 1)] | int64Variables[(short) (OFFSET_rotr_2 + 1)])) ^ int64Variables[(short) (OFFSET_rotr_3 + 1)]);
   int64Variables[(short) (offset_result + 2)] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotl_1 + 2)] | int64Variables[(short) (OFFSET_rotr_1 + 2)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2 + 2)] | int64Variables[(short) (OFFSET_rotr_2 + 2)])) ^ int64Variables[(short) (OFFSET_rotr_3 + 2)]);
   int64Variables[(short) (offset_result + 3)] = (short) ((short) ((short) (int64Variables[(short) (OFFSET_rotl_1 + 3)] | int64Variables[(short) (OFFSET_rotr_1 + 3)])) ^ (short) ((short) (int64Variables[(short) (OFFSET_rotl_2 + 3)] | int64Variables[(short) (OFFSET_rotr_2 + 3)])) ^ int64Variables[(short) (OFFSET_rotr_3 + 3)]);

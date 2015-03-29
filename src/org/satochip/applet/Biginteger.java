@@ -1,8 +1,10 @@
-// OV-chip 2.0 project
+// Based on the OV-chip 2.0 project
 // 
 // Digital Security (DS) group at Radboud Universiteit Nijmegen
 // Copyright (C) 2008, 2009
 // 
+// Changes by Toporin for the Bitcoin SatoChip Hardware Wallet
+// Sources available on https://github.com/Toporin
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License as
