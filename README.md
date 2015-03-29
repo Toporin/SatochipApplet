@@ -102,5 +102,5 @@ An example of application is the [BitcoinWallet](https://github.com/Toporin/Bitc
 
 This application is distributed under the GNU Affero General Public License version 3.
 
-Some parts of the code may be licensed under a different (MIT-like) license. (Contact me)[mailto:satochip.wallet@gmail.com] if you feel that some license combination is inappropriate.
+Some parts of the code may be licensed under a different (MIT-like) license. [Contact me](mailto:satochip.wallet@gmail.com) if you feel that some license combination is inappropriate.
 
