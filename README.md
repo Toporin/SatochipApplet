@@ -36,9 +36,27 @@ Disadvantages:
 
 # Supported hardware
 
+To support Bitcoin signatures, the javacard must support ALG_ECDSA_SHA_256, which in practice requires a javacard compliant with the JavaCard 3.0.1 specification. Note that this is a necessary but not sufficient condition since javacards typically implements only a subset of the specification.
+A detailed list of javacard and their supported features is available [here](http://www.fi.muni.cz/~xsvenda/jcsupport.html).
+
+An interesting guide to consult before shopping can be found [here](https://github.com/martinpaljak/GlobalPlatformPro/tree/master/docs/JavaCardBuyersGuide)
+
+## tested and working
+
+### Yubikey Neo
 **Important remark:** the Yubikeys currently sold by Yubico are configured for production only and it is not possible to load the applet on these dongles (see [this link](https://www.yubico.com/2014/07/yubikey-neo-updates/) for more details). Only the development Yubikeys (with serial number below 3,000,000) are suitable for our use! 
 
-To support Bitcoin signatures, the javacard must support ALG_ECDSA_SHA_256, which in practice requires a javacard compliant with the JavaCard 3.0.1 specification. Note that this is a necessary but not sufficient condition since javacards typically implements only a subset of the specification.
+### NXP JCOP J2D081
+Available for purchase [here](http://www.javacardsdk.com/Index.aspx?p0=AAT1P0000012&p1=1&p2=1&p3=1&p4=0&p5=1) (minimum quantity order: 5 pieces)
+
+### Swissbit PS-100u VE card Secure micro SD memory card
+More info [here](http://www.swissbit.com/index.php?option=com_content&view=article&id=293&Itemid=601)
+(Note however that Swissbit does not sell its product directly to end users but only to business partners)
+
+## Not tested but should work
+
+### J3D081 JCOP v2.4.2 R2
+Available [here](http://www.motechno.com/javacard3.0.html)
 
 
 # Build
@@ -80,4 +98,9 @@ An example of application is the [BitcoinWallet](https://github.com/Toporin/Bitc
 - The Bitcoin transaction parser is derived from [Btchip](https://github.com/LedgerHQ/btchipJC).
 - The BitcoinWallet application is based on ScripterRon [BitcoinWallet](https://github.com/ScripterRon/BitcoinWallet) client and [BitcoinCore](https://github.com/ScripterRon/BitcoinCore) library.
 
+# License
+
+This application is distributed under the GNU Affero General Public License version 3.
+
+Some parts of the code may be licensed under a different (MIT-like) license. (Contact me)[mailto:satochip.wallet@gmail.com] if you feel that some license combination is inappropriate.
 
