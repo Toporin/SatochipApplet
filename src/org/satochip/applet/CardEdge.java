@@ -399,7 +399,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	
 	// private variables 
 	private HmacSha512 hmacsha512;
-	private Sha2 sha512; // needed?
+	private Sha512 sha512; // needed?
 	private byte bip32_seedsize=(byte)0xff; // uninitialized state
 	private byte[] bip32_masterACL; // define right access for Write,Read, and Use
 	private AESKey bip32_masterkey; 
@@ -446,7 +446,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		
 		// HD wallet
 		hmacsha512= new HmacSha512();
-		sha512= new Sha2(Sha2.SHA_512);
 		
 		// debug
 		register();
