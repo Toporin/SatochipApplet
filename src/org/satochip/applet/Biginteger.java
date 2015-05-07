@@ -171,6 +171,20 @@ public class Biginteger {
         return true;
     }
     
+    public static void Shift1bit(byte[] src, short srcOffset, short size){
+		short rightShifts=(short)1;
+		short leftShifts = (short)7;
+		short mask= 0x00FF;
+		 
+		byte previousByte = src[srcOffset]; // keep the byte before modification
+		src[srcOffset]= (byte) (((src[srcOffset]&mask)>>rightShifts)&mask);
+		for(short i = (short)(srcOffset+1); i < (short)(srcOffset+size); i++) {
+			byte tmp = src[i];
+			src[i]= (byte) ( (((src[i]&mask)>>rightShifts)&mask) | ((previousByte&mask)<<leftShifts) );
+			previousByte= tmp;
+		}    
+    }
+    
     /**
      * For a Biginteger bi of given size stored in a given byte array at given offset, 
      * the function sets the Biginteger to zero*/
