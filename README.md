@@ -1,37 +1,41 @@
 # SatoChipApplet
-Open source javacard applet implementing a Bitcoin hardware wallet with partial BIP32 support
+Open source javacard applet implementing a Bitcoin hardware wallet with full BIP32 support
 
-SatoChip stands for Secure Anonymous Trustless and Open Chip. It is a javacard applet that can be used as a secure hardware wallet running for example on a [Yubikey Neo](https://store.yubico.com/store/catalog/product_info.php?ref=368&products_id=72&affiliate_banner_id=1). The SatoChip has partial BIP32 supports but due to technical limitations on current javacards, only *hardened keys* are supported (i.e. child keys using indices 2^31 through 2^32-1).
+# Demonstration 
 
-Using SatoChip, an initial BIP32 seed is imported in the javacard and private keys are derived as requested by an external application. *Private keys are never exported outside of the secure chip*. Private key derivation is actually quite slow due to the fact that BIP32 derivation requires HMAC-SHA512, which is not natively available on current javacards. Hence the applet uses a [software implementation](http://www.fi.muni.cz/~xsvenda/jcalgs.html#sha2). To improve performances, the result of key derivation is cached in secure memory for future requests.
+[![demonstrationon youtube](http://img.youtube.com/vi/ADWikh8Fxdk/0.jpg)](http://www.youtube.com/watch?v=ADWikh8Fxdk)
+
+# Introduction
+
+SatoChip stands for Secure Anonymous Trustless and Open Chip. It is a javacard applet that can be used as a secure hardware wallet running for example on a [Yubikey Neo](https://store.yubico.com/store/catalog/product_info.php?ref=368&products_id=72&affiliate_banner_id=1). The SatoChip has full BIP32 supports but due to technical limitations on current javacards, *hardened keys* (i.e. child keys using indices 2^31 through 2^32-1) are derived much faster than normal keys.
+
+Using SatoChip, an initial BIP32 seed is imported in the javacard and private keys are derived as requested by an external application. *Private keys are never exported outside of the secure chip*. Private key derivation is actually rather slow due to the fact that BIP32 derivation requires HMAC-SHA512, which is not natively available on current javacards. Hence the applet uses a [software implementation]. To improve performances, the result of key derivation is cached in secure memory for future requests so that derivation is only computed once.
 
 The SatoChip also supports the import of regular (non-BIP32 keys) such as vanity keys. Here again, private keys cannot be exported outside of the secure chip. Up to 16 regular keys can be imported on the chip. In any case, the private keys can be used to sign transactions and Bitcoin messages, if sufficient credentials are provided.
 
 Access to private keys (creation, derivation and signature) is enforced through the use of PIN code. This access control is based on the [MUSCLE framework](http://pcsclite.alioth.debian.org/musclecard.com/index.html) on which the applet is built. As part of this framework, it is also possible to securely store and retrieve data objects in secure memory, or use the chip to perform encryption and decryption, although some functionalities have been disabled.
 
-Please note that this implementation is currently under development: *Use it at your own risk!*. I cannot be held responsible for any loss incurred by the use of this application.
+Please note that this implementation is currently under development: *Use it at your own risk!*. I cannot be held responsible for any loss incurred by the use of this application. 
 
 Advantages:
 - Code is free and open source (no NDA required!)
-- Code should be easy to read and maintain (java card is a subset of java)
+- Code easy to read and maintain (java card is a subset of java)
 - Multiple form factor could be supported in addition to Yubikey (e.g sim cards)
 - Plug and play
 - Smartcards have a long experience in dealing with security and physical security in particular
 - Can be easily used or extended for other crypto-currencies
+- A test package is run during build to ensure that critical functionalities are implemented correctly
 
 Also, if used with a Yubikey:
 - Yubikey has minimal size and is practically indestructible
 - The Yubico company is not going anywhere anytime soon! 
 - Many promising functionalities: NFC, Yubikey OTP, U2F, ...
+- Possibility to use the HMAC-SHA1 challenge-response of the Yubikey as second factor for additional security against malwares
 
 Disadvantages:
 - This is still experimental code, use with caution!
-- The applet could use more testing
-- Functionalities are a bit limited currently
-- Performances are still poor (derive a new key takes about 30 seconds!)
-- Building the applet can be tricky
-- Debugging can be painful
-- Although transactions are parsed by the applet, not much is currently done to protect against MITM attacks
+- Key derivation is a bit slow(derive a new hardened key takes about 10 seconds)
+- Building the applet is a bit tricky
 - The software implementation of HMAC-SHA512 could have an potential impact on the physical security against side-channel attacks (for attackers with physical access to the chip).
 
 # Supported hardware
