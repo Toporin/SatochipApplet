@@ -114,10 +114,15 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 
 	/* constants declaration */
 	
-	// changes that impact compatibility with the client side
+	/** 
+	 * VERSION HISTORY
+	 * PROTOCOL VERSION: changes that impact compatibility with the client side
+	 * APPLET VERSION:   changes with no impact on compatibility of the client
+	 */
+	// 0.1-0.1: initial version
+	// 0.2-0.1: support for hmac-sha1 authorization + improved sha256 + bip32 full suport  
 	private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
-	private final static byte PROTOCOL_MINOR_VERSION = (byte) 1;
-	// changes with no impact on compatibility of the client
+	private final static byte PROTOCOL_MINOR_VERSION = (byte) 2;
 	private final static byte APPLET_MAJOR_VERSION = (byte) 0;
 	private final static byte APPLET_MINOR_VERSION = (byte) 1;
 	
@@ -208,14 +213,15 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	
 	// HD wallet
 	private final static byte INS_COMPUTE_SHA512 = (byte) 0x6A;
-	private final static byte INS_COMPUTE_HMACSHA512= (byte) 0x6B;
+	//private final static byte INS_COMPUTE_HMACSHA512= (byte) 0x6B;
+	private final static byte INS_COMPUTE_HMAC= (byte) 0x6B;
 	private final static byte INS_BIP32_IMPORT_SEED= (byte) 0x6C;
 	private final static byte INS_BIP32_GET_AUTHENTIKEY= (byte) 0x73;
 	private final static byte INS_BIP32_GET_EXTENDED_KEY= (byte) 0x6D;
+	private final static byte INS_BIP32_SET_EXTENDED_KEY= (byte) 0x70;
 	private final static byte INS_SIGN_MESSAGE= (byte) 0x6E;
 	private final static byte INS_SIGN_SHORT_MESSAGE= (byte) 0x72;
 	private final static byte INS_SIGN_TRANSACTION= (byte) 0x6F;
-	private final static byte INS_BIP32_SET_EXTENDED_KEY= (byte) 0x70;
 	private final static byte INS_PARSE_TRANSACTION = (byte) 0x71;
 
 	/** There have been memory problems on the card */
@@ -299,6 +305,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static byte ALG_EC_SVDP_DH_PLAIN= (byte) 3; //https://javacard.kenai.com/javadocs/connected/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN
 	private final static short LENGTH_EC_FP_256= (short) 256;
 	
+	
 	//Bitcoin: default parameters for EC curve secp256k1
 	private final static byte[] SECP256K1_P = {(byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, 
 											   (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, 
@@ -367,7 +374,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	// Buffer for storing extended APDUs
 	private byte[] recvBuffer;
 	private byte[] tmpBuffer;
-	
 
 	/*
 	 * Logged identities: this is used for faster access control, so we don't
@@ -428,9 +434,17 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private boolean sign_flag= false;
 	
 	// transaction signing
-	private byte[] transactionHash;
-	//private HMACKey hmacKey; 
-	//private Signature sigHmacSha1;
+	private byte[] transactionData;
+	private static final byte OFFSET_TRANSACTION_HASH=0;
+	private static final byte OFFSET_TRANSACTION_AMOUNT=OFFSET_TRANSACTION_HASH+32;
+	private static final byte OFFSET_TRANSACTION_TOTAL=OFFSET_TRANSACTION_AMOUNT+8;
+	private static final byte OFFSET_TRANSACTION_LIMIT=OFFSET_TRANSACTION_TOTAL+8;
+	private static final byte OFFSET_TRANSACTION_HMACKEY=OFFSET_TRANSACTION_LIMIT+8;
+	private static final byte OFFSET_TRANSACTION_SIZE=OFFSET_TRANSACTION_HMACKEY+20;
+	private static final short HMAC_CHALRESP_2FA=(short)0x8000;
+	
+	// additional options
+	private short option_flags;
 	
 	/****************************************
 	 * Methods *
@@ -593,12 +607,14 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		case INS_GET_STATUS:
 			GetStatus(apdu, buffer);
 			break;
-//		case INS_COMPUTE_SHA512:
-//			computeSha512(apdu, buffer);
-//			break;
-//		case INS_COMPUTE_HMACSHA512:
-//			computeHmacSha512(apdu, buffer);
-//			break;
+		case INS_COMPUTE_SHA512:
+			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED); // only for debug purpose
+			//computeSha512(apdu, buffer);
+			break;
+		case INS_COMPUTE_HMAC:
+			//ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED); // only for debug purpose
+			computeHmac(apdu, buffer);
+			break;
 		case INS_BIP32_IMPORT_SEED:
 			importBIP32Seed(apdu, buffer);
 			break;
@@ -617,9 +633,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		case INS_SIGN_TRANSACTION:
 			SignTransaction(apdu, buffer);
 			break;
-//		case INS_BIP32_SET_EXTENDED_KEY:	
-//			setBIP32ExtendedKey(apdu, buffer);
-//			break;
+		case INS_BIP32_SET_EXTENDED_KEY:	
+			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED); // only for debug purpose
+			//setBIP32ExtendedKey(apdu, buffer);
+			break;
 		case INS_PARSE_TRANSACTION:
 			ParseTransaction(apdu, buffer);
 			break;
@@ -638,7 +655,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * data: [default_pin_length(1b) | default_pin | 
      *        pin_tries0(1b) | ublk_tries0(1b) | pin0_length(1b) | pin0 | ublk0_length(1b) | ublk0 | 
      *        pin_tries1(1b) | ublk_tries1(1b) | pin1_length(1b) | pin1 | ublk1_length(1b) | ublk1 | 
-     *        secmemsize(2b) | memsize(2b) | ACL(3b) ]
+     *        secmemsize(2b) | memsize(2b) | ACL(3b) |
+     *        option_flags(2b) | 
+     *        hmacksha1_key(20b) | amount_limit(8b)]
 	 * where: 
 	 * 		default_pin: {0x4D, 0x75, 0x73, 0x63, 0x6C, 0x65, 0x30, 0x30};
 	 * 		pin_tries: max number of PIN try allowed before the corresponding PIN is blocked
@@ -646,7 +665,11 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * 		secmemsize: number of bytes reserved for internal memory (storage of Bip32 objects)
 	 * 		memsize: number of bytes reserved for memory with external access
 	 * 		ACL: creation rights for objects - Key - PIN
-	 * 
+	 * 		option_flags: flags to define up to 16 additional options:
+	 * 		bit15 set: second factor authentication using hmac-sha1 challenge-response (v0.2-0.1)
+	 * 			hmacsha1_key: 20-byte hmac key used for transaction authorization
+	 * 			amount_limit: max amount (in satoshis) allowed without confirmation (this includes change value)
+	 *  
 	 * return: none
 	 */
 	private void setup(APDU apdu, byte[] buffer) {
@@ -657,6 +680,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		short base = (short) (ISO7816.OFFSET_CDATA);
 
 		byte numBytes = buffer[base++];
+		bytesLeft--;
 
 		OwnerPIN pin = pins[0];
 
@@ -670,10 +694,12 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			ISOException.throwIt(SW_AUTH_FAILED);
 		
 		base += numBytes;
+		bytesLeft-=numBytes;
 
 		byte pin_tries = buffer[base++];
 		byte ublk_tries = buffer[base++];
 		numBytes = buffer[base++];
+		bytesLeft-=3;
 
 		if (!CheckPINPolicy(buffer, base, numBytes))
 			ISOException.throwIt(SW_INVALID_PARAMETER);
@@ -682,8 +708,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		pins[0].update(buffer, base, numBytes);
 
 		base += numBytes;
+		bytesLeft-=numBytes;
 		numBytes = buffer[base++];
-
+		bytesLeft--;
+		
 		if (!CheckPINPolicy(buffer, base, numBytes))
 			ISOException.throwIt(SW_INVALID_PARAMETER);
 
@@ -691,11 +719,13 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		ublk_pins[0].update(buffer, base, numBytes);
 
 		base += numBytes;
+		bytesLeft-=numBytes;
 
 		pin_tries = buffer[base++];
 		ublk_tries = buffer[base++];
 		numBytes = buffer[base++];
-
+		bytesLeft-=3;
+		
 		if (!CheckPINPolicy(buffer, base, numBytes))
 			ISOException.throwIt(SW_INVALID_PARAMETER);
 
@@ -703,23 +733,28 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		pins[1].update(buffer, base, numBytes);
 
 		base += numBytes;
+		bytesLeft-=numBytes;
 		numBytes = buffer[base++];
-
+		bytesLeft--;
+		
 		if (!CheckPINPolicy(buffer, base, numBytes))
 			ISOException.throwIt(SW_INVALID_PARAMETER);
 
 		ublk_pins[1] = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
 		ublk_pins[1].update(buffer, base, numBytes);
 		base += numBytes;
+		bytesLeft-=numBytes;
 		
 		short secmem_size= Util.getShort(buffer, base);
 		base += (short) 2;
 		short mem_size = Util.getShort(buffer, base);
 		base += (short) 2;
-
+		bytesLeft-=4;
+		
 		create_object_ACL = buffer[base++];
 		create_key_ACL = buffer[base++];
 		create_pin_ACL = buffer[base++];
+		bytesLeft-=3;
 		
 		mem = new MemoryManager((short) mem_size);
 		om = new ObjectManager(mem);
@@ -765,7 +800,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 
 		// HD wallet
 		HmacSha512.init(tmpBuffer);
-		HmacSha160.init(tmpBuffer);
 		EccComputation.init(tmpBuffer);
 		// bip32 material
 		bip32_master_compbyte=0x04;
@@ -807,12 +841,25 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		
 		// Transaction signing
 		Transaction.init();
-		transactionHash= new byte[32];
-
-		// hmac initialization (doesn't work? return 6F00)
-		//hmacKey= (HMACKey) KeyBuilder.buildKey(KeyBuilder.TYPE_HMAC, KeyBuilder.LENGTH_HMAC_SHA_1_BLOCK_64, false);
-		//hmacKey= (HMACKey) KeyBuilder.buildKey(KeyBuilder.TYPE_HMAC_TRANSIENT_DESELECT, KeyBuilder.LENGTH_HMAC_SHA_1_BLOCK_64, false); //debug 11
-		//sigHmacSha1= Signature.getInstance(Signature.ALG_HMAC_SHA1, false);
+		HmacSha160.init(tmpBuffer);
+		transactionData= new byte[OFFSET_TRANSACTION_SIZE];
+		
+		// parse options
+		option_flags=0;
+		if (bytesLeft>=2){
+			option_flags = Util.getShort(buffer, base);
+			base+=(short)2;
+			bytesLeft-=(short)2;
+			// transaction confirmation based on hmacsha160
+			if ((option_flags & HMAC_CHALRESP_2FA)==HMAC_CHALRESP_2FA){
+				Util.arrayCopyNonAtomic(buffer, base, transactionData, OFFSET_TRANSACTION_HMACKEY, (short)20); 
+				base+=(short)20;
+				bytesLeft-=(short)20;
+				Util.arrayCopyNonAtomic(buffer, base, transactionData, OFFSET_TRANSACTION_LIMIT, (short)8); 
+				base+=(short)8;
+				bytesLeft-=(short)8;
+			}
+		}
 		
 		setupDone = true;
 	}
@@ -2790,27 +2837,30 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 //		
 //		apdu.setOutgoingAndSend((short) 0, Sha2.SHA512_DIGEST_LENGTH);
 //	}
-//	
-//	private void computeHmacSha512(APDU apdu, byte[] buffer) {
-//		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
-//			ISOException.throwIt(SW_INCORRECT_P1);
-//		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
-//			ISOException.throwIt(SW_INCORRECT_P2);
-//		short avail = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-//		if (apdu.setIncomingAndReceive() != avail)
-//			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-//		
-//		short pos= ISO7816.OFFSET_CDATA;//apdu.getOffsetCdata(); //(short) ISO7816.OFFSET_CDATA;
-//		short key_size=Util.getShort(buffer, pos);
-//		pos+=2;
-//		pos+=key_size;
-//		short msg_size=Util.getShort(buffer, pos);
-//		pos+=2;
-//		hmacsha512.computeHmacSha512(buffer, (short)(ISO7816.OFFSET_CDATA+2), key_size, buffer, pos, msg_size, buffer, (short)0);
-//		apdu.setOutgoingAndSend((short) 0, HmacSha512.hash_size);
-//		
-//		return;
-//	}
+
+	private void computeHmac(APDU apdu, byte[] buffer) {
+		if (buffer[ISO7816.OFFSET_P1] != (byte)20 && buffer[ISO7816.OFFSET_P1] != (byte)64)
+			ISOException.throwIt(SW_INCORRECT_P1);
+		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
+			ISOException.throwIt(SW_INCORRECT_P2);
+		short avail = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+		if (apdu.setIncomingAndReceive() != avail)
+			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+		
+		short pos= ISO7816.OFFSET_CDATA;//apdu.getOffsetCdata(); //(short) ISO7816.OFFSET_CDATA;
+		short key_size=Util.getShort(buffer, pos);
+		pos+=2;
+		pos+=key_size;
+		short msg_size=Util.getShort(buffer, pos);
+		pos+=2;
+		short hashSize=0;
+		if (buffer[ISO7816.OFFSET_P1]==(byte)20)
+			hashSize= HmacSha160.computeHmacSha160(buffer, (short)(ISO7816.OFFSET_CDATA+2), key_size, buffer, pos, msg_size, buffer, (short)0);
+		else if (buffer[ISO7816.OFFSET_P1]==(byte)64)
+			hashSize= HmacSha512.computeHmacSha512(buffer, (short)(ISO7816.OFFSET_CDATA+2), key_size, buffer, pos, msg_size, buffer, (short)0);
+		apdu.setOutgoingAndSend((short) 0, hashSize);
+		return;
+	}
 	
 	/**
 	 * This function imports a Bip32 seed to the applet and derives the master key and chain code.
@@ -3165,145 +3215,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		
 		return nb_deleted;
 	}
-//	
-//	// OV-chip 2.0 project
-//	// 
-//	// Digital Security (DS) group at Radboud Universiteit Nijmegen
-//	// Copyright (C) 2008, 2009
-//	// 
-//	// This program is free software; you can redistribute it and/or
-//	// modify it under the terms of the GNU General Public License as
-//	// published by the Free Software Foundation; either version 2 of
-//	// the License, or (at your option) any later version.
-//	// 
-//	// This program is distributed in the hope that it will be useful,
-//	// but WITHOUT ANY WARRANTY; without even the implied warranty of
-//	// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-//	// General Public License in file COPYING in this or one of the
-//	// parent directories for more details.
-//	//
-//
-//	/**
-//     * Addition with carry report. Adds other to this number. If this
-//     * is too small for the result (i.e., an overflow occurs) the
-//     * method returns true. Further, the result in {@code this} will
-//     * then be the correct result of an addition modulo the first
-//     * number that does not fit into {@code this} ({@code 2^(}{@link
-//     * #digit_len}{@code * }{@link #size this.size}{@code )}), i.e.,
-//     * only one leading 1 bit is missing. If there is no overflow the
-//     * method will return false.
-//     * <P>
-//     * 
-//     * compute x= x+y
-//     * operands are stored Most Signifiant Byte First
-//     * size is the size in bytes of the operands (should be same size, padded with 0..0 if needed)
-//     * @param other 
-//     */
-//	private boolean add_carry(byte[] x, short offsetx, byte[] y, short offsety, short size)
-//    {
-//        short akku = 0;
-//        short j = (short)(offsetx+size-1); 
-//        for(short i = (short)(offsety+size-1); i >= offsety; i--, j--) {
-//            akku = (short)(akku + (x[j] & digit_mask) + (y[i] & digit_mask));
-//
-//            x[j] = (byte)(akku & digit_mask);
-//            akku = (short)((akku >>> digit_len) & digit_mask);
-//        }
-//        
-//        return akku != 0;
-//    }
-//	
-//	/**
-//	 * compute x= x+1
-//	 * operands are stored Most Signifiant Byte First
-//	 * size is the size in bytes of the operand x
-//	 */
-//	private boolean add1_carry(byte[] x, short offsetx, short size)
-//    {
-//		short digit_mask = (short)0xff;
-//		short digit_len = 8;
-//		short akku = 1; // first carry set to 1 for increment
-//        for(short i = (short)(offsetx+size-1); i >= offsetx; i--) {
-//            akku = (short) ((x[i] & digit_mask) + akku);
-//
-//            x[i] = (byte)(akku & digit_mask);
-//            akku = (short)((akku >>> digit_len) & digit_mask);
-//        }
-//        
-//        return akku != 0;
-//    }
-//	
-//	/**
-//     * 
-//     * Subtraction. Subtract {@code other} from {@code this} and store
-//     * the result in {@code this}. If an overflow occurs the return
-//     * value is true and the value of this is the correct negative
-//     * result in two's complement. If there is no overflow the return
-//     * value is false.
-//     * <P>
-//     *
-//     * compute x= x-y
-//     * operands are stored Most Signifiant Byte First
-//     * size is the size in bytes of the operands (should be same size, padded with 0..0 if needed) 
-//     */
-//    public boolean subtract(byte[] x, short offsetx, byte[] y, short offsety, short size) {
-//        
-//    	short subtraction_result = 0;
-//        short carry = 0;
-//
-//        short i = (short)(offsetx+size-1);
-//        short j = (short)(offsety+size-1);
-//        for(; i >= offsetx && j >= offsety; i--, j--) {
-//            subtraction_result = (short) ((x[i] & digit_mask) - (y[j] & digit_mask) - carry);
-//            x[i] = (byte)(subtraction_result & digit_mask);
-//            carry = (short)(subtraction_result < 0 ? 1 : 0);
-//        }
-//
-//        return carry > 0;
-//    }
-//
-//    /**
-//     * Check whether (unsigned)x is strictly smaller than (unsigned)y 
-//     * operands are stored Most Signifiant Byte First
-//     * size is the size in bytes of the operands (should be same size, padded with 0..0 if needed) 
-//     * returns true if x is strictly smaller than y, false otherwise
-//     */
-//    public static boolean lessThan(byte[] x, short offsetx, byte[] y, short offsety, short size) {
-//        
-//    	short xs, ys;
-//        for(short i = offsetx, j=offsety; i < (short)(offsetx+size); i++, j++) {
-//            xs= (short)(x[i] & digit_mask);
-//            ys= (short)(y[j] & digit_mask);
-//        	
-//        	if(xs < ys) return true;
-//            if(xs > ys) return false;
-//        }
-//        return false; // in case of equality
-//    }
-//    /**
-//    * Check whether x is strictly equal to 0 
-//    * operands are stored Most Signifiant Byte First
-//    * size is the size in bytes of the operand 
-//    * returns true if x is equal to 0, false otherwise
-//    */
-//    public static boolean equalZero(byte[] x, short offsetx, short size) {
-//        
-//        for(short i = offsetx; i < (short)(offsetx+size); i++) {
-//            if(x[i] != 0) return false;
-//        }
-//        return true;
-//    }
-//    
-//    /**
-//     * Compare unsigned byte/short in java
-//     * http://www.javamex.com/java_equivalents/unsigned_arithmetic.shtml 
-//     */
-//    public static boolean isStrictlyLessThanUnsigned(byte n1, byte n2) {
-//    	return (n1 < n2) ^ ((n1 < 0) != (n2 < 0));
-//	}
-//    public static boolean isStrictlyLessThanUnsigned(short n1, short n2) {
-//    	return (n1 < n2) ^ ((n1 < 0) != (n2 < 0));
-//	}
     
     /**
      * This function signs Bitcoin message using std or Bip32 extended key
@@ -3497,8 +3408,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * p2: 0x00
 	 * data: [raw_tx]
 	 * 
-	 * return: [hash(32b) | sig_size(2b) | sig ]
+	 * return: [hash(32b) | needs_confirm(1b) | sig_size(2b) | sig ]
 	 *
+	 * where:
+	 * 		needs_confirm is 0x01 if a hmac-sha1 of the hash must be provided for tx signing 
      */
     private void ParseTransaction(APDU apdu, byte[] buffer){
     	
@@ -3556,26 +3469,38 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
         }
         else if (result == Transaction.RESULT_FINISHED) {
             
-        	short offset = 0;
-        	// store transaction hash (single hash!) in memory 
-            Transaction.digestFull.doFinal(transactionHash, (short)0, (short)0, transactionHash, (short)0);
-            // return transaction hash (double hash!) 
-            sha256.reset();
-            sha256.doFinal(transactionHash, (short)0, (short)32, buffer, offset);
-            offset += 32;
+        	// check whether 2fa is required (hmac-sha1 of tx hash)
+            short need2fa=(short)0x0000;
+            Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_A_TRANSACTION_AMOUNT, transactionData, OFFSET_TRANSACTION_AMOUNT, (short)8);
+            Biginteger.add_carry(transactionData, OFFSET_TRANSACTION_AMOUNT, transactionData, OFFSET_TRANSACTION_TOTAL, (short)8);
+            if ((option_flags & HMAC_CHALRESP_2FA)==HMAC_CHALRESP_2FA){
+	            if (Biginteger.lessThan(transactionData, OFFSET_TRANSACTION_LIMIT, transactionData, OFFSET_TRANSACTION_AMOUNT, (short)8)){
+	            	need2fa^= HMAC_CHALRESP_2FA; // set msb 
+	            }
+            }
             
+        	// store transaction hash (single hash!) in memory 
+            Transaction.digestFull.doFinal(transactionData, (short)0, (short)0, transactionData, OFFSET_TRANSACTION_HASH);
+            // return transaction hash (double hash!) 
+            // the msb bit of hash_size is set to 1 if a Hmac confirmation is required for the tx signature
+            sha256.reset();
+            short hash_size=sha256.doFinal(transactionData, OFFSET_TRANSACTION_HASH, (short)32, buffer, (short)2);
+            Util.setShort(buffer, (short)0, (short)(hash_size^need2fa));
+            short offset = (short)(2+hash_size);
+        	
             // hash signed by authentikey if seed is initialized
             if (bip32_seedsize!=(byte)0xFF){
 	            sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
-	            short sign_size= sigECDSA.sign(buffer, (short)0, (short)32, buffer, (short)(32+2));
-	            Util.setShort(buffer, (short)32, sign_size);
+	            short sign_size= sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
+	            Util.setShort(buffer, offset, sign_size);
 	            offset+=(short)(2+sign_size); 
             }else{
-            	Util.setShort(buffer, (short)32, (short)0);
+            	Util.setShort(buffer, offset, (short)0);
             	offset+=(short)2;
             }
         	
-        	// Transaction context
+        	// Transaction context 
+            //todo: put this context in other method
         	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_I_CURRENT_I, buffer, offset, Transaction.SIZEOF_U32);
         	offset += 4;
         	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_I_CURRENT_O, buffer, offset, Transaction.SIZEOF_U32);
@@ -3607,7 +3532,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
             
             // reset data and send result
             // buffer= [tx_hash(32) | sign_size(2) | signature | tx context(20 - 46)]
-            // TO DO: Challenge-response mechanism? => the challenge is the tx hash
             Transaction.resetTransaction();
             apdu.setOutgoingAndSend((short)0, offset);                       
         }
@@ -3618,11 +3542,13 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     /**
      * This function signs the current hash transaction with a std or the last extended key
      * The hash provided in the APDU is compared to the version stored inside the chip.
+	 * Depending of the total amount in the transaction and the predefined limit, 
+	 * a HMAC must be provided as an additional security layer. 
 	 * 
      * ins: 0x6F
 	 * p1: key number or 0xFF for the last derived Bip32 extended key  
 	 * p2: 0x00
-	 * data: [hash]
+	 * data: [hash(32b) | option:hmac(20b)]
 	 * 
 	 * return: [sig ]
 	 *
@@ -3644,25 +3570,38 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     	if (key_nb!=(byte)0xFF && !authorizeKeyOp(key_nb, ACL_USE))
 			ISOException.throwIt(SW_UNAUTHORIZED);
     	
-    	// check whether the seed is seed is initialized
+    	// check whether the seed is initialized
 		if (key_nb==(byte)0xFF && bip32_seedsize==(byte)0xFF)
 			ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
 		
 		// check doublehash value in buffer with cached singlehash value
 		sha256.reset();
-		sha256.doFinal(transactionHash, (short)0, MessageDigest.LENGTH_SHA_256, recvBuffer, (short)0);
+		sha256.doFinal(transactionData, OFFSET_TRANSACTION_HASH, MessageDigest.LENGTH_SHA_256, recvBuffer, (short)0);
 		if ((byte)0 != Util.arrayCompare(buffer, ISO7816.OFFSET_CDATA, recvBuffer, (short)0, MessageDigest.LENGTH_SHA_256))
 			ISOException.throwIt(SW_INCORRECT_TXHASH);
 		
-		// check challenge-response answer
-//		if (hmacKey.isInitialized()){
-//			// buffer= [tx_doublehash(32) | tx_sig(20)]
-//			if (bytesLeft<MessageDigest.LENGTH_SHA_256+MessageDigest.LENGTH_SHA)
-//				ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-//			sigHmacSha1.init(hmacKey, Signature.MODE_VERIFY);
-//    		if(!sigHmacSha1.verify(buffer, (short)0, MessageDigest.LENGTH_SHA_256, buffer, MessageDigest.LENGTH_SHA_256, MessageDigest.LENGTH_SHA))
-//    			ISOException.throwIt(SW_SIGNATURE_INVALID);
-//    	}
+		// check challenge-response answer if necessary
+		if( (option_flags & HMAC_CHALRESP_2FA)==HMAC_CHALRESP_2FA){
+			if(	Biginteger.lessThan(transactionData, OFFSET_TRANSACTION_LIMIT, transactionData, OFFSET_TRANSACTION_AMOUNT, (short)8)){
+				if (bytesLeft<MessageDigest.LENGTH_SHA_256+MessageDigest.LENGTH_SHA+(short)2)
+					ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+				// check flag for 2fa_hmac_chalresp
+				short hmac_flags= Util.getShort(buffer, (short)(ISO7816.OFFSET_CDATA+32+2));
+				if (hmac_flags!=HMAC_CHALRESP_2FA)
+					ISOException.throwIt(SW_INCORRECT_ALG);
+				// hmac of 64-bytes msg: (doublesha256(raw_tx) | 32bytes padding)
+				Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0x00);
+				HmacSha160.computeHmacSha160(transactionData, OFFSET_TRANSACTION_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
+				if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20)!=0)
+					ISOException.throwIt(SW_SIGNATURE_INVALID);
+				// reset total amount
+				Util.arrayFillNonAtomic(transactionData, OFFSET_TRANSACTION_TOTAL, (short)8, (byte)0x00);
+			}
+			else{					
+				//update total amount
+				Util.arrayCopyNonAtomic(transactionData, OFFSET_TRANSACTION_AMOUNT, transactionData, OFFSET_TRANSACTION_TOTAL, (short)8);
+			}
+		}
 		
 		// hash+sign singlehash
     	if (key_nb==(byte)0xFF)
@@ -3673,7 +3612,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     			ISOException.throwIt(SW_INCORRECT_ALG);
     		sigECDSA.init(key, Signature.MODE_SIGN);
     	}
-        short sign_size= sigECDSA.sign(transactionHash, (short)0, (short)32, buffer, (short)0);
+        short sign_size= sigECDSA.sign(transactionData, OFFSET_TRANSACTION_HASH, (short)32, buffer, (short)0);
         apdu.setOutgoingAndSend((short) 0, sign_size);
     	
     }

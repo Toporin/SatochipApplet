@@ -41,7 +41,8 @@ public class HmacSha160 {
 		data= tmp;
 	}
 	
-	public static void computeHmacSha160(byte[] key, short key_offset, short key_length, 
+	public static short computeHmacSha160(
+			byte[] key, short key_offset, short key_length, 
 			byte[] message, short message_offset, short message_length,
 			byte[] mac, short mac_offset){
 		
@@ -75,7 +76,7 @@ public class HmacSha160 {
 		// previous hash already copied to correct offset in data
 		sha160.reset();
 		sha160.doFinal(data, (short)0, (short)(BLOCKSIZE+HASHSIZE), mac, mac_offset);
-		return;
+		return HASHSIZE;
 	}	
 	
 }

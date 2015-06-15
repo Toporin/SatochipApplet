@@ -41,7 +41,7 @@ public class HmacSha512 {
 		//this.data= new byte[(short)(BLOCKSIZE+HASHSIZE)];
 	}
 	
-	public static void computeHmacSha512(byte[] key, short key_offset, short key_length, 
+	public static short computeHmacSha512(byte[] key, short key_offset, short key_length, 
 			byte[] message, short message_offset, short message_length,
 			byte[] mac, short mac_offset){
 		
@@ -78,7 +78,7 @@ public class HmacSha512 {
 		// previous hash already copied to correct offset in data
 		sha512.reset();
 		sha512.doFinal(data, (short)0, (short)(BLOCKSIZE+HASHSIZE), mac, mac_offset);
-		return;
+		return HASHSIZE;
 	}	
 	
 }
