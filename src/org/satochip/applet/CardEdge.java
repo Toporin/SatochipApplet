@@ -306,33 +306,33 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static short LENGTH_EC_FP_256= (short) 256;
 	
 	
-	//Bitcoin: default parameters for EC curve secp256k1
-	private final static byte[] SECP256K1_P = {(byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, 
-											   (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, 
-											   (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF,
-											   (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFE, (byte)0xFF,(byte)0xFF,(byte)0xFC,(byte)0x2F}; 
-	private final static byte[] SECP256K1_a = {0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00, 
-											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00, 
-											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
-											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00};
-	private final static byte[] SECP256K1_b = {0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
-											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
-											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
-											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x07};
-	private final static byte[] SECP256K1_G = {(byte)0x04, //base point, uncompressed form 
-											   (byte)0x79,(byte)0xBE,(byte)0x66,(byte)0x7E, (byte)0xF9,(byte)0xDC,(byte)0xBB,(byte)0xAC,
-											   (byte)0x55,(byte)0xA0,(byte)0x62,(byte)0x95, (byte)0xCE,(byte)0x87,(byte)0x0B,(byte)0x07,
-											   (byte)0x02,(byte)0x9B,(byte)0xFC,(byte)0xDB, (byte)0x2D,(byte)0xCE,(byte)0x28,(byte)0xD9,
-											   (byte)0x59,(byte)0xF2,(byte)0x81,(byte)0x5B, (byte)0x16,(byte)0xF8,(byte)0x17,(byte)0x98,
-											   (byte)0x48,(byte)0x3A,(byte)0xDA,(byte)0x77, (byte)0x26,(byte)0xA3,(byte)0xC4,(byte)0x65,
-											   (byte)0x5D,(byte)0xA4,(byte)0xFB,(byte)0xFC, (byte)0x0E,(byte)0x11,(byte)0x08,(byte)0xA8,
-											   (byte)0xFD,(byte)0x17,(byte)0xB4,(byte)0x48, (byte)0xA6,(byte)0x85,(byte)0x54,(byte)0x19,
-											   (byte)0x9C,(byte)0x47,(byte)0xD0,(byte)0x8F, (byte)0xFB,(byte)0x10,(byte)0xD4,(byte)0xB8};
-	private final static byte[] SECP256K1_R = {(byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, // order of G
-											   (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFE,
-											   (byte)0xBA,(byte)0xAE,(byte)0xDC,(byte)0xE6, (byte)0xAF,(byte)0x48,(byte)0xA0,(byte)0x3B,
-											   (byte)0xBF,(byte)0xD2,(byte)0x5E,(byte)0x8C, (byte)0xD0,(byte)0x36,(byte)0x41,(byte)0x41};
-	private final static short SECP256K1_K = 0x01; // cofactor 
+//	//Bitcoin: default parameters for EC curve secp256k1
+//	private final static byte[] SECP256K1_P = {(byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, 
+//											   (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, 
+//											   (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF,
+//											   (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFE, (byte)0xFF,(byte)0xFF,(byte)0xFC,(byte)0x2F}; 
+//	private final static byte[] SECP256K1_a = {0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00, 
+//											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00, 
+//											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+//											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00};
+//	private final static byte[] SECP256K1_b = {0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+//											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+//											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+//											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x07};
+//	private final static byte[] SECP256K1_G = {(byte)0x04, //base point, uncompressed form 
+//											   (byte)0x79,(byte)0xBE,(byte)0x66,(byte)0x7E, (byte)0xF9,(byte)0xDC,(byte)0xBB,(byte)0xAC,
+//											   (byte)0x55,(byte)0xA0,(byte)0x62,(byte)0x95, (byte)0xCE,(byte)0x87,(byte)0x0B,(byte)0x07,
+//											   (byte)0x02,(byte)0x9B,(byte)0xFC,(byte)0xDB, (byte)0x2D,(byte)0xCE,(byte)0x28,(byte)0xD9,
+//											   (byte)0x59,(byte)0xF2,(byte)0x81,(byte)0x5B, (byte)0x16,(byte)0xF8,(byte)0x17,(byte)0x98,
+//											   (byte)0x48,(byte)0x3A,(byte)0xDA,(byte)0x77, (byte)0x26,(byte)0xA3,(byte)0xC4,(byte)0x65,
+//											   (byte)0x5D,(byte)0xA4,(byte)0xFB,(byte)0xFC, (byte)0x0E,(byte)0x11,(byte)0x08,(byte)0xA8,
+//											   (byte)0xFD,(byte)0x17,(byte)0xB4,(byte)0x48, (byte)0xA6,(byte)0x85,(byte)0x54,(byte)0x19,
+//											   (byte)0x9C,(byte)0x47,(byte)0xD0,(byte)0x8F, (byte)0xFB,(byte)0x10,(byte)0xD4,(byte)0xB8};
+//	private final static byte[] SECP256K1_R = {(byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, // order of G
+//											   (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFE,
+//											   (byte)0xBA,(byte)0xAE,(byte)0xDC,(byte)0xE6, (byte)0xAF,(byte)0x48,(byte)0xA0,(byte)0x3B,
+//											   (byte)0xBF,(byte)0xD2,(byte)0x5E,(byte)0x8C, (byte)0xD0,(byte)0x36,(byte)0x41,(byte)0x41};
+//	private final static short SECP256K1_K = 0x01; // cofactor 
 	
 	/****************************************
 	 * Instance variables declaration *
@@ -813,28 +813,31 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		aes128= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_ECB_NOPAD, false);
 		// object containing the current extended key
 		bip32_extendedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
-		bip32_extendedkey.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
-		bip32_extendedkey.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
-		bip32_extendedkey.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
-		bip32_extendedkey.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
-		bip32_extendedkey.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
-		bip32_extendedkey.setK( SECP256K1_K);
+		Secp256k1.setCommonCurveParameters(bip32_extendedkey);
+//		bip32_extendedkey.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
+//		bip32_extendedkey.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
+//		bip32_extendedkey.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
+//		bip32_extendedkey.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
+//		bip32_extendedkey.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
+//		bip32_extendedkey.setK( SECP256K1_K);
 		// key used to authenticate sensitive data from applet
 		bip32_authentikey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
-		bip32_authentikey.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
-		bip32_authentikey.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
-		bip32_authentikey.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
-		bip32_authentikey.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
-		bip32_authentikey.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
-		bip32_authentikey.setK( SECP256K1_K);
+		Secp256k1.setCommonCurveParameters(bip32_authentikey);
+//		bip32_authentikey.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
+//		bip32_authentikey.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
+//		bip32_authentikey.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
+//		bip32_authentikey.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
+//		bip32_authentikey.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
+//		bip32_authentikey.setK( SECP256K1_K);
 		// key used to recover public key from private
 		bip32_pubkey= (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, LENGTH_EC_FP_256, false);
-		bip32_pubkey.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
-		bip32_pubkey.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
-		bip32_pubkey.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
-		bip32_pubkey.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
-		bip32_pubkey.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
-		bip32_pubkey.setK( SECP256K1_K);
+		Secp256k1.setCommonCurveParameters(bip32_pubkey);
+//		bip32_pubkey.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
+//		bip32_pubkey.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
+//		bip32_pubkey.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
+//		bip32_pubkey.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
+//		bip32_pubkey.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
+//		bip32_pubkey.setK( SECP256K1_K);
 		
 		// message signing
 		sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
@@ -1551,13 +1554,14 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
         		// Bitcoin uses 256-bit keysize!
         		if (key_size!=256)
         			ISOException.throwIt(SW_INVALID_PARAMETER);
-	            // PINCOIN default is secp256k1 (over Fp)
-				prv_key.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
-				prv_key.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
-				prv_key.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
-				prv_key.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
-				prv_key.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
-				prv_key.setK( SECP256K1_K);
+	            // Satochip default is secp256k1 (over Fp)
+        		Secp256k1.setCommonCurveParameters(prv_key);
+//				prv_key.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
+//				prv_key.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
+//				prv_key.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
+//				prv_key.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
+//				prv_key.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
+//				prv_key.setK( SECP256K1_K);
 				// Set secret value from random 
 				randomData.generateData(recvBuffer,(short)0,(short)(key_size/8));
 				prv_key.setS(recvBuffer, (short)0, (short)(key_size/8));
@@ -1706,13 +1710,14 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 				if (bytesLeft < (short) (blob_size))
 					ISOException.throwIt(SW_INVALID_PARAMETER);
 				// others curves parameters are take by default as SECP256k1
-				// PINCOIN default is secp256k1 (over Fp)
-				ec_pub_key.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
-				ec_pub_key.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
-				ec_pub_key.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
-				ec_pub_key.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
-				ec_pub_key.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
-				ec_pub_key.setK( SECP256K1_K);
+				// Satochip default is secp256k1 (over Fp)
+				Secp256k1.setCommonCurveParameters(ec_pub_key);
+//				ec_pub_key.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
+//				ec_pub_key.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
+//				ec_pub_key.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
+//				ec_pub_key.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
+//				ec_pub_key.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
+//				ec_pub_key.setK( SECP256K1_K);
 				// set public point
 				ec_pub_key.setW(buffer, dataOffset, (short)(blob_size));
 				// https://javacard.kenai.com/javadocs/classic/javacard/security/ECPrivateKey.html
@@ -1735,13 +1740,8 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	            if (bytesLeft < (short) (blob_size))
 	                ISOException.throwIt(SW_INVALID_PARAMETER);
 	            // curves parameters are take by default as SECP256k1
-	            // PINCOIN default is secp256k1 (over Fp)
-	            ec_prv_key.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
-	            ec_prv_key.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
-	            ec_prv_key.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
-	            ec_prv_key.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
-	            ec_prv_key.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
-	            ec_prv_key.setK( SECP256K1_K);
+	            // Satochip default is secp256k1 (over Fp)
+	            Secp256k1.setCommonCurveParameters(ec_prv_key);
 	            // set from secret value
 	            ec_prv_key.setS(buffer, dataOffset, blob_size);
 	            dataOffset += blob_size; 
@@ -1909,27 +1909,12 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 					ISOException.throwIt(SW_INCORRECT_ALG);
 				
 				// check the curve param
-				((ECPrivateKey)key).getA(recvBuffer, (short)0);
-				if (0!=Util.arrayCompare(recvBuffer, (short)0, SECP256K1_a, (short)0, (short)SECP256K1_a.length))
-					ISOException.throwIt(SW_INCORRECT_ALG);
-				((ECPrivateKey)key).getB(recvBuffer, (short)0);
-				if (0!=Util.arrayCompare(recvBuffer, (short)0, SECP256K1_b, (short)0, (short)SECP256K1_b.length))
-					ISOException.throwIt(SW_INCORRECT_ALG);
-				((ECPrivateKey)key).getG(recvBuffer, (short)0);
-				if (0!=Util.arrayCompare(recvBuffer, (short)0, SECP256K1_G, (short)0, (short)SECP256K1_G.length))
-					ISOException.throwIt(SW_INCORRECT_ALG);
-				((ECPrivateKey)key).getR(recvBuffer, (short)0);
-				if (0!=Util.arrayCompare(recvBuffer, (short)0, SECP256K1_R, (short)0, (short)SECP256K1_R.length))
-					ISOException.throwIt(SW_INCORRECT_ALG);
-				((ECPrivateKey)key).getField(recvBuffer, (short)0);
-				if (0!=Util.arrayCompare(recvBuffer, (short)0, SECP256K1_P, (short)0, (short)SECP256K1_P.length))
-					ISOException.throwIt(SW_INCORRECT_ALG);
-				if (((ECPrivateKey)key).getK()!= SECP256K1_K)
+				if(!Secp256k1.checkCurveParameters((ECPrivateKey)key, recvBuffer, (short)0))
 					ISOException.throwIt(SW_INCORRECT_ALG);
 				
 				// compute the corresponding partial public key...
 		        keyAgreement.init((ECPrivateKey)key);
-		        short coordx_size = keyAgreement.generateSecret(SECP256K1_G, (short) 0, (short) SECP256K1_G.length, buffer, (short)2); // compute x coordinate of public key as k*G
+		        short coordx_size = keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)2); // compute x coordinate of public key as k*G
 		        Util.setShort(buffer, (short)0, coordx_size);
 		        
 		        // sign fixed message
@@ -2930,7 +2915,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		
 		// compute the partial authentikey public key...
         keyAgreement.init(bip32_authentikey);
-        short coordx_size = keyAgreement.generateSecret(SECP256K1_G, (short) 0, (short) SECP256K1_G.length, buffer, (short)2); // compute x coordinate of public key as k*G
+        short coordx_size = keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)2); // compute x coordinate of public key as k*G
         Util.setShort(buffer, (short)0, coordx_size);
         // self signed public key
         sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
@@ -2965,7 +2950,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		
 		// compute the partial authentikey public key...
         keyAgreement.init(bip32_authentikey);
-        short coordx_size = keyAgreement.generateSecret(SECP256K1_G, (short) 0, (short) SECP256K1_G.length, buffer, (short)2); // compute x coordinate of public key as k*G
+        short coordx_size = keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)2); // compute x coordinate of public key as k*G
         Util.setShort(buffer, (short)0, coordx_size);
         // self signed public key
         sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
@@ -3080,7 +3065,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 					// compute coord x from privkey 
 					bip32_extendedkey.setS(recvBuffer, (short)(BIP32_KEY_SIZE+1), BIP32_KEY_SIZE);
 					keyAgreement.init(bip32_extendedkey);
-			        keyAgreement.generateSecret(SECP256K1_G, (short) 0, (short) SECP256K1_G.length, recvBuffer, BIP32_OFFSET_PUBX); 
+			        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, BIP32_OFFSET_PUBX); 
 			        
 			        // compute compbyte from coord y if necessary
 			        if (compbyte==0x04){
@@ -3116,18 +3101,18 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 				
 				// addition with parent_key...
 				// First check that parse256(IL) < SECP256K1_R
-				if(!Biginteger.lessThan(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, SECP256K1_R, (short) 0, BIP32_KEY_SIZE)){
+				if(!Biginteger.lessThan(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE)){
 					ISOException.throwIt(SW_BIP32_DERIVATION_ERROR);
 				}
 				// add parent_key (mod SECP256K1_R)
 				if(Biginteger.add_carry(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, recvBuffer, (short) (BIP32_KEY_SIZE+1), BIP32_KEY_SIZE)){
 					// in case of final carry, we must substract SECP256K1_R
 					// we have IL<SECP256K1_R and parent_key<SECP256K1_R, so IL+parent_key<2*SECP256K1_R
-					Biginteger.subtract(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, SECP256K1_R, (short) 0, BIP32_KEY_SIZE);	
+					Biginteger.subtract(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE);	
 				}else{
 				    // in the unlikely case where SECP256K1_R<=IL+parent_key<2^256
-					if(!Biginteger.lessThan(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, SECP256K1_R, (short) 0, BIP32_KEY_SIZE)){
-						Biginteger.subtract(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, SECP256K1_R, (short) 0, BIP32_KEY_SIZE);
+					if(!Biginteger.lessThan(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE)){
+						Biginteger.subtract(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE);
 					}
 					// check that value is not 0
 					if(Biginteger.equalZero(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, BIP32_KEY_SIZE)){
@@ -3175,7 +3160,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 				
 		// compute the corresponding partial public key...
         keyAgreement.init(bip32_extendedkey);
-        short coordx_size = keyAgreement.generateSecret(SECP256K1_G, (short) 0, (short) SECP256K1_G.length, buffer, (short)2); // compute x coordinate of public key as k*G
+        short coordx_size = keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)2); // compute x coordinate of public key as k*G
         Util.setShort(buffer, (short)0, coordx_size);
         
         // self-sign coordx
