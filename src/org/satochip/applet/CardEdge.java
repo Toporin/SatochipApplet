@@ -121,8 +121,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 */
 	// 0.1-0.1: initial version
 	// 0.2-0.1: support for hmac-sha1 authorization + improved sha256 + bip32 full suport  
+	// 0.3-0.1: change parseTransaction response for coherence: add separate short flags for second factor authentication  
 	private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
-	private final static byte PROTOCOL_MINOR_VERSION = (byte) 2;
+	private final static byte PROTOCOL_MINOR_VERSION = (byte) 3;
 	private final static byte APPLET_MAJOR_VERSION = (byte) 0;
 	private final static byte APPLET_MINOR_VERSION = (byte) 1;
 	
