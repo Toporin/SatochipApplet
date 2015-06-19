@@ -3470,8 +3470,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
             // the msb bit of hash_size is set to 1 if a Hmac confirmation is required for the tx signature
             sha256.reset();
             short hash_size=sha256.doFinal(transactionData, OFFSET_TRANSACTION_HASH, (short)32, buffer, (short)2);
-            Util.setShort(buffer, (short)0, (short)(hash_size^need2fa));
-            short offset = (short)(2+hash_size);
+            Util.setShort(buffer, (short)0, (short)(hash_size+2));
+            Util.setShort(buffer, (short)(2+hash_size), need2fa);
+            short offset = (short)(2+hash_size+2);
         	
             // hash signed by authentikey if seed is initialized
             if (bip32_seedsize!=(byte)0xFF){
