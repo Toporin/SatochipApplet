@@ -800,6 +800,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		}
 
 		// HD wallet
+		Sha512.init();
 		HmacSha512.init(tmpBuffer);
 		EccComputation.init(tmpBuffer);
 		// bip32 material

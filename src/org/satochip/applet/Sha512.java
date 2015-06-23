@@ -103,19 +103,19 @@ public class Sha512 {
 	public static final short REG1=8;
 	public static final short REG2=12;
 
-    public short[] h_short;
-    public short[] w_short;
+    public static short[] h_short;
+    public static short[] w_short;
 
-    public short[] hashState;
-    public byte[] buffer;
-    public short bufferOff;
-    public short bufferLeft;
+    public static short[] hashState;
+    public static byte[] buffer;
+    public static short bufferOff;
+    public static short bufferLeft;
 
-    public byte[] dataSize;
+    public static byte[] dataSize;
 	public static final short MSGSIZE=0;
 	public static final short CHUNKSIZE=4;
 
-    public Sha512(){
+    public static void init(){
 
     	w_short= JCSystem.makeTransientShortArray((short) (64), JCSystem.CLEAR_ON_DESELECT);
     	h_short= JCSystem.makeTransientShortArray((short) (32), JCSystem.CLEAR_ON_DESELECT);
@@ -124,10 +124,9 @@ public class Sha512 {
         hashState= JCSystem.makeTransientShortArray((short) (32), JCSystem.CLEAR_ON_DESELECT);
         buffer= JCSystem.makeTransientByteArray((short) (128), JCSystem.CLEAR_ON_DESELECT);
         dataSize= JCSystem.makeTransientByteArray((short) (8), JCSystem.CLEAR_ON_DESELECT);
-
     }
 
-    public final void reset(){
+    public static void reset(){
         InitH(hashState);
         bufferOff=0;
         bufferLeft=128;
@@ -138,7 +137,7 @@ public class Sha512 {
 
     }
 
-    public final void update(byte[] inBuff, short inOffset, short inLength){
+    public static void update(byte[] inBuff, short inOffset, short inLength){
 
 
 		short akku,posy,posx,addx,addy;
@@ -180,7 +179,7 @@ public class Sha512 {
         bufferOff+=inLength;
     }
 
-    public final short doFinal(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset){
+    public static short doFinal(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset){
 
 
 		short akku,posy,posx,addx,addy;
@@ -234,7 +233,7 @@ public class Sha512 {
         return (short)64;
     }
 
-    public final void CompressionFunction(short[] state, short stateOff, byte[] msgBlock, short msgOff){
+    public static void CompressionFunction(short[] state, short stateOff, byte[] msgBlock, short msgOff){
 
 
 		short akku,posy,posx,addx,addy;
@@ -303,7 +302,7 @@ public class Sha512 {
     	}
     }
 
-    public final void InitW(byte[] msgBlock, short msgOff){
+    public static void InitW(byte[] msgBlock, short msgOff){
 
     	short dstOff=0;
     	for (short i=0; i<128; i+=2){

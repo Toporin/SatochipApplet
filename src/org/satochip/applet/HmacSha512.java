@@ -26,7 +26,6 @@ import javacard.framework.JCSystem;
 // very limited Hmac-SHA512 implementation
 public class HmacSha512 {
 
-	private static Sha512 sha512;
 	public static final short BLOCKSIZE=128; // 128 bytes 
 	public static final short HASHSIZE=64;
 	private static final short SW_UNSUPPORTED_KEYSIZE = (short) 0x9c0E;
@@ -35,7 +34,6 @@ public class HmacSha512 {
 	
 	
 	public static void init(byte[] tmp){
-		sha512= new Sha512();
 		data= tmp;
 		//this.data= JCSystem.makeTransientByteArray((short)(BLOCKSIZE+HASHSIZE), JCSystem.CLEAR_ON_DESELECT);
 		//this.data= new byte[(short)(BLOCKSIZE+HASHSIZE)];
@@ -63,8 +61,8 @@ public class HmacSha512 {
 		for (short i=0; i<message_length; i++){
 			data[(short)(BLOCKSIZE+i)]= message[(short)(message_offset+i)];
 		}
-		sha512.reset();
-		sha512.doFinal(data, (short)0, (short)(BLOCKSIZE+message_length), data, BLOCKSIZE); // copy hash result to data buffer!
+		Sha512.reset();
+		Sha512.doFinal(data, (short)0, (short)(BLOCKSIZE+message_length), data, BLOCKSIZE); // copy hash result to data buffer!
 		
 		// compute outer hash
 		for (short i=0; i<key_length; i++){
@@ -76,8 +74,8 @@ public class HmacSha512 {
 			//key_block[i]= (byte) 0x5c;
 		}
 		// previous hash already copied to correct offset in data
-		sha512.reset();
-		sha512.doFinal(data, (short)0, (short)(BLOCKSIZE+HASHSIZE), mac, mac_offset);
+		Sha512.reset();
+		Sha512.doFinal(data, (short)0, (short)(BLOCKSIZE+HASHSIZE), mac, mac_offset);
 		return HASHSIZE;
 	}	
 	
