@@ -52,8 +52,7 @@ public class Transaction {
         }
         short firstByte = (short)(buffer[h[CURRENT]] & 0xff);
         if (firstByte < (short)0xfd) {
-            //Uint32Helper.setByte(target, targetOffset, (byte)firstByte);
-        	Biginteger.setByte(target, targetOffset, (short)4, (byte)firstByte);
+            Biginteger.setByte(target, targetOffset, (short)4, (byte)firstByte);
             consumeTransaction(buffer, (short)1);            
         }
         else
@@ -62,7 +61,6 @@ public class Transaction {
             if (h[REMAINING] < (short)2) {
                 return false;
             }
-            //Uint32Helper.setShort(target, targetOffset, buffer[(short)(h[CURRENT] + 1)], buffer[h[CURRENT]]);
             target[targetOffset]=0x00;
             target[(short)(targetOffset+1)]=0x00;
             target[(short)(targetOffset+2)]=buffer[(short)(h[CURRENT] + 1)];
@@ -75,7 +73,6 @@ public class Transaction {
             if (h[REMAINING] < (short)4) { 
                 return false;
             }
-            //Uint32Helper.setInt(target, targetOffset, buffer[(short)(h[CURRENT] + 3)], buffer[(short)(h[CURRENT] + 2)], buffer[(short)(h[CURRENT] + 1)], buffer[h[CURRENT]]);
             target[targetOffset]=buffer[(short)(h[CURRENT] + 3)];
             target[(short)(targetOffset+1)]=buffer[(short)(h[CURRENT] + 2)];
             target[(short)(targetOffset+2)]=buffer[(short)(h[CURRENT] + 1)];
@@ -89,15 +86,7 @@ public class Transaction {
     }
     
     public static void resetTransaction(){
-    		ctx[TX_B_TRANSACTION_STATE] = STATE_NONE;
-//            Uint32Helper.clear(ctx, TX_I_REMAINING_I);
-//            Uint32Helper.clear(ctx, TX_I_CURRENT_I);
-//            Uint32Helper.clear(ctx, TX_I_REMAINING_O);
-//            Uint32Helper.clear(ctx, TX_I_CURRENT_O);
-//            Uint32Helper.clear(ctx, TX_I_SCRIPT_REMAINING);
-//            Uint64Helper.clear(ctx, TX_A_TRANSACTION_AMOUNT);
-//            Uint32Helper.clear(ctx, TX_I_SCRIPT_COORD);
-//            Uint64Helper.clear(ctx, TX_TMP_BUFFER);           
+    		ctx[TX_B_TRANSACTION_STATE] = STATE_NONE;          
             Biginteger.setZero(ctx, TX_I_REMAINING_I, (short)4);
             Biginteger.setZero(ctx, TX_I_REMAINING_O, (short)4);
             Biginteger.setZero(ctx, TX_I_CURRENT_I, (short)4);
@@ -130,8 +119,7 @@ public class Transaction {
                 ctx[TX_B_TRANSACTION_STATE] = STATE_DEFINED_WAIT_INPUT;
             }
             if (ctx[TX_B_TRANSACTION_STATE] == STATE_DEFINED_WAIT_INPUT) {
-                //if (Uint32Helper.isZero(ctx, TX_I_REMAINING_I)) {
-            	if (Biginteger.equalZero(ctx, TX_I_REMAINING_I,(short)4)) {	
+                if (Biginteger.equalZero(ctx, TX_I_REMAINING_I,(short)4)) {	
             		if (ctx[TX_I_SCRIPT_ACTIVE]== INACTIVE){
                 		// there should be exactly one input script active at this point
                 		return RESULT_ERROR;
@@ -153,7 +141,6 @@ public class Transaction {
                 if (!parseVarint(buffer, ctx, TX_I_SCRIPT_REMAINING)) {
                     return RESULT_ERROR;
                 }
-                //else if (!Uint32Helper.isZero(ctx,TX_I_SCRIPT_REMAINING)){
                 else if (!Biginteger.equalZero(ctx,TX_I_SCRIPT_REMAINING, (short)4)){
                 	// check if a script was already present
                 	if (ctx[TX_I_SCRIPT_ACTIVE]== INACTIVE){
@@ -172,7 +159,6 @@ public class Transaction {
                     return RESULT_MORE;
                 }
                 // if script size is zero or script is already consumed 
-                //if (Uint32Helper.isZero(ctx,TX_I_SCRIPT_REMAINING)) { 
                 if (Biginteger.equalZero(ctx,TX_I_SCRIPT_REMAINING,(short)4)) {
                     // Sequence
                     if (h[REMAINING] < (short)4) {
@@ -181,22 +167,17 @@ public class Transaction {
                     // TODO : enforce sequence
                     consumeTransaction(buffer, (short)4);
                     // Move to next input
-                    //Uint32Helper.decrease(ctx, TX_I_REMAINING_I);
-                    //Uint32Helper.increase(ctx, TX_I_CURRENT_I);
                     Biginteger.subtract1_carry(ctx, TX_I_REMAINING_I,(short)4);
                     Biginteger.add1_carry(ctx, TX_I_CURRENT_I, (short)4);
                     ctx[TX_B_TRANSACTION_STATE] = STATE_DEFINED_WAIT_INPUT;
                     continue;
                 }
-                //short scriptRemaining = Uint32Helper.getU8(ctx, TX_I_SCRIPT_REMAINING); // what happens if script is size is >= 0xff
                 short scriptRemaining = Biginteger.getLSB(ctx, TX_I_SCRIPT_REMAINING,(short)4); 
                 short dataAvailable = (h[REMAINING] > scriptRemaining ? scriptRemaining : h[REMAINING]);
                 if (dataAvailable == 0) {
                     return RESULT_MORE;
                 }
                 consumeTransaction(buffer, dataAvailable);
-                //Uint32Helper.setByte(ctx, TX_TMP_BUFFER, (byte)dataAvailable);
-                //Uint32Helper.sub(ctx, TX_I_SCRIPT_REMAINING, ctx, TX_TMP_BUFFER);
                 Biginteger.setByte(ctx, TX_TMP_BUFFER, (short)4, (byte)dataAvailable);
                 Biginteger.subtract(ctx, TX_I_SCRIPT_REMAINING, ctx, TX_TMP_BUFFER, (short)4);
                 // at this point the program loop until either the script or the buffer is consumed
@@ -213,7 +194,6 @@ public class Transaction {
                 ctx[TX_B_TRANSACTION_STATE] = STATE_DEFINED_WAIT_OUTPUT;
             }
             if (ctx[TX_B_TRANSACTION_STATE] == STATE_DEFINED_WAIT_OUTPUT) {
-                //if (Uint32Helper.isZero(ctx, TX_I_REMAINING_O)) {
             	if (Biginteger.equalZero(ctx, TX_I_REMAINING_O,(short)4)) {
                     // No more outputs to hash, move forward
                     ctx[TX_B_TRANSACTION_STATE] = STATE_OUTPUT_HASHING_DONE;
@@ -227,8 +207,6 @@ public class Transaction {
                 if (h[REMAINING] < (short)8) {
                     return RESULT_ERROR;
                 }
-                //Uint64Helper.swap(ctx, TX_TMP_BUFFER, buffer, h[CURRENT]);
-                //Uint64Helper.add(ctx, TX_A_TRANSACTION_AMOUNT, ctx, TX_TMP_BUFFER);
                 Biginteger.swap(buffer, h[CURRENT], ctx, TX_TMP_BUFFER, (short)8);
                 Biginteger.add_carry(ctx, TX_A_TRANSACTION_AMOUNT, ctx, TX_TMP_BUFFER, (short)8);
                 consumeTransaction(buffer, (short)8);
@@ -243,25 +221,19 @@ public class Transaction {
                     // No more data to read, ok
                     return RESULT_MORE;
                 }
-                //if (Uint32Helper.isZero(ctx,TX_I_SCRIPT_REMAINING)) {
                 if (Biginteger.equalZero(ctx,TX_I_SCRIPT_REMAINING, (short)4)) {
                     // Move to next output
-                    //Uint32Helper.decrease(ctx, TX_I_REMAINING_O);
-                    //Uint32Helper.increase(ctx, TX_I_CURRENT_O);
-                	Biginteger.subtract1_carry(ctx, TX_I_REMAINING_O, (short)4);
+                    Biginteger.subtract1_carry(ctx, TX_I_REMAINING_O, (short)4);
                     Biginteger.add1_carry(ctx, TX_I_CURRENT_O, (short)4);
                     ctx[TX_B_TRANSACTION_STATE] = STATE_DEFINED_WAIT_OUTPUT;
                     continue;
                 }
-                //short scriptRemaining = Uint32Helper.getU8(ctx, TX_I_SCRIPT_REMAINING);
                 short scriptRemaining = Biginteger.getLSB(ctx, TX_I_SCRIPT_REMAINING,(short)4);
                 short dataAvailable = (h[REMAINING] > scriptRemaining ? scriptRemaining : h[REMAINING]);
                 if (dataAvailable == 0) {
                     return RESULT_MORE;
                 }
                 consumeTransaction(buffer, dataAvailable);
-                //Uint32Helper.setByte(ctx, TX_TMP_BUFFER, (byte)dataAvailable);
-                //Uint32Helper.sub(ctx, TX_I_SCRIPT_REMAINING, ctx, TX_TMP_BUFFER);
                 Biginteger.setByte(ctx, TX_TMP_BUFFER, (short)4, (byte)dataAvailable);
                 Biginteger.subtract(ctx, TX_I_SCRIPT_REMAINING, ctx, TX_TMP_BUFFER,(short)4);
             }

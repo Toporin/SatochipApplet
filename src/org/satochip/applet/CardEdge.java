@@ -305,36 +305,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static byte ALG_ECDSA_SHA_256= (byte) 33;
 	private final static byte ALG_EC_SVDP_DH_PLAIN= (byte) 3; //https://javacard.kenai.com/javadocs/connected/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN
 	private final static short LENGTH_EC_FP_256= (short) 256;
-	
-	
-//	//Bitcoin: default parameters for EC curve secp256k1
-//	private final static byte[] SECP256K1_P = {(byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, 
-//											   (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, 
-//											   (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF,
-//											   (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFE, (byte)0xFF,(byte)0xFF,(byte)0xFC,(byte)0x2F}; 
-//	private final static byte[] SECP256K1_a = {0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00, 
-//											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00, 
-//											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
-//											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00};
-//	private final static byte[] SECP256K1_b = {0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
-//											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
-//											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
-//											   0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x07};
-//	private final static byte[] SECP256K1_G = {(byte)0x04, //base point, uncompressed form 
-//											   (byte)0x79,(byte)0xBE,(byte)0x66,(byte)0x7E, (byte)0xF9,(byte)0xDC,(byte)0xBB,(byte)0xAC,
-//											   (byte)0x55,(byte)0xA0,(byte)0x62,(byte)0x95, (byte)0xCE,(byte)0x87,(byte)0x0B,(byte)0x07,
-//											   (byte)0x02,(byte)0x9B,(byte)0xFC,(byte)0xDB, (byte)0x2D,(byte)0xCE,(byte)0x28,(byte)0xD9,
-//											   (byte)0x59,(byte)0xF2,(byte)0x81,(byte)0x5B, (byte)0x16,(byte)0xF8,(byte)0x17,(byte)0x98,
-//											   (byte)0x48,(byte)0x3A,(byte)0xDA,(byte)0x77, (byte)0x26,(byte)0xA3,(byte)0xC4,(byte)0x65,
-//											   (byte)0x5D,(byte)0xA4,(byte)0xFB,(byte)0xFC, (byte)0x0E,(byte)0x11,(byte)0x08,(byte)0xA8,
-//											   (byte)0xFD,(byte)0x17,(byte)0xB4,(byte)0x48, (byte)0xA6,(byte)0x85,(byte)0x54,(byte)0x19,
-//											   (byte)0x9C,(byte)0x47,(byte)0xD0,(byte)0x8F, (byte)0xFB,(byte)0x10,(byte)0xD4,(byte)0xB8};
-//	private final static byte[] SECP256K1_R = {(byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, // order of G
-//											   (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFF, (byte)0xFF,(byte)0xFF,(byte)0xFF,(byte)0xFE,
-//											   (byte)0xBA,(byte)0xAE,(byte)0xDC,(byte)0xE6, (byte)0xAF,(byte)0x48,(byte)0xA0,(byte)0x3B,
-//											   (byte)0xBF,(byte)0xD2,(byte)0x5E,(byte)0x8C, (byte)0xD0,(byte)0x36,(byte)0x41,(byte)0x41};
-//	private final static short SECP256K1_K = 0x01; // cofactor 
-	
+		
 	/****************************************
 	 * Instance variables declaration *
 	 ****************************************/
@@ -342,9 +313,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	// Memory & Object Manager
 	private MemoryManager mem;
 	private ObjectManager om;
-	// Secure Memory & Object Manager with no access from outside (used internally for storing BIP32 objects)
-	private MemoryManager secmem;
-	private ObjectManager secom;
 	
 	// Key objects (allocated on demand)
 	private Key[] keys;
@@ -367,8 +335,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	// Says if we are using a signature or a cipher object
 	private byte[] ciph_dirs;
 	private KeyPair[] keyPairs;
-	private RandomData randomData; // RandomData class instance
-
+	
 	// PIN and PUK objects, allocated on demand
 	private OwnerPIN[] pins, ublk_pins;
 
@@ -388,7 +355,20 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private byte create_key_ACL;
 	private byte create_pin_ACL;
 	
-	// HD wallet
+	// shared cryptographic objects
+	private RandomData randomData;
+	private KeyAgreement keyAgreement;
+	private Signature sigECDSA;
+	private Cipher aes128;
+	
+	/*********************************************
+	 *  BIP32 Hierarchical Deterministic Wallet  *
+	 *********************************************/
+	// Secure Memory & Object Manager with no access from outside (used internally for storing BIP32 objects)
+	private MemoryManager bip32_mem;
+	private ObjectManager bip32_om;
+	
+	// seed derivation
 	private static final byte[] BITCOIN_SEED = {'B','i','t','c','o','i','n',' ','s','e','e','d'};
 	private static final byte[] BITCOIN_SEED2 = {'B','i','t','c','o','i','n',' ','s','e','e','d','2'};
 	private static final byte MAX_BIP32_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
@@ -399,36 +379,37 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private static final short BIP32_KEY_SIZE= 32; // size of extended key and chain code is 256 bits
 	private static final short BIP32_ANTICOLLISION_LENGTH=4; // max 12 bytes so that index+crc + two hashes fit in 32 bits
 	private static final short BIP32_OBJECT_SIZE= (short)(2*BIP32_KEY_SIZE+BIP32_ANTICOLLISION_LENGTH+1);  
+	
+	// offset in working buffer
 	private static final short BIP32_OFFSET_INDEX= (short)(2*BIP32_KEY_SIZE+1); // offset in recvBuffer
-	private static final short BIP32_OFFSET_ANTICOLLISIONHASHTMP= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE-2*BIP32_ANTICOLLISION_LENGTH-4);
+	private static final short BIP32_OFFSET_COLLISIONHASHTMP= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE-2*BIP32_ANTICOLLISION_LENGTH-4);
 	private static final short BIP32_OFFSET_CRC= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE-BIP32_ANTICOLLISION_LENGTH-4);
-	private static final short BIP32_OFFSET_ANTICOLLISIONHASH= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE-BIP32_ANTICOLLISION_LENGTH);
+	private static final short BIP32_OFFSET_COLLISIONHASH= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE-BIP32_ANTICOLLISION_LENGTH);
 	private static final short BIP32_OFFSET_EXTENDEDKEY= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE); 
 	private static final short BIP32_OFFSET_CHAINCODE= (short)(BIP32_OFFSET_EXTENDEDKEY+BIP32_KEY_SIZE);
-	//private static final short BIP32_OFFSET_COMPBYTE= (short)(BIP32_OFFSET_CHAINCODE+BIP32_KEY_SIZE);
 	private static final short BIP32_OFFSET_PUB= (short)(BIP32_OFFSET_CHAINCODE+BIP32_KEY_SIZE);
 	private static final short BIP32_OFFSET_PUBX= (short)(BIP32_OFFSET_PUB+1);
 	private static final short BIP32_OFFSET_PUBY= (short)(BIP32_OFFSET_PUBX+BIP32_KEY_SIZE);
 	private static final short BIP32_OFFSET_END= (short)(BIP32_OFFSET_PUBY+BIP32_KEY_SIZE);
 	private static final short BIP32_OFFSET_SIG= (short)(ISO7816.OFFSET_CDATA+4*MAX_BIP32_DEPTH);
-	// private variables 
-	private byte bip32_seedsize=(byte)0xff; // uninitialized state
+	
+	//   
+	private boolean bip32_seeded= false;
 	private byte[] bip32_masterACL; // define right access for Write,Read, and Use
+	private byte[] bip32_extendedACL; // define right access for Write,Read, and Use
+	private byte bip32_seedsize=(byte)0xff; // uninitialized state
 	private byte bip32_master_compbyte; // compression byte for master key
 	private AESKey bip32_masterkey; 
 	private AESKey bip32_masterchaincode; 
 	private AESKey bip32_encryptkey; // used to encrypt sensitive data in object
-	private byte[] bip32_extendedACL; // define right access for Write,Read, and Use
 	private ECPrivateKey bip32_extendedkey; // object storing last extended key used
 	private ECPrivateKey bip32_authentikey; // key used to authenticate data
 	private ECPublicKey bip32_pubkey;
-	private KeyAgreement keyAgreement;
-	private Signature sigECDSA;
-	private Cipher aes128;
-//	// used for +-< operations on byte arrays
-//	private static final short digit_mask = 0xff;
-//	private static final short digit_len = 8;
-    
+	
+	/*********************************************
+	 *        Other data instances               *
+	 *********************************************/
+	
 	// Message signing
 	private static final byte[] BITCOIN_SIGNED_MESSAGE_HEADER = {0x18,'B','i','t','c','o','i','n',' ','S','i','g','n','e','d',' ','M','e','s','s','a','g','e',':','\n'}; //"Bitcoin Signed Message:\n";
 	private MessageDigest sha256;  
@@ -759,8 +740,8 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		
 		mem = new MemoryManager((short) mem_size);
 		om = new ObjectManager(mem);
-		secmem = new MemoryManager((short) secmem_size);
-		secom = new ObjectManager(secmem);
+		bip32_mem = new MemoryManager((short) secmem_size);
+		bip32_om = new ObjectManager(bip32_mem);
 		
 		keys = new Key[MAX_NUM_KEYS];
 		keyACLs = new byte[(short) (MAX_NUM_KEYS * KEY_ACL_SIZE)];
@@ -776,8 +757,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 
 		logged_ids = 0x00; // No identities logged in
 		//getChallengeDone = false; // No GetChallenge() issued so far
-		randomData = null; // Will be created on demand when needed
-
+		
 		STD_PUBLIC_ACL = new byte[KEY_ACL_SIZE];
 		for (byte i = (byte) 0; i < (byte) KEY_ACL_SIZE; i += (short) 2)
 			Util.setShort(STD_PUBLIC_ACL, i, (short) 0x0000);
@@ -799,47 +779,33 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			tmpBuffer = new byte[TMP_BUFFER_SIZE];
 		}
 
+		// shared cryptographic objects
+		randomData = null; // Will be created on demand when needed
+		keyAgreement = KeyAgreement.getInstance(ALG_EC_SVDP_DH_PLAIN, false); 
+		sigECDSA= Signature.getInstance(ALG_ECDSA_SHA_256, false); 
+		aes128= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_ECB_NOPAD, false);
+		
 		// HD wallet
 		Sha512.init();
 		HmacSha512.init(tmpBuffer);
 		EccComputation.init(tmpBuffer);
 		// bip32 material
+		bip32_seeded= false;
 		bip32_master_compbyte=0x04;
 		bip32_masterkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
 		bip32_masterchaincode= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
 		bip32_encryptkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
 		bip32_masterACL= new byte[KEY_ACL_SIZE];
 		bip32_extendedACL= new byte[KEY_ACL_SIZE];
-		keyAgreement = KeyAgreement.getInstance(ALG_EC_SVDP_DH_PLAIN, false); 
-		sigECDSA= Signature.getInstance(ALG_ECDSA_SHA_256, false); 
-		aes128= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_ECB_NOPAD, false);
 		// object containing the current extended key
 		bip32_extendedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
 		Secp256k1.setCommonCurveParameters(bip32_extendedkey);
-//		bip32_extendedkey.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
-//		bip32_extendedkey.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
-//		bip32_extendedkey.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
-//		bip32_extendedkey.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
-//		bip32_extendedkey.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
-//		bip32_extendedkey.setK( SECP256K1_K);
 		// key used to authenticate sensitive data from applet
 		bip32_authentikey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
 		Secp256k1.setCommonCurveParameters(bip32_authentikey);
-//		bip32_authentikey.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
-//		bip32_authentikey.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
-//		bip32_authentikey.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
-//		bip32_authentikey.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
-//		bip32_authentikey.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
-//		bip32_authentikey.setK( SECP256K1_K);
 		// key used to recover public key from private
 		bip32_pubkey= (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, LENGTH_EC_FP_256, false);
 		Secp256k1.setCommonCurveParameters(bip32_pubkey);
-//		bip32_pubkey.setFieldFP( SECP256K1_P, (short)0, (short)SECP256K1_P.length);
-//		bip32_pubkey.setA( SECP256K1_a, (short)0, (short)SECP256K1_a.length);
-//		bip32_pubkey.setB( SECP256K1_b, (short)0, (short)SECP256K1_b.length);
-//		bip32_pubkey.setG( SECP256K1_G, (short)0, (short)SECP256K1_G.length);
-//		bip32_pubkey.setR( SECP256K1_R, (short)0, (short)SECP256K1_R.length);
-//		bip32_pubkey.setK( SECP256K1_K);
 		
 		// message signing
 		sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
@@ -2786,12 +2752,12 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		buffer[pos++] = (byte) PROTOCOL_MINOR_VERSION; // Minor Card Edge Protocol version n.
 		buffer[pos++] = (byte) APPLET_MAJOR_VERSION; // Major Applet version n.
 		buffer[pos++] = (byte) APPLET_MINOR_VERSION; // Minor Applet version n.
-		Util.setShort(buffer, pos, (short) secmem.getBuffer().length); // Total secure mem 
+		Util.setShort(buffer, pos, (short) bip32_mem.getBuffer().length); // Total secure mem 
 		pos += (short) 2;
 		Util.setShort(buffer, pos, (short) mem.getBuffer().length); // Total mem
 		// L.S.
 		pos += (short) 2;
-		Util.setShort(buffer, pos, secmem.freemem()); // secure mem 
+		Util.setShort(buffer, pos, bip32_mem.freemem()); // secure mem 
 		pos += (short) 2;
 		Util.setShort(buffer, pos, mem.freemem()); // Free mem
 		pos += (short) 2;
@@ -2911,6 +2877,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		HmacSha512.computeHmacSha512(BITCOIN_SEED2, (short)0, (short)BITCOIN_SEED2.length, buffer, offset, (short)bip32_seedsize, recvBuffer, (short)64);
 		bip32_authentikey.setS(recvBuffer, (short)64, BIP32_KEY_SIZE);
 		bip32_encryptkey.setKey(recvBuffer, (short)96); // AES-128: 16-bytes key!!
+		bip32_seeded= true;
 		
 		// clear recvBuffer
 		Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)128, (byte)0);
@@ -3028,16 +2995,16 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			sha256.doFinal(buffer, ISO7816.OFFSET_CDATA, (short)(i*4), recvBuffer, (short)(BIP32_OFFSET_INDEX));
 			short crc1=Util.getShort(recvBuffer, BIP32_OFFSET_CRC);
 			short crc2=Util.getShort(recvBuffer, (short)(BIP32_OFFSET_CRC+2));
-			short base=secom.getBaseAddress(crc1, crc2);
+			short base=bip32_om.getBaseAddress(crc1, crc2);
 			
 			while(base!=MemoryManager.NULL_OFFSET){ // there is already an object at this address
 				
 				//extract anti-collision hash of object
-				secmem.getBytes(recvBuffer, BIP32_OFFSET_ANTICOLLISIONHASHTMP, base, (short)0, BIP32_ANTICOLLISION_LENGTH); 
+				bip32_mem.getBytes(recvBuffer, BIP32_OFFSET_COLLISIONHASHTMP, base, (short)0, BIP32_ANTICOLLISION_LENGTH); 
 				// check whether it is the correct object or just a collision
-				if (Util.arrayCompare(recvBuffer, BIP32_OFFSET_ANTICOLLISIONHASHTMP, recvBuffer, BIP32_OFFSET_ANTICOLLISIONHASH, BIP32_ANTICOLLISION_LENGTH)==0){
+				if (Util.arrayCompare(recvBuffer, BIP32_OFFSET_COLLISIONHASHTMP, recvBuffer, BIP32_OFFSET_COLLISIONHASH, BIP32_ANTICOLLISION_LENGTH)==0){
 					// copy object data to temporary buffer
-					secmem.getBytes(recvBuffer, BIP32_OFFSET_ANTICOLLISIONHASH, base, (short)0, BIP32_OBJECT_SIZE);
+					bip32_mem.getBytes(recvBuffer, BIP32_OFFSET_COLLISIONHASH, base, (short)0, BIP32_OBJECT_SIZE);
 					// exit loop with base pointing to the correct object
 					break; 
 				}else{ // collision
@@ -3045,7 +3012,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 					Biginteger.add1_carry(recvBuffer, BIP32_OFFSET_CRC, (short) 4);
 					crc1=Util.getShort(recvBuffer, BIP32_OFFSET_CRC);
 					crc2=Util.getShort(recvBuffer, (short)(BIP32_OFFSET_CRC+2));
-					base=secom.getBaseAddress(crc1, crc2);
+					base=bip32_om.getBaseAddress(crc1, crc2);
 				}
 			} //end of while
 			// at this point, either base points to the correct object, of the object does not exist
@@ -3062,7 +3029,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 					if (parent_base==MemoryManager.NULL_OFFSET)
 						compbyte=bip32_master_compbyte;
 					else
-						compbyte=secmem.getByte(parent_base, (short)(BIP32_OBJECT_SIZE-1));
+						compbyte=bip32_mem.getByte(parent_base, (short)(BIP32_OBJECT_SIZE-1));
 					
 					// compute coord x from privkey 
 					bip32_extendedkey.setS(recvBuffer, (short)(BIP32_KEY_SIZE+1), BIP32_KEY_SIZE);
@@ -3087,7 +3054,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 						if (parent_base==MemoryManager.NULL_OFFSET)
 							bip32_master_compbyte= compbyte;
 						else
-							secmem.setByte(parent_base, (short)(BIP32_OBJECT_SIZE-1), compbyte);
+							bip32_mem.setByte(parent_base, (short)(BIP32_OBJECT_SIZE-1), compbyte);
 			        }
 			        
 			        // compute HMAC of compressed pubkey + index
@@ -3129,13 +3096,13 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 				// create object if logged identities have the correct ACL
 				// to do: check the object ACL
 				// to do: create object for transaction keys in last index (since they are usually used only once)?
-				base= secom.createObject(crc1, crc2, BIP32_OBJECT_SIZE, bip32_masterACL, (short) 0);
+				base= bip32_om.createObject(crc1, crc2, BIP32_OBJECT_SIZE, bip32_masterACL, (short) 0);
 				// Enforce Access Control
-				if (!secom.authorizeWriteFromAddress(base, logged_ids))
+				if (!bip32_om.authorizeWriteFromAddress(base, logged_ids))
 					ISOException.throwIt(SW_UNAUTHORIZED);
 				// Update object data
 				recvBuffer[BIP32_OFFSET_PUB]=0x04;
-				secmem.setBytes(base, (short)0, recvBuffer, BIP32_OFFSET_ANTICOLLISIONHASH, BIP32_OBJECT_SIZE);
+				bip32_mem.setBytes(base, (short)0, recvBuffer, BIP32_OFFSET_COLLISIONHASH, BIP32_OBJECT_SIZE);
 			
 			}//end if (object creation)
 			
@@ -3191,12 +3158,12 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		
 		short nb_deleted=0;
 		short obj_cla, obj_id;
-		while (secom.getFirstRecord(tmpBuffer, offset)){
+		while (bip32_om.getFirstRecord(tmpBuffer, offset)){
 			
 			// get obj_class and obj_id
 			obj_cla= Util.getShort(tmpBuffer, offset);
 			obj_id= Util.getShort(tmpBuffer, (short)(offset+2));
-			secom.destroyObject(obj_cla, obj_id, true);
+			bip32_om.destroyObject(obj_cla, obj_id, true);
 			nb_deleted++;
 		}
 		
