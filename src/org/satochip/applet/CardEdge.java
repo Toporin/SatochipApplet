@@ -381,23 +381,26 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private static final short BIP32_OBJECT_SIZE= (short)(2*BIP32_KEY_SIZE+BIP32_ANTICOLLISION_LENGTH+1);  
 	
 	// offset in working buffer
+	private static final short BIP32_OFFSET_PARENT_CHAINCODE=0;
+	private static final short BIP32_OFFSET_PARENT_SEPARATOR=BIP32_KEY_SIZE;
+	private static final short BIP32_OFFSET_PARENT_KEY=BIP32_KEY_SIZE+1;
 	private static final short BIP32_OFFSET_INDEX= (short)(2*BIP32_KEY_SIZE+1); // offset in recvBuffer
 	private static final short BIP32_OFFSET_COLLISIONHASHTMP= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE-2*BIP32_ANTICOLLISION_LENGTH-4);
 	private static final short BIP32_OFFSET_CRC= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE-BIP32_ANTICOLLISION_LENGTH-4);
 	private static final short BIP32_OFFSET_COLLISIONHASH= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE-BIP32_ANTICOLLISION_LENGTH);
-	private static final short BIP32_OFFSET_EXTENDEDKEY= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE); 
-	private static final short BIP32_OFFSET_CHAINCODE= (short)(BIP32_OFFSET_EXTENDEDKEY+BIP32_KEY_SIZE);
-	private static final short BIP32_OFFSET_PUB= (short)(BIP32_OFFSET_CHAINCODE+BIP32_KEY_SIZE);
+	private static final short BIP32_OFFSET_CHILD_KEY= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE); 
+	private static final short BIP32_OFFSET_CHILD_CHAINCODE= (short)(BIP32_OFFSET_CHILD_KEY+BIP32_KEY_SIZE);
+	private static final short BIP32_OFFSET_PUB= (short)(BIP32_OFFSET_CHILD_CHAINCODE+BIP32_KEY_SIZE);
 	private static final short BIP32_OFFSET_PUBX= (short)(BIP32_OFFSET_PUB+1);
 	private static final short BIP32_OFFSET_PUBY= (short)(BIP32_OFFSET_PUBX+BIP32_KEY_SIZE);
-	private static final short BIP32_OFFSET_END= (short)(BIP32_OFFSET_PUBY+BIP32_KEY_SIZE);
+	private static final short BIP32_OFFSET_PATH= (short)(BIP32_OFFSET_PUBY+BIP32_KEY_SIZE);
+	private static final short BIP32_OFFSET_END= (short)(BIP32_OFFSET_PATH+4*MAX_BIP32_DEPTH);
 	private static final short BIP32_OFFSET_SIG= (short)(ISO7816.OFFSET_CDATA+4*MAX_BIP32_DEPTH);
 	
-	//   
+	//   bip32 keys
 	private boolean bip32_seeded= false;
 	private byte[] bip32_masterACL; // define right access for Write,Read, and Use
 	private byte[] bip32_extendedACL; // define right access for Write,Read, and Use
-	private byte bip32_seedsize=(byte)0xff; // uninitialized state
 	private byte bip32_master_compbyte; // compression byte for master key
 	private AESKey bip32_masterkey; 
 	private AESKey bip32_masterchaincode; 
@@ -2846,7 +2849,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			ISOException.throwIt(SW_UNAUTHORIZED);
 		
 		// if seed is already initialized, check that logged identities are allowed to rewwrite seed (and master key)
-		if ((bip32_seedsize!=(byte)0xFF) && !authorizeKeyOp(bip32_masterACL, ACL_WRITE))
+		if (bip32_seeded && !authorizeKeyOp(bip32_masterACL, ACL_WRITE))
 			ISOException.throwIt(SW_UNAUTHORIZED);
 		
 		// buffer data = [6-byte ACL | 1-byte seed size (in byte) | seed data]
@@ -2856,14 +2859,14 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		offset+= KEY_ACL_SIZE;
 		
 		// get seed bytesize (max 64 bytes)
-		bip32_seedsize = buffer[offset];
+		byte bip32_seedsize = buffer[offset];
 		offset++;
 		if (bip32_seedsize <0 || bip32_seedsize>64)
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 		
-		// TO DO: if seed was already defined, we must clear all related objects!!
+		// if seed was already defined, we must clear all related objects!!
 		short nb_deleted=0;
-		if (bip32_seedsize!=(byte)0xFF){
+		if (bip32_seeded){
 			nb_deleted= clearAllBip32ExtendedKey(recvBuffer, (short)0);}
 		
 		// derive master key!
@@ -2877,6 +2880,8 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		HmacSha512.computeHmacSha512(BITCOIN_SEED2, (short)0, (short)BITCOIN_SEED2.length, buffer, offset, (short)bip32_seedsize, recvBuffer, (short)64);
 		bip32_authentikey.setS(recvBuffer, (short)64, BIP32_KEY_SIZE);
 		bip32_encryptkey.setKey(recvBuffer, (short)96); // AES-128: 16-bytes key!!
+		
+		// bip32 is now seeded
 		bip32_seeded= true;
 		
 		// clear recvBuffer
@@ -2914,7 +2919,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private void getBIP32AuthentiKey(APDU apdu, byte[] buffer){
 		
 		// check whether the seed is initialized
-		if (bip32_seedsize==(byte)0xFF)
+		if (!bip32_seeded)
 			ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
 		
 		// compute the partial authentikey public key...
@@ -2974,17 +2979,19 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			clearAllBip32ExtendedKey(recvBuffer, (short)0);
 		
 		// check whether the seed is seed is initialized
-		if (bip32_seedsize==(byte)0xFF)
+		if (!bip32_seeded)
 			ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
 		
 		// master key data (usefull as parent's data for key derivation)
 		// The method uses a temporary buffer recvBuffer to store the parent and extended key object data:
-		// recvBuffer=[ parent_chain_code (32b) | 0x00 | parent_key (32b) | hash(address)(32b) | current_extended_key(32b) | current_chain_code(32b)]
+		// recvBuffer=[ parent_chain_code (32b) | 0x00 | parent_key (32b) | hash(address)(32b) | current_extended_key(32b) | current_chain_code(32b) | parent_pubkey(65b) | bip32_path(40b)]
 		// hash(address)= [ index(4b) | unused (16b)| crc (4b) | ANTICOLLISIONHASHTMP(4b)| ANTICOLLISIONHASH(4b)]
-	
-		bip32_masterchaincode.getKey(recvBuffer, (short)0);
-		bip32_masterkey.getKey(recvBuffer,(short)(BIP32_KEY_SIZE+1)); 		
-		recvBuffer[BIP32_KEY_SIZE]=0x00; // separator, also facilitate HMAC derivation
+	    // parent_pubkey(65b)= [compression_byte(1b) | coord_x (32b) | coord_y(32b)]
+		
+		bip32_masterchaincode.getKey(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE);
+		bip32_masterkey.getKey(recvBuffer,BIP32_OFFSET_PARENT_KEY); 		
+		recvBuffer[BIP32_OFFSET_PARENT_SEPARATOR]=0x00; // separator, also facilitate HMAC derivation
+		Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, recvBuffer, BIP32_OFFSET_PATH, (short)(4*bip32_depth));
 		short parent_base=MemoryManager.NULL_OFFSET; 
 		
 		// iterate on indexes provided 
@@ -2992,7 +2999,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 						
 			//compute SHA of the extended key address up to depth i (only the last bytes are actually used)
 			sha256.reset(); 
-			sha256.doFinal(buffer, ISO7816.OFFSET_CDATA, (short)(i*4), recvBuffer, (short)(BIP32_OFFSET_INDEX));
+			sha256.doFinal(recvBuffer, BIP32_OFFSET_PATH, (short)(i*4), recvBuffer, BIP32_OFFSET_INDEX);
 			short crc1=Util.getShort(recvBuffer, BIP32_OFFSET_CRC);
 			short crc2=Util.getShort(recvBuffer, (short)(BIP32_OFFSET_CRC+2));
 			short base=bip32_om.getBaseAddress(crc1, crc2);
@@ -3021,7 +3028,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			if (base==MemoryManager.NULL_OFFSET){
 				
 				// normal or hardened child?
-				byte msb= buffer[(short)(ISO7816.OFFSET_CDATA+4*(i-1))];
+				byte msb= recvBuffer[(short)(BIP32_OFFSET_PATH+4*(i-1))];
 				if ((msb & 0x80)!=0x80){ // normal child
 					// we must compute parent's compressed pubkey from privkey
 					// check if parent's compression byte is available
@@ -3032,7 +3039,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 						compbyte=bip32_mem.getByte(parent_base, (short)(BIP32_OBJECT_SIZE-1));
 					
 					// compute coord x from privkey 
-					bip32_extendedkey.setS(recvBuffer, (short)(BIP32_KEY_SIZE+1), BIP32_KEY_SIZE);
+					bip32_extendedkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
 					keyAgreement.init(bip32_extendedkey);
 			        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, BIP32_OFFSET_PUBX); 
 			        
@@ -3059,39 +3066,39 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			        
 			        // compute HMAC of compressed pubkey + index
 					recvBuffer[BIP32_OFFSET_PUB]= compbyte;
-			        Util.arrayCopyNonAtomic(buffer, (short)(ISO7816.OFFSET_CDATA+4*(i-1)), recvBuffer, BIP32_OFFSET_PUBY, (short)4);
-					HmacSha512.computeHmacSha512(recvBuffer, (short)0, (short)BIP32_KEY_SIZE, recvBuffer, BIP32_OFFSET_PUB, (short)(1+BIP32_KEY_SIZE+4), recvBuffer, BIP32_OFFSET_EXTENDEDKEY);
+			        Util.arrayCopyNonAtomic(recvBuffer, (short)(BIP32_OFFSET_PATH+4*(i-1)), recvBuffer, BIP32_OFFSET_PUBY, (short)4);
+					HmacSha512.computeHmacSha512(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_KEY_SIZE, recvBuffer, BIP32_OFFSET_PUB, (short)(1+BIP32_KEY_SIZE+4), recvBuffer, BIP32_OFFSET_CHILD_KEY);
 				}
 				else { // hardened child
 					recvBuffer[BIP32_KEY_SIZE]= 0x00;
-					Util.arrayCopyNonAtomic(buffer, (short)(ISO7816.OFFSET_CDATA+4*(i-1)), recvBuffer, BIP32_OFFSET_INDEX, (short)4);
-					HmacSha512.computeHmacSha512(recvBuffer, (short)0, (short)BIP32_KEY_SIZE, recvBuffer, BIP32_KEY_SIZE, (short)(1+BIP32_KEY_SIZE+4), recvBuffer, BIP32_OFFSET_EXTENDEDKEY);
+					Util.arrayCopyNonAtomic(recvBuffer, (short)(BIP32_OFFSET_PATH+4*(i-1)), recvBuffer, BIP32_OFFSET_INDEX, (short)4);
+					HmacSha512.computeHmacSha512(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_KEY_SIZE, recvBuffer, BIP32_OFFSET_PARENT_SEPARATOR, (short)(1+BIP32_KEY_SIZE+4), recvBuffer, BIP32_OFFSET_CHILD_KEY);
 				}
 				
 				// addition with parent_key...
 				// First check that parse256(IL) < SECP256K1_R
-				if(!Biginteger.lessThan(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE)){
+				if(!Biginteger.lessThan(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE)){
 					ISOException.throwIt(SW_BIP32_DERIVATION_ERROR);
 				}
 				// add parent_key (mod SECP256K1_R)
-				if(Biginteger.add_carry(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, recvBuffer, (short) (BIP32_KEY_SIZE+1), BIP32_KEY_SIZE)){
+				if(Biginteger.add_carry(recvBuffer, BIP32_OFFSET_CHILD_KEY, recvBuffer, (short) (BIP32_KEY_SIZE+1), BIP32_KEY_SIZE)){
 					// in case of final carry, we must substract SECP256K1_R
 					// we have IL<SECP256K1_R and parent_key<SECP256K1_R, so IL+parent_key<2*SECP256K1_R
-					Biginteger.subtract(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE);	
+					Biginteger.subtract(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE);	
 				}else{
 				    // in the unlikely case where SECP256K1_R<=IL+parent_key<2^256
-					if(!Biginteger.lessThan(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE)){
-						Biginteger.subtract(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE);
+					if(!Biginteger.lessThan(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE)){
+						Biginteger.subtract(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE);
 					}
 					// check that value is not 0
-					if(Biginteger.equalZero(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, BIP32_KEY_SIZE)){
+					if(Biginteger.equalZero(recvBuffer, BIP32_OFFSET_CHILD_KEY, BIP32_KEY_SIZE)){
 						ISOException.throwIt(SW_BIP32_DERIVATION_ERROR);
 					}
 				}
 				
 				// encrypt privkey & chaincode
 				aes128.init(bip32_encryptkey, Cipher.MODE_ENCRYPT);
-				aes128.doFinal(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, (short)(2*BIP32_KEY_SIZE), recvBuffer, BIP32_OFFSET_EXTENDEDKEY);
+				aes128.doFinal(recvBuffer, BIP32_OFFSET_CHILD_KEY, (short)(2*BIP32_KEY_SIZE), recvBuffer, BIP32_OFFSET_CHILD_KEY);
 				
 				// create object if logged identities have the correct ACL
 				// to do: check the object ACL
@@ -3109,10 +3116,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			// at this point, recvBuffer contains a copy of the object related to extended key at depth i
 			// decrypt privkey & chaincode as they are encrypted at this point
 			aes128.init(bip32_encryptkey, Cipher.MODE_DECRYPT);
-			aes128.doFinal(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, (short)(2*BIP32_KEY_SIZE), recvBuffer, BIP32_OFFSET_EXTENDEDKEY);
+			aes128.doFinal(recvBuffer, BIP32_OFFSET_CHILD_KEY, (short)(2*BIP32_KEY_SIZE), recvBuffer, BIP32_OFFSET_CHILD_KEY);
 			// copy privkey & chain code in parent's offset
-			Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_CHAINCODE, recvBuffer, (short)0, BIP32_KEY_SIZE); // chaincode
-			Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_EXTENDEDKEY, recvBuffer, (short)(BIP32_KEY_SIZE+1), BIP32_KEY_SIZE); // extended_key
+			Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_CHILD_CHAINCODE, recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_KEY_SIZE); // chaincode
+			Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_CHILD_KEY, recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE); // extended_key
 			recvBuffer[BIP32_KEY_SIZE]=0x00;
 			
 			// update parent_base for next iteration
@@ -3121,11 +3128,11 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		
 		// at this point, recvBuffer contains a copy of the last extended key 
 		// instantiate elliptic curve with last extended key + copy ACL
-		bip32_extendedkey.setS(recvBuffer, (short)(BIP32_KEY_SIZE+1), BIP32_KEY_SIZE);
+		bip32_extendedkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
 		Util.arrayCopyNonAtomic(bip32_masterACL, (short)0, bip32_extendedACL, (short)0, KEY_ACL_SIZE); 
 		
 		// clear recvBuffer
-		Util.arrayFillNonAtomic(recvBuffer, (short)0, BIP32_OFFSET_END, (byte)0);
+		Util.arrayFillNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_OFFSET_END, (byte)0);
 				
 		// compute the corresponding partial public key...
         keyAgreement.init(bip32_extendedkey);
@@ -3202,8 +3209,8 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     	if (key_nb!=(byte)0xFF && !authorizeKeyOp(key_nb, ACL_USE))
 			ISOException.throwIt(SW_UNAUTHORIZED);
     	
-    	// check whether the seed is seed is initialized
-		if (key_nb==(byte)0xFF && bip32_seedsize==(byte)0xFF)
+    	// check whether the seed is initialized
+		if (key_nb==(byte)0xFF && !bip32_seeded)
 			ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
 		
 		short chunk_size, offset, recvOffset;
@@ -3291,8 +3298,8 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     	if (key_nb!=(byte)0xFF && !authorizeKeyOp(key_nb, ACL_USE))
 			ISOException.throwIt(SW_UNAUTHORIZED);
     	
-    	// check whether the seed is seed is initialized
-		if (key_nb==(byte)0xFF && bip32_seedsize==(byte)0xFF)
+    	// check whether the seed is initialized
+		if (key_nb==(byte)0xFF && !bip32_seeded)
 			ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
 				
 		// copy message header to tmp buffer
@@ -3444,7 +3451,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
             short offset = (short)(2+hash_size+2);
         	
             // hash signed by authentikey if seed is initialized
-            if (bip32_seedsize!=(byte)0xFF){
+            if (bip32_seeded){
 	            sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
 	            short sign_size= sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
 	            Util.setShort(buffer, offset, sign_size);
@@ -3526,7 +3533,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			ISOException.throwIt(SW_UNAUTHORIZED);
     	
     	// check whether the seed is initialized
-		if (key_nb==(byte)0xFF && bip32_seedsize==(byte)0xFF)
+		if (key_nb==(byte)0xFF && !bip32_seeded)
 			ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
 		
 		// check doublehash value in buffer with cached singlehash value

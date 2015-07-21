@@ -35,8 +35,6 @@ public class HmacSha512 {
 	
 	public static void init(byte[] tmp){
 		data= tmp;
-		//this.data= JCSystem.makeTransientByteArray((short)(BLOCKSIZE+HASHSIZE), JCSystem.CLEAR_ON_DESELECT);
-		//this.data= new byte[(short)(BLOCKSIZE+HASHSIZE)];
 	}
 	
 	public static short computeHmacSha512(byte[] key, short key_offset, short key_length, 
