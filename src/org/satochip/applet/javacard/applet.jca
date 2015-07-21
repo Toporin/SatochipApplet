@@ -1,5 +1,5 @@
 // converted by version 1.3
-// on Tue Jul 21 14:03:03 CEST 2015
+// on Tue Jul 21 17:58:43 CEST 2015
 
 .package org/satochip/applet {
 	.aid 0x53:0x61:0x74:0x6F:0x43:0x68:0x69:0x70;
@@ -542,77 +542,77 @@
 		// 216
 		staticFieldRef byte[] HmacSha512/data;
 		// 217
-		staticMethodRef Sha512/reset()V;
+		staticMethodRef Sha512/resetUpdateDoFinal([BSS[BS)S;
 		// 218
-		staticMethodRef Sha512/doFinal([BSS[BS)S;
-		// 219
 		staticMethodRef CardEdge/GetObjectSize(Ljavacard/framework/APDU;[B)V;
 			.descriptor	Ljavacard/framework/APDU;	1.10;
 
-		// 220
+		// 219
 		staticMethodRef CardEdge/ListPINs(Ljavacard/framework/APDU;[B)V;
 			.descriptor	Ljavacard/framework/APDU;	1.10;
 
-		// 221
+		// 220
 		staticMethodRef MemoryManager/Init(S)V;
-		// 222
+		// 221
 		virtualMethodRef MemoryManager/free(S)V;
-		// 223
+		// 222
 		staticMethodRef CardEdge/ListObjects(Ljavacard/framework/APDU;[B)V;
 			.descriptor	Ljavacard/framework/APDU;	1.10;
 
-		// 224
+		// 223
 		staticMethodRef CardEdge/ListKeys(Ljavacard/framework/APDU;[B)V;
 			.descriptor	Ljavacard/framework/APDU;	1.10;
 
-		// 225
+		// 224
 		virtualMethodRef MemoryManager/alloc(S)S;
-		// 226
+		// 225
 		virtualMethodRef MemoryManager/setShort(SSS)V;
-		// 227
+		// 226
 		virtualMethodRef MemoryManager/getMaxSize()S;
-		// 228
+		// 227
 		staticMethodRef ObjectManager/getEntry(SS)S;
-		// 229
+		// 228
 		virtualMethodRef MemoryManager/realloc(SS)Z;
-		// 230
+		// 229
 		virtualMethodRef MemoryManager/getShort(SS)S;
-		// 231
+		// 230
 		staticMethodRef ObjectManager/authorizeOp(SS)Z;
-		// 232
+		// 231
 		virtualMethodRef MemoryManager/getShort(S)S;
-		// 233
+		// 232
 		staticMethodRef CardEdge/GetStatus(Ljavacard/framework/APDU;[B)V;
 			.descriptor	Ljavacard/framework/APDU;	1.10;
 
-		// 234
+		// 233
 		classRef 3.17;		// javacard/security/ECKey
-		// 235
+		// 234
 		staticMethodRef 1.8.15(SB)[S;		// javacard/framework/JCSystem.makeTransientShortArray(SB)[S
-		// 236
+		// 235
 		staticFieldRef short[] Sha512/w_short;
-		// 237
+		// 236
 		staticFieldRef short[] Sha512/h_short;
-		// 238
+		// 237
 		staticFieldRef short[] Sha512/tmp;
-		// 239
+		// 238
 		staticFieldRef short[] Sha512/hashState;
-		// 240
+		// 239
 		staticFieldRef byte[] Sha512/buffer;
-		// 241
+		// 240
 		staticFieldRef byte[] Sha512/dataSize;
-		// 242
-		staticMethodRef Sha512/InitH([S)V;
-		// 243
+		// 241
 		staticFieldRef short Sha512/bufferOff;
-		// 244
+		// 242
 		staticFieldRef short Sha512/bufferLeft;
-		// 245
+		// 243
+		staticFieldRef short[] Sha512/H_INIT_SHORT;
+		// 244
 		staticMethodRef Sha512/add_carry_byte([BS[BSS)Z;
-		// 246
+		// 245
 		staticMethodRef Sha512/CompressionFunction([SS[BS)V;
-		// 247
+		// 246
 		staticMethodRef Sha512/update([BSS)V;
+		// 247
+		staticMethodRef Sha512/reset()V;
 		// 248
 		staticMethodRef Sha512/InitW([BS)V;
 		// 249
@@ -630,26 +630,24 @@
 		// 255
 		staticMethodRef Sha512/MessageSchedule([SS[SS[SS[SS[SS)V;
 		// 256
-		staticFieldRef short[] Sha512/H_INIT_SHORT;
-		// 257
 		staticFieldRef short[] Sha512/K_SHORT;
-		// 258
+		// 257
 		staticMethodRef Sha512/Sig1_opt([SS[SS)V;
-		// 259
+		// 258
 		staticMethodRef Sha512/Sig0([SS[SS)V;
-		// 260
+		// 259
 		staticFieldRef short[] Transaction/h;
-		// 261
+		// 260
 		staticMethodRef Biginteger/setByte([BSSB)V;
-		// 262
+		// 261
 		staticMethodRef Transaction/consumeTransaction([BS)V;
-		// 263
+		// 262
 		staticMethodRef Transaction/parseVarint([B[BS)Z;
-		// 264
+		// 263
 		staticMethodRef Biginteger/subtract1_carry([BSS)Z;
-		// 265
+		// 264
 		staticMethodRef Biginteger/getLSB([BSS)S;
-		// 266
+		// 265
 		staticMethodRef Biginteger/swap([BS[BSS)V;
 	}
 
@@ -1787,27 +1785,27 @@
 				L30:	aload_0;
 					aload_1;
 					aload_2;
-					invokespecial 219;		// org/satochip/applet/CardEdge.GetObjectSize(Ljavacard/framework/APDU;[B)V
+					invokespecial 218;		// org/satochip/applet/CardEdge.GetObjectSize(Ljavacard/framework/APDU;[B)V
 					goto L46;
 				L31:	aload_0;
 					aload_1;
 					aload_2;
-					invokespecial 220;		// org/satochip/applet/CardEdge.ListPINs(Ljavacard/framework/APDU;[B)V
+					invokespecial 219;		// org/satochip/applet/CardEdge.ListPINs(Ljavacard/framework/APDU;[B)V
 					goto L46;
 				L32:	aload_0;
 					aload_1;
 					aload_2;
-					invokespecial 223;		// org/satochip/applet/CardEdge.ListObjects(Ljavacard/framework/APDU;[B)V
+					invokespecial 222;		// org/satochip/applet/CardEdge.ListObjects(Ljavacard/framework/APDU;[B)V
 					goto L46;
 				L33:	aload_0;
 					aload_1;
 					aload_2;
-					invokespecial 224;		// org/satochip/applet/CardEdge.ListKeys(Ljavacard/framework/APDU;[B)V
+					invokespecial 223;		// org/satochip/applet/CardEdge.ListKeys(Ljavacard/framework/APDU;[B)V
 					goto L46;
 				L34:	aload_0;
 					aload_1;
 					aload_2;
-					invokespecial 233;		// org/satochip/applet/CardEdge.GetStatus(Ljavacard/framework/APDU;[B)V
+					invokespecial 232;		// org/satochip/applet/CardEdge.GetStatus(Ljavacard/framework/APDU;[B)V
 					goto L46;
 				L35:	sspush 27904;
 					invokestatic 66;		// javacard/framework/ISOException.throwIt(S)V
@@ -8083,35 +8081,21 @@
 				L8:	sload 8;
 					sload_2;
 					if_scmplt L7;
-				L9:	sload_2;
-					sstore 8;
-					goto L11;
-				L10:	getstatic_a 216;		// reference org/satochip/applet/HmacSha512.data
-					sload 8;
+				L9:	getstatic_a 216;		// reference org/satochip/applet/HmacSha512.data
+					sload_2;
+					sspush 128;
+					sload_2;
+					ssub;
 					bspush 54;
-					bastore;
-					sinc 8 1;
-				L11:	sload 8;
-					sspush 128;
-					if_scmplt L10;
-				L12:	sconst_0;
-					sstore 8;
-					goto L14;
-				L13:	getstatic_a 216;		// reference org/satochip/applet/HmacSha512.data
-					sspush 128;
-					sload 8;
-					sadd;
+					invokestatic 58;		// javacard/framework/Util.arrayFillNonAtomic([BSSB)S
+					pop;
 					aload_3;
 					sload 4;
-					sload 8;
-					sadd;
-					baload;
-					bastore;
-					sinc 8 1;
-				L14:	sload 8;
+					getstatic_a 216;		// reference org/satochip/applet/HmacSha512.data
+					sspush 128;
 					sload 5;
-					if_scmplt L13;
-				L15:	invokestatic 217;		// org/satochip/applet/Sha512.reset()V
+					invokestatic 114;		// javacard/framework/Util.arrayCopyNonAtomic([BS[BSS)S
+					pop;
 					getstatic_a 216;		// reference org/satochip/applet/HmacSha512.data
 					sconst_0;
 					sspush 128;
@@ -8119,12 +8103,12 @@
 					sadd;
 					getstatic_a 216;		// reference org/satochip/applet/HmacSha512.data
 					sspush 128;
-					invokestatic 218;		// org/satochip/applet/Sha512.doFinal([BSS[BS)S
+					invokestatic 217;		// org/satochip/applet/Sha512.resetUpdateDoFinal([BSS[BS)S
 					pop;
 					sconst_0;
 					sstore 8;
-					goto L17;
-				L16:	getstatic_a 216;		// reference org/satochip/applet/HmacSha512.data
+					goto L11;
+				L10:	getstatic_a 216;		// reference org/satochip/applet/HmacSha512.data
 					sload 8;
 					aload_0;
 					sload_1;
@@ -8135,27 +8119,23 @@
 					sxor;
 					bastore;
 					sinc 8 1;
-				L17:	sload 8;
+				L11:	sload 8;
 					sload_2;
-					if_scmplt L16;
-				L18:	sload_2;
-					sstore 8;
-					goto L20;
-				L19:	getstatic_a 216;		// reference org/satochip/applet/HmacSha512.data
-					sload 8;
-					bspush 92;
-					bastore;
-					sinc 8 1;
-				L20:	sload 8;
+					if_scmplt L10;
+				L12:	getstatic_a 216;		// reference org/satochip/applet/HmacSha512.data
+					sload_2;
 					sspush 128;
-					if_scmplt L19;
-				L21:	invokestatic 217;		// org/satochip/applet/Sha512.reset()V
+					sload_2;
+					ssub;
+					bspush 92;
+					invokestatic 58;		// javacard/framework/Util.arrayFillNonAtomic([BSSB)S
+					pop;
 					getstatic_a 216;		// reference org/satochip/applet/HmacSha512.data
 					sconst_0;
 					sspush 192;
 					aload 6;
 					sload 7;
-					invokestatic 218;		// org/satochip/applet/Sha512.doFinal([BSS[BS)S
+					invokestatic 217;		// org/satochip/applet/Sha512.resetUpdateDoFinal([BSS[BS)S
 					pop;
 					bspush 64;
 					sreturn;
@@ -8210,7 +8190,7 @@
 					putfield_s 40;		// short org/satochip/applet/MemoryManager.free_head
 					aload_0;
 					sload_1;
-					invokespecial 221;		// org/satochip/applet/MemoryManager.Init(S)V
+					invokespecial 220;		// org/satochip/applet/MemoryManager.Init(S)V
 					return;
 		}
 
@@ -8563,7 +8543,7 @@
 					sload_1;
 					sload_2;
 					sadd;
-					invokevirtual 222;		// free(S)V
+					invokevirtual 221;		// free(S)V
 					sconst_1;
 					sreturn;
 		}
@@ -8771,7 +8751,7 @@
 					sload_3;
 					bspush 14;
 					sadd;
-					invokevirtual 225;		// alloc(S)S
+					invokevirtual 224;		// alloc(S)S
 					sstore 6;
 					sload 6;
 					sconst_m1;
@@ -8782,22 +8762,22 @@
 					sload 6;
 					sconst_0;
 					getfield_s_this 42;		// short org/satochip/applet/ObjectManager.obj_list_head
-					invokevirtual 226;		// setShort(SSS)V
+					invokevirtual 225;		// setShort(SSS)V
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload 6;
 					sconst_2;
 					sload_1;
-					invokevirtual 226;		// setShort(SSS)V
+					invokevirtual 225;		// setShort(SSS)V
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload 6;
 					sconst_4;
 					sload_2;
-					invokevirtual 226;		// setShort(SSS)V
+					invokevirtual 225;		// setShort(SSS)V
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload 6;
 					bspush 12;
 					sload_3;
-					invokevirtual 226;		// setShort(SSS)V
+					invokevirtual 225;		// setShort(SSS)V
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload 6;
 					bspush 6;
@@ -8819,7 +8799,7 @@
 			.locals 1;
 
 				L0:	getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
-					invokevirtual 227;		// getMaxSize()S
+					invokevirtual 226;		// getMaxSize()S
 					sstore 5;
 					sload 5;
 					ifne L2;
@@ -8844,7 +8824,7 @@
 				L0:	aload_0;
 					sload_1;
 					sload_2;
-					invokespecial 228;		// org/satochip/applet/ObjectManager.getEntry(SS)S
+					invokespecial 227;		// org/satochip/applet/ObjectManager.getEntry(SS)S
 					sstore 4;
 					sload 4;
 					sconst_m1;
@@ -8856,13 +8836,13 @@
 					sload_3;
 					bspush 14;
 					sadd;
-					invokevirtual 229;		// realloc(SS)Z
+					invokevirtual 228;		// realloc(SS)Z
 					ifeq L4;
 				L3:	getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload 4;
 					bspush 12;
 					sload_3;
-					invokevirtual 226;		// setShort(SSS)V
+					invokevirtual 225;		// setShort(SSS)V
 					sconst_1;
 					sreturn;
 				L4:	sconst_0;
@@ -8876,7 +8856,7 @@
 				L0:	aload_0;
 					sload_1;
 					sload_2;
-					invokespecial 228;		// org/satochip/applet/ObjectManager.getEntry(SS)S
+					invokespecial 227;		// org/satochip/applet/ObjectManager.getEntry(SS)S
 					sstore 5;
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload 5;
@@ -8896,9 +8876,9 @@
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload_1;
 					bspush -8;
-					invokevirtual 230;		// getShort(SS)S
+					invokevirtual 229;		// getShort(SS)S
 					sload_2;
-					invokespecial 231;		// org/satochip/applet/ObjectManager.authorizeOp(SS)Z
+					invokespecial 230;		// org/satochip/applet/ObjectManager.authorizeOp(SS)Z
 					sreturn;
 		}
 
@@ -8910,9 +8890,9 @@
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload_1;
 					bspush -6;
-					invokevirtual 230;		// getShort(SS)S
+					invokevirtual 229;		// getShort(SS)S
 					sload_2;
-					invokespecial 231;		// org/satochip/applet/ObjectManager.authorizeOp(SS)Z
+					invokespecial 230;		// org/satochip/applet/ObjectManager.authorizeOp(SS)Z
 					sreturn;
 		}
 
@@ -8924,9 +8904,9 @@
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload_1;
 					bspush -4;
-					invokevirtual 230;		// getShort(SS)S
+					invokevirtual 229;		// getShort(SS)S
 					sload_2;
-					invokespecial 231;		// org/satochip/applet/ObjectManager.authorizeOp(SS)Z
+					invokespecial 230;		// org/satochip/applet/ObjectManager.authorizeOp(SS)Z
 					sreturn;
 		}
 
@@ -8962,13 +8942,13 @@
 				L1:	getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload 4;
 					sconst_2;
-					invokevirtual 230;		// getShort(SS)S
+					invokevirtual 229;		// getShort(SS)S
 					sload_1;
 					if_scmpne L4;
 				L2:	getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload 4;
 					sconst_4;
-					invokevirtual 230;		// getShort(SS)S
+					invokevirtual 229;		// getShort(SS)S
 					sload_2;
 					if_scmpne L4;
 				L3:	sconst_1;
@@ -8979,7 +8959,7 @@
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload 4;
 					sconst_0;
-					invokevirtual 230;		// getShort(SS)S
+					invokevirtual 229;		// getShort(SS)S
 					sstore 4;
 				L5:	sload 6;
 					ifne L7;
@@ -8997,14 +8977,14 @@
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload 4;
 					sconst_0;
-					invokevirtual 230;		// getShort(SS)S
-					invokevirtual 226;		// setShort(SSS)V
+					invokevirtual 229;		// getShort(SS)S
+					invokevirtual 225;		// setShort(SSS)V
 					goto L11;
 				L10:	aload_0;
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload 4;
 					sconst_0;
-					invokevirtual 230;		// getShort(SS)S
+					invokevirtual 229;		// getShort(SS)S
 					putfield_s 42;		// short org/satochip/applet/ObjectManager.obj_list_head
 				L11:	sload_3;
 					ifeq L13;
@@ -9016,13 +8996,13 @@
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload 4;
 					bspush 12;
-					invokevirtual 230;		// getShort(SS)S
+					invokevirtual 229;		// getShort(SS)S
 					sconst_0;
 					invokestatic 58;		// javacard/framework/Util.arrayFillNonAtomic([BSSB)S
 					pop;
 				L13:	getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload 4;
-					invokevirtual 222;		// free(S)V
+					invokevirtual 221;		// free(S)V
 				L14:	return;
 		}
 
@@ -9036,13 +9016,13 @@
 				L1:	getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload_3;
 					sconst_2;
-					invokevirtual 230;		// getShort(SS)S
+					invokevirtual 229;		// getShort(SS)S
 					sload_1;
 					if_scmpne L4;
 				L2:	getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload_3;
 					sconst_4;
-					invokevirtual 230;		// getShort(SS)S
+					invokevirtual 229;		// getShort(SS)S
 					sload_2;
 					if_scmpne L4;
 				L3:	sload_3;
@@ -9050,7 +9030,7 @@
 				L4:	getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					sload_3;
 					sconst_0;
-					invokevirtual 230;		// getShort(SS)S
+					invokevirtual 229;		// getShort(SS)S
 					sstore_3;
 				L5:	sload_3;
 					sconst_m1;
@@ -9066,7 +9046,7 @@
 				L0:	aload_0;
 					sload_1;
 					sload_2;
-					invokespecial 228;		// org/satochip/applet/ObjectManager.getEntry(SS)S
+					invokespecial 227;		// org/satochip/applet/ObjectManager.getEntry(SS)S
 					sstore_3;
 					sload_3;
 					sconst_m1;
@@ -9086,7 +9066,7 @@
 				L0:	aload_0;
 					sload_1;
 					sload_2;
-					invokespecial 228;		// org/satochip/applet/ObjectManager.getEntry(SS)S
+					invokespecial 227;		// org/satochip/applet/ObjectManager.getEntry(SS)S
 					sstore_3;
 					sload_3;
 					sconst_m1;
@@ -9107,7 +9087,7 @@
 					ssub;
 					bspush 12;
 					sadd;
-					invokevirtual 232;		// getShort(S)S
+					invokevirtual 231;		// getShort(S)S
 					sreturn;
 		}
 
@@ -9139,7 +9119,7 @@
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					getfield_s_this 43;		// short org/satochip/applet/ObjectManager.it
 					sconst_2;
-					invokevirtual 230;		// getShort(SS)S
+					invokevirtual 229;		// getShort(SS)S
 					invokestatic 115;		// javacard/framework/Util.setShort([BSS)S
 					pop;
 					aload_1;
@@ -9149,7 +9129,7 @@
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					getfield_s_this 43;		// short org/satochip/applet/ObjectManager.it
 					sconst_4;
-					invokevirtual 230;		// getShort(SS)S
+					invokevirtual 229;		// getShort(SS)S
 					invokestatic 115;		// javacard/framework/Util.setShort([BSS)S
 					pop;
 					aload_1;
@@ -9166,7 +9146,7 @@
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					getfield_s_this 43;		// short org/satochip/applet/ObjectManager.it
 					bspush 12;
-					invokevirtual 230;		// getShort(SS)S
+					invokevirtual 229;		// getShort(SS)S
 					invokestatic 115;		// javacard/framework/Util.setShort([BSS)S
 					pop;
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
@@ -9185,7 +9165,7 @@
 					getfield_a_this 41;		// reference org/satochip/applet/ObjectManager.mem
 					getfield_s_this 43;		// short org/satochip/applet/ObjectManager.it
 					sconst_0;
-					invokevirtual 230;		// getShort(SS)S
+					invokevirtual 229;		// getShort(SS)S
 					putfield_s 43;		// short org/satochip/applet/ObjectManager.it
 					sconst_1;
 					sreturn;
@@ -9256,30 +9236,30 @@
 					getstatic_a 160;		// reference org/satochip/applet/Secp256k1.SECP256K1
 					sconst_0;
 					bspush 32;
-					invokeinterface 4 234 0;		// javacard/security/ECKey
+					invokeinterface 4 233 0;		// javacard/security/ECKey
 					aload_0;
 					getstatic_a 160;		// reference org/satochip/applet/Secp256k1.SECP256K1
 					bspush 32;
 					bspush 32;
-					invokeinterface 4 234 3;		// javacard/security/ECKey
+					invokeinterface 4 233 3;		// javacard/security/ECKey
 					aload_0;
 					getstatic_a 160;		// reference org/satochip/applet/Secp256k1.SECP256K1
 					bspush 64;
 					bspush 32;
-					invokeinterface 4 234 4;		// javacard/security/ECKey
+					invokeinterface 4 233 4;		// javacard/security/ECKey
 					aload_0;
 					getstatic_a 160;		// reference org/satochip/applet/Secp256k1.SECP256K1
 					bspush 96;
 					bspush 32;
-					invokeinterface 4 234 6;		// javacard/security/ECKey
+					invokeinterface 4 233 6;		// javacard/security/ECKey
 					aload_0;
 					getstatic_a 160;		// reference org/satochip/applet/Secp256k1.SECP256K1
 					sspush 128;
 					bspush 65;
-					invokeinterface 4 234 5;		// javacard/security/ECKey
+					invokeinterface 4 233 5;		// javacard/security/ECKey
 					aload_0;
 					sconst_1;
-					invokeinterface 2 234 7;		// javacard/security/ECKey
+					invokeinterface 2 233 7;		// javacard/security/ECKey
 					return;
 		}
 
@@ -9292,7 +9272,7 @@
 				L0:	aload_0;
 					aload_1;
 					sload_2;
-					invokeinterface 3 234 9;		// javacard/security/ECKey
+					invokeinterface 3 233 9;		// javacard/security/ECKey
 					pop;
 					aload_1;
 					sload_2;
@@ -9306,7 +9286,7 @@
 				L2:	aload_0;
 					aload_1;
 					sload_2;
-					invokeinterface 3 234 10;		// javacard/security/ECKey
+					invokeinterface 3 233 10;		// javacard/security/ECKey
 					pop;
 					aload_1;
 					sload_2;
@@ -9320,7 +9300,7 @@
 				L4:	aload_0;
 					aload_1;
 					sload_2;
-					invokeinterface 3 234 11;		// javacard/security/ECKey
+					invokeinterface 3 233 11;		// javacard/security/ECKey
 					pop;
 					aload_1;
 					sload_2;
@@ -9334,7 +9314,7 @@
 				L6:	aload_0;
 					aload_1;
 					sload_2;
-					invokeinterface 3 234 12;		// javacard/security/ECKey
+					invokeinterface 3 233 12;		// javacard/security/ECKey
 					pop;
 					aload_1;
 					sload_2;
@@ -9348,7 +9328,7 @@
 				L8:	aload_0;
 					aload_1;
 					sload_2;
-					invokeinterface 3 234 8;		// javacard/security/ECKey
+					invokeinterface 3 233 8;		// javacard/security/ECKey
 					pop;
 					aload_1;
 					sload_2;
@@ -9360,7 +9340,7 @@
 				L9:	sconst_0;
 					sreturn;
 				L10:	aload_0;
-					invokeinterface 1 234 13;		// javacard/security/ECKey
+					invokeinterface 1 233 13;		// javacard/security/ECKey
 					sconst_1;
 					if_scmpeq L12;
 				L11:	sconst_0;
@@ -9414,60 +9394,71 @@
 
 				L0:	bspush 64;
 					sconst_2;
-					invokestatic 235;		// javacard/framework/JCSystem.makeTransientShortArray(SB)[S
-					putstatic_a 236;		// reference org/satochip/applet/Sha512.w_short
+					invokestatic 234;		// javacard/framework/JCSystem.makeTransientShortArray(SB)[S
+					putstatic_a 235;		// reference org/satochip/applet/Sha512.w_short
 					bspush 32;
 					sconst_2;
-					invokestatic 235;		// javacard/framework/JCSystem.makeTransientShortArray(SB)[S
-					putstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+					invokestatic 234;		// javacard/framework/JCSystem.makeTransientShortArray(SB)[S
+					putstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					bspush 16;
 					sconst_2;
-					invokestatic 235;		// javacard/framework/JCSystem.makeTransientShortArray(SB)[S
-					putstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					invokestatic 234;		// javacard/framework/JCSystem.makeTransientShortArray(SB)[S
+					putstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 32;
 					sconst_2;
-					invokestatic 235;		// javacard/framework/JCSystem.makeTransientShortArray(SB)[S
-					putstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					invokestatic 234;		// javacard/framework/JCSystem.makeTransientShortArray(SB)[S
+					putstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sspush 128;
 					sconst_2;
 					invokestatic 81;		// javacard/framework/JCSystem.makeTransientByteArray(SB)[B
-					putstatic_a 240;		// reference org/satochip/applet/Sha512.buffer
+					putstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
 					bspush 8;
 					sconst_2;
 					invokestatic 81;		// javacard/framework/JCSystem.makeTransientByteArray(SB)[B
-					putstatic_a 241;		// reference org/satochip/applet/Sha512.dataSize
+					putstatic_a 240;		// reference org/satochip/applet/Sha512.dataSize
 					return;
 		}
 
 		.method public static reset()V 2 {
-			.stack 3;
+			.stack 4;
 			.locals 1;
 
-				L0:	getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
-					invokestatic 242;		// org/satochip/applet/Sha512.InitH([S)V
-					sconst_0;
-					putstatic_s 243;		// short org/satochip/applet/Sha512.bufferOff
+				L0:	sconst_0;
+					putstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
 					sspush 128;
-					putstatic_s 244;		// short org/satochip/applet/Sha512.bufferLeft
+					putstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
 					sconst_0;
 					sstore_0;
 					goto L2;
-				L1:	getstatic_a 241;		// reference org/satochip/applet/Sha512.dataSize
+				L1:	getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload_0;
+					getstatic_a 243;		// reference org/satochip/applet/Sha512.H_INIT_SHORT
+					sload_0;
+					saload;
+					sastore;
+					sinc 0 1;
+				L2:	sload_0;
+					bspush 32;
+					if_scmplt L1;
+				L3:	sconst_0;
+					sstore_0;
+					goto L5;
+				L4:	getstatic_a 240;		// reference org/satochip/applet/Sha512.dataSize
 					sload_0;
 					sconst_0;
 					bastore;
 					sinc 0 1;
-				L2:	sload_0;
+				L5:	sload_0;
 					bspush 8;
-					if_scmplt L1;
-				L3:	return;
+					if_scmplt L4;
+				L6:	return;
 		}
 
 		.method public static update([BSS)V 3 {
 			.stack 5;
 			.locals 6;
 
-				L0:	getstatic_a 241;		// reference org/satochip/applet/Sha512.dataSize
+				L0:	getstatic_a 240;		// reference org/satochip/applet/Sha512.dataSize
 					bspush 6;
 					bspush 8;
 					sload_2;
@@ -9478,7 +9469,7 @@
 					sand;
 					s2b;
 					bastore;
-					getstatic_a 241;		// reference org/satochip/applet/Sha512.dataSize
+					getstatic_a 240;		// reference org/satochip/applet/Sha512.dataSize
 					bspush 7;
 					bspush 8;
 					sload_2;
@@ -9487,39 +9478,39 @@
 					sand;
 					s2b;
 					bastore;
-					getstatic_a 241;		// reference org/satochip/applet/Sha512.dataSize
+					getstatic_a 240;		// reference org/satochip/applet/Sha512.dataSize
 					sconst_0;
-					getstatic_a 241;		// reference org/satochip/applet/Sha512.dataSize
+					getstatic_a 240;		// reference org/satochip/applet/Sha512.dataSize
 					sconst_4;
 					sconst_4;
-					invokestatic 245;		// org/satochip/applet/Sha512.add_carry_byte([BS[BSS)Z
+					invokestatic 244;		// org/satochip/applet/Sha512.add_carry_byte([BS[BSS)Z
 					pop;
 					goto_w L7;
 				L1:	aload_0;
 					sload_1;
-					getstatic_a 240;		// reference org/satochip/applet/Sha512.buffer
-					getstatic_s 243;		// short org/satochip/applet/Sha512.bufferOff
-					getstatic_s 244;		// short org/satochip/applet/Sha512.bufferLeft
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
+					getstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
 					invokestatic 114;		// javacard/framework/Util.arrayCopyNonAtomic([BS[BSS)S
 					pop;
 					sload_1;
-					getstatic_s 244;		// short org/satochip/applet/Sha512.bufferLeft
+					getstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
 					sadd;
 					sstore_1;
 					sload_2;
-					getstatic_s 244;		// short org/satochip/applet/Sha512.bufferLeft
+					getstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
 					ssub;
 					sstore_2;
 					sspush 128;
-					putstatic_s 244;		// short org/satochip/applet/Sha512.bufferLeft
+					putstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
 					sconst_0;
-					putstatic_s 243;		// short org/satochip/applet/Sha512.bufferOff
+					putstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
 					sconst_0;
 					sstore 8;
 					goto L3;
-				L2:	getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+				L2:	getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sload 8;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 8;
 					saload;
 					sastore;
@@ -9527,11 +9518,11 @@
 				L3:	sload 8;
 					bspush 32;
 					if_scmplt L2;
-				L4:	getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+				L4:	getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sconst_0;
-					getstatic_a 240;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
 					sconst_0;
-					invokestatic 246;		// org/satochip/applet/Sha512.CompressionFunction([SS[BS)V
+					invokestatic 245;		// org/satochip/applet/Sha512.CompressionFunction([SS[BS)V
 					sconst_0;
 					sstore 8;
 					goto_w L6;
@@ -9545,15 +9536,15 @@
 					sconst_3;
 					sadd;
 					sstore 5;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 5;
 					saload;
 					sstore 6;
-					getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sload 4;
 					saload;
 					sstore 7;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 5;
 					sload 6;
 					sload 7;
@@ -9567,7 +9558,7 @@
 					sload 6;
 					sload 7;
 					sor;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 5;
 					saload;
 					sconst_m1;
@@ -9581,15 +9572,15 @@
 					sstore_3;
 					sinc 4 -1;
 					sinc 5 -1;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 5;
 					saload;
 					sstore 6;
-					getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sload 4;
 					saload;
 					sstore 7;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 5;
 					sload 6;
 					sload 7;
@@ -9603,7 +9594,7 @@
 					sload 6;
 					sload 7;
 					sor;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 5;
 					saload;
 					sconst_m1;
@@ -9617,15 +9608,15 @@
 					sstore_3;
 					sinc 4 -1;
 					sinc 5 -1;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 5;
 					saload;
 					sstore 6;
-					getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sload 4;
 					saload;
 					sstore 7;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 5;
 					sload 6;
 					sload 7;
@@ -9639,7 +9630,7 @@
 					sload 6;
 					sload 7;
 					sor;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 5;
 					saload;
 					sconst_m1;
@@ -9653,15 +9644,15 @@
 					sstore_3;
 					sinc 4 -1;
 					sinc 5 -1;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 5;
 					saload;
 					sstore 6;
-					getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sload 4;
 					saload;
 					sstore 7;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 5;
 					sload 6;
 					sload 7;
@@ -9674,12 +9665,12 @@
 					bspush 32;
 					if_scmplt_w L5;
 				L7:	sload_2;
-					getstatic_s 244;		// short org/satochip/applet/Sha512.bufferLeft
+					getstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
 					if_scmpge_w L1;
 				L8:	aload_0;
 					sload_1;
-					getstatic_a 240;		// reference org/satochip/applet/Sha512.buffer
-					getstatic_s 243;		// short org/satochip/applet/Sha512.bufferOff
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
 					sload_2;
 					invokestatic 114;		// javacard/framework/Util.arrayCopyNonAtomic([BS[BSS)S
 					pop;
@@ -9687,14 +9678,14 @@
 					sload_2;
 					sadd;
 					sstore_1;
-					getstatic_s 244;		// short org/satochip/applet/Sha512.bufferLeft
+					getstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
 					sload_2;
 					ssub;
-					putstatic_s 244;		// short org/satochip/applet/Sha512.bufferLeft
-					getstatic_s 243;		// short org/satochip/applet/Sha512.bufferOff
+					putstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
+					getstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
 					sload_2;
 					sadd;
-					putstatic_s 243;		// short org/satochip/applet/Sha512.bufferOff
+					putstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
 					return;
 		}
 
@@ -9705,34 +9696,34 @@
 				L0:	aload_0;
 					sload_1;
 					sload_2;
-					invokestatic 247;		// org/satochip/applet/Sha512.update([BSS)V
-					getstatic_a 240;		// reference org/satochip/applet/Sha512.buffer
-					getstatic_s 243;		// short org/satochip/applet/Sha512.bufferOff
+					invokestatic 246;		// org/satochip/applet/Sha512.update([BSS)V
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
 					bspush -128;
 					bastore;
-					getstatic_s 244;		// short org/satochip/applet/Sha512.bufferLeft
+					getstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
 					sconst_1;
 					ssub;
-					putstatic_s 244;		// short org/satochip/applet/Sha512.bufferLeft
-					getstatic_s 243;		// short org/satochip/applet/Sha512.bufferOff
+					putstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
+					getstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
 					sconst_1;
 					sadd;
-					putstatic_s 243;		// short org/satochip/applet/Sha512.bufferOff
-					getstatic_a 240;		// reference org/satochip/applet/Sha512.buffer
-					getstatic_s 243;		// short org/satochip/applet/Sha512.bufferOff
-					getstatic_s 244;		// short org/satochip/applet/Sha512.bufferLeft
+					putstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
+					getstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
 					sconst_0;
 					invokestatic 58;		// javacard/framework/Util.arrayFillNonAtomic([BSSB)S
 					pop;
-					getstatic_s 244;		// short org/satochip/applet/Sha512.bufferLeft
+					getstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
 					bspush 16;
 					if_scmpge_w L8;
 				L1:	sconst_0;
 					sstore 10;
 					goto L3;
-				L2:	getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+				L2:	getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sload 10;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 10;
 					saload;
 					sastore;
@@ -9740,11 +9731,11 @@
 				L3:	sload 10;
 					bspush 32;
 					if_scmplt L2;
-				L4:	getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+				L4:	getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sconst_0;
-					getstatic_a 240;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
 					sconst_0;
-					invokestatic 246;		// org/satochip/applet/Sha512.CompressionFunction([SS[BS)V
+					invokestatic 245;		// org/satochip/applet/Sha512.CompressionFunction([SS[BS)V
 					sconst_0;
 					sstore 10;
 					goto_w L6;
@@ -9758,15 +9749,15 @@
 					sconst_3;
 					sadd;
 					sstore 7;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					saload;
 					sstore 8;
-					getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sload 6;
 					saload;
 					sstore 9;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					sload 8;
 					sload 9;
@@ -9780,7 +9771,7 @@
 					sload 8;
 					sload 9;
 					sor;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					saload;
 					sconst_m1;
@@ -9794,15 +9785,15 @@
 					sstore 5;
 					sinc 6 -1;
 					sinc 7 -1;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					saload;
 					sstore 8;
-					getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sload 6;
 					saload;
 					sstore 9;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					sload 8;
 					sload 9;
@@ -9816,7 +9807,7 @@
 					sload 8;
 					sload 9;
 					sor;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					saload;
 					sconst_m1;
@@ -9830,15 +9821,15 @@
 					sstore 5;
 					sinc 6 -1;
 					sinc 7 -1;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					saload;
 					sstore 8;
-					getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sload 6;
 					saload;
 					sstore 9;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					sload 8;
 					sload 9;
@@ -9852,7 +9843,7 @@
 					sload 8;
 					sload 9;
 					sor;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					saload;
 					sconst_m1;
@@ -9866,15 +9857,15 @@
 					sstore 5;
 					sinc 6 -1;
 					sinc 7 -1;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					saload;
 					sstore 8;
-					getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sload 6;
 					saload;
 					sstore 9;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					sload 8;
 					sload 9;
@@ -9887,19 +9878,19 @@
 					bspush 32;
 					if_scmplt_w L5;
 				L7:	sconst_0;
-					putstatic_s 243;		// short org/satochip/applet/Sha512.bufferOff
+					putstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
 					sspush 128;
-					putstatic_s 244;		// short org/satochip/applet/Sha512.bufferLeft
-					getstatic_a 240;		// reference org/satochip/applet/Sha512.buffer
-					getstatic_s 243;		// short org/satochip/applet/Sha512.bufferOff
-					getstatic_s 244;		// short org/satochip/applet/Sha512.bufferLeft
+					putstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
+					getstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
 					sconst_0;
 					invokestatic 58;		// javacard/framework/Util.arrayFillNonAtomic([BSSB)S
 					pop;
-				L8:	getstatic_a 241;		// reference org/satochip/applet/Sha512.dataSize
+				L8:	getstatic_a 240;		// reference org/satochip/applet/Sha512.dataSize
 					sconst_0;
-					getstatic_a 240;		// reference org/satochip/applet/Sha512.buffer
-					getstatic_a 240;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
 					arraylength;
 					sconst_4;
 					ssub;
@@ -9909,9 +9900,9 @@
 					sconst_0;
 					sstore 10;
 					goto L10;
-				L9:	getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+				L9:	getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sload 10;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 10;
 					saload;
 					sastore;
@@ -9919,11 +9910,11 @@
 				L10:	sload 10;
 					bspush 32;
 					if_scmplt L9;
-				L11:	getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+				L11:	getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sconst_0;
-					getstatic_a 240;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
 					sconst_0;
-					invokestatic 246;		// org/satochip/applet/Sha512.CompressionFunction([SS[BS)V
+					invokestatic 245;		// org/satochip/applet/Sha512.CompressionFunction([SS[BS)V
 					sconst_0;
 					sstore 10;
 					goto_w L13;
@@ -9937,15 +9928,15 @@
 					sconst_3;
 					sadd;
 					sstore 7;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					saload;
 					sstore 8;
-					getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sload 6;
 					saload;
 					sstore 9;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					sload 8;
 					sload 9;
@@ -9959,7 +9950,7 @@
 					sload 8;
 					sload 9;
 					sor;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					saload;
 					sconst_m1;
@@ -9973,15 +9964,15 @@
 					sstore 5;
 					sinc 6 -1;
 					sinc 7 -1;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					saload;
 					sstore 8;
-					getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sload 6;
 					saload;
 					sstore 9;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					sload 8;
 					sload 9;
@@ -9995,7 +9986,7 @@
 					sload 8;
 					sload 9;
 					sor;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					saload;
 					sconst_m1;
@@ -10009,15 +10000,15 @@
 					sstore 5;
 					sinc 6 -1;
 					sinc 7 -1;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					saload;
 					sstore 8;
-					getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sload 6;
 					saload;
 					sstore 9;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					sload 8;
 					sload 9;
@@ -10031,7 +10022,7 @@
 					sload 8;
 					sload 9;
 					sor;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					saload;
 					sconst_m1;
@@ -10045,15 +10036,15 @@
 					sstore 5;
 					sinc 6 -1;
 					sinc 7 -1;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					saload;
 					sstore 8;
-					getstatic_a 237;		// reference org/satochip/applet/Sha512.h_short
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
 					sload 6;
 					saload;
 					sstore 9;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 7;
 					sload 8;
 					sload 9;
@@ -10070,7 +10061,7 @@
 					goto L16;
 				L15:	aload_3;
 					sload 4;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 10;
 					saload;
 					bspush 8;
@@ -10082,7 +10073,7 @@
 					sinc 4 1;
 					aload_3;
 					sload 4;
-					getstatic_a 239;		// reference org/satochip/applet/Sha512.hashState
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
 					sload 10;
 					saload;
 					sspush 255;
@@ -10094,12 +10085,455 @@
 				L16:	sload 10;
 					bspush 32;
 					if_scmplt L15;
-				L17:	invokestatic 217;		// org/satochip/applet/Sha512.reset()V
+				L17:	invokestatic 247;		// org/satochip/applet/Sha512.reset()V
 					bspush 64;
 					sreturn;
 		}
 
-		.method public static CompressionFunction([SS[BS)V 5 {
+		.method public static resetUpdateDoFinal([BSS[BS)S 5 {
+			.stack 5;
+			.locals 7;
+
+				L0:	sconst_0;
+					putstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
+					sspush 128;
+					putstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
+					aload_0;
+					sload_1;
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
+					getstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
+					invokestatic 114;		// javacard/framework/Util.arrayCopyNonAtomic([BS[BSS)S
+					pop;
+					sload_1;
+					getstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
+					sadd;
+					sstore_1;
+					sspush 128;
+					putstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
+					sconst_0;
+					putstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
+					sconst_0;
+					sstore 10;
+					goto L2;
+				L1:	getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 10;
+					getstatic_a 243;		// reference org/satochip/applet/Sha512.H_INIT_SHORT
+					sload 10;
+					saload;
+					sastore;
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
+					sload 10;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 10;
+					saload;
+					sastore;
+					sinc 10 1;
+				L2:	sload 10;
+					bspush 32;
+					if_scmplt L1;
+				L3:	getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
+					sconst_0;
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					sconst_0;
+					invokestatic 245;		// org/satochip/applet/Sha512.CompressionFunction([SS[BS)V
+					sconst_0;
+					sstore 10;
+					goto_w L5;
+				L4:	sconst_0;
+					sstore 5;
+					sload 10;
+					sconst_3;
+					sadd;
+					sstore 6;
+					sload 10;
+					sconst_3;
+					sadd;
+					sstore 7;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					saload;
+					sstore 8;
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
+					sload 6;
+					saload;
+					sstore 9;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					sload 8;
+					sload 9;
+					sadd;
+					sload 5;
+					sadd;
+					sastore;
+					sload 8;
+					sload 9;
+					sand;
+					sload 8;
+					sload 9;
+					sor;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					saload;
+					sconst_m1;
+					sxor;
+					sand;
+					sor;
+					bspush 15;
+					sshr;
+					sconst_1;
+					sand;
+					sstore 5;
+					sinc 6 -1;
+					sinc 7 -1;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					saload;
+					sstore 8;
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
+					sload 6;
+					saload;
+					sstore 9;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					sload 8;
+					sload 9;
+					sadd;
+					sload 5;
+					sadd;
+					sastore;
+					sload 8;
+					sload 9;
+					sand;
+					sload 8;
+					sload 9;
+					sor;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					saload;
+					sconst_m1;
+					sxor;
+					sand;
+					sor;
+					bspush 15;
+					sshr;
+					sconst_1;
+					sand;
+					sstore 5;
+					sinc 6 -1;
+					sinc 7 -1;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					saload;
+					sstore 8;
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
+					sload 6;
+					saload;
+					sstore 9;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					sload 8;
+					sload 9;
+					sadd;
+					sload 5;
+					sadd;
+					sastore;
+					sload 8;
+					sload 9;
+					sand;
+					sload 8;
+					sload 9;
+					sor;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					saload;
+					sconst_m1;
+					sxor;
+					sand;
+					sor;
+					bspush 15;
+					sshr;
+					sconst_1;
+					sand;
+					sstore 5;
+					sinc 6 -1;
+					sinc 7 -1;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					saload;
+					sstore 8;
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
+					sload 6;
+					saload;
+					sstore 9;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					sload 8;
+					sload 9;
+					sadd;
+					sload 5;
+					sadd;
+					sastore;
+					sinc 10 4;
+				L5:	sload 10;
+					bspush 32;
+					if_scmplt_w L4;
+				L6:	sload_2;
+					sspush 128;
+					ssub;
+					sstore 10;
+					aload_0;
+					sload_1;
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
+					sload 10;
+					invokestatic 114;		// javacard/framework/Util.arrayCopyNonAtomic([BS[BSS)S
+					pop;
+					getstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
+					sload 10;
+					ssub;
+					putstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
+					getstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
+					sload 10;
+					sadd;
+					putstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
+					bspush -128;
+					bastore;
+					getstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
+					sconst_1;
+					ssub;
+					putstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
+					getstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
+					sconst_1;
+					sadd;
+					putstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_s 241;		// short org/satochip/applet/Sha512.bufferOff
+					getstatic_s 242;		// short org/satochip/applet/Sha512.bufferLeft
+					sconst_0;
+					invokestatic 58;		// javacard/framework/Util.arrayFillNonAtomic([BSSB)S
+					pop;
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					arraylength;
+					sconst_2;
+					ssub;
+					bspush 8;
+					sload_2;
+					smul;
+					bspush 8;
+					sshr;
+					sspush 255;
+					sand;
+					s2b;
+					bastore;
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					arraylength;
+					sconst_1;
+					ssub;
+					bspush 8;
+					sload_2;
+					smul;
+					sspush 255;
+					sand;
+					s2b;
+					bastore;
+					sconst_0;
+					sstore 11;
+					goto L8;
+				L7:	getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
+					sload 11;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 11;
+					saload;
+					sastore;
+					sinc 11 1;
+				L8:	sload 11;
+					bspush 32;
+					if_scmplt L7;
+				L9:	getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
+					sconst_0;
+					getstatic_a 239;		// reference org/satochip/applet/Sha512.buffer
+					sconst_0;
+					invokestatic 245;		// org/satochip/applet/Sha512.CompressionFunction([SS[BS)V
+					sconst_0;
+					sstore 11;
+					goto_w L11;
+				L10:	sconst_0;
+					sstore 5;
+					sload 11;
+					sconst_3;
+					sadd;
+					sstore 6;
+					sload 11;
+					sconst_3;
+					sadd;
+					sstore 7;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					saload;
+					sstore 8;
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
+					sload 6;
+					saload;
+					sstore 9;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					sload 8;
+					sload 9;
+					sadd;
+					sload 5;
+					sadd;
+					sastore;
+					sload 8;
+					sload 9;
+					sand;
+					sload 8;
+					sload 9;
+					sor;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					saload;
+					sconst_m1;
+					sxor;
+					sand;
+					sor;
+					bspush 15;
+					sshr;
+					sconst_1;
+					sand;
+					sstore 5;
+					sinc 6 -1;
+					sinc 7 -1;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					saload;
+					sstore 8;
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
+					sload 6;
+					saload;
+					sstore 9;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					sload 8;
+					sload 9;
+					sadd;
+					sload 5;
+					sadd;
+					sastore;
+					sload 8;
+					sload 9;
+					sand;
+					sload 8;
+					sload 9;
+					sor;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					saload;
+					sconst_m1;
+					sxor;
+					sand;
+					sor;
+					bspush 15;
+					sshr;
+					sconst_1;
+					sand;
+					sstore 5;
+					sinc 6 -1;
+					sinc 7 -1;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					saload;
+					sstore 8;
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
+					sload 6;
+					saload;
+					sstore 9;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					sload 8;
+					sload 9;
+					sadd;
+					sload 5;
+					sadd;
+					sastore;
+					sload 8;
+					sload 9;
+					sand;
+					sload 8;
+					sload 9;
+					sor;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					saload;
+					sconst_m1;
+					sxor;
+					sand;
+					sor;
+					bspush 15;
+					sshr;
+					sconst_1;
+					sand;
+					sstore 5;
+					sinc 6 -1;
+					sinc 7 -1;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					saload;
+					sstore 8;
+					getstatic_a 236;		// reference org/satochip/applet/Sha512.h_short
+					sload 6;
+					saload;
+					sstore 9;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 7;
+					sload 8;
+					sload 9;
+					sadd;
+					sload 5;
+					sadd;
+					sastore;
+					sinc 11 4;
+				L11:	sload 11;
+					bspush 32;
+					if_scmplt_w L10;
+				L12:	sconst_0;
+					sstore 11;
+					goto L14;
+				L13:	aload_3;
+					sload 4;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 11;
+					saload;
+					bspush 8;
+					sshr;
+					sspush 255;
+					sand;
+					s2b;
+					bastore;
+					sinc 4 1;
+					aload_3;
+					sload 4;
+					getstatic_a 238;		// reference org/satochip/applet/Sha512.hashState
+					sload 11;
+					saload;
+					sspush 255;
+					sand;
+					s2b;
+					bastore;
+					sinc 4 1;
+					sinc 11 1;
+				L14:	sload 11;
+					bspush 32;
+					if_scmplt L13;
+				L15:	bspush 64;
+					sreturn;
+		}
+
+		.method public static CompressionFunction([SS[BS)V 6 {
 			.stack 8;
 			.locals 8;
 
@@ -10113,14 +10547,14 @@
 					sconst_0;
 					sstore 11;
 					goto_w L2;
-				L1:	getstatic_a 236;		// reference org/satochip/applet/Sha512.w_short
+				L1:	getstatic_a 235;		// reference org/satochip/applet/Sha512.w_short
 					sload 10;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 8;
 					invokestatic 249;		// org/satochip/applet/Sha512.updateW([SS[SS)S
 					sstore 10;
 					sload 11;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 12;
 					invokestatic 250;		// org/satochip/applet/Sha512.getK(S[SS)V
 					sconst_0;
@@ -10129,15 +10563,15 @@
 					sstore 5;
 					bspush 11;
 					sstore 6;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10151,7 +10585,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -10165,15 +10599,15 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10187,7 +10621,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -10201,15 +10635,15 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10223,7 +10657,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -10237,15 +10671,15 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10265,7 +10699,7 @@
 					sstore 5;
 					bspush 11;
 					sstore 6;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
@@ -10273,7 +10707,7 @@
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10287,7 +10721,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -10301,7 +10735,7 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
@@ -10309,7 +10743,7 @@
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10323,7 +10757,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -10337,7 +10771,7 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
@@ -10345,7 +10779,7 @@
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10359,7 +10793,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -10373,7 +10807,7 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
@@ -10381,7 +10815,7 @@
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10407,7 +10841,7 @@
 					sadd;
 					bspush 32;
 					srem;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 12;
 					invokestatic 251;		// org/satochip/applet/Sha512.Ch([SS[SS[SS[SS)V
 					sconst_0;
@@ -10416,15 +10850,15 @@
 					sstore 5;
 					bspush 11;
 					sstore 6;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10438,7 +10872,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -10452,15 +10886,15 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10474,7 +10908,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -10488,15 +10922,15 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10510,7 +10944,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -10524,15 +10958,15 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10546,7 +10980,7 @@
 					sadd;
 					bspush 32;
 					srem;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 12;
 					invokestatic 252;		// org/satochip/applet/Sha512.E1_opt([SS[SS)V
 					sconst_0;
@@ -10555,15 +10989,15 @@
 					sstore 5;
 					bspush 11;
 					sstore 6;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10577,7 +11011,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -10591,15 +11025,15 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10613,7 +11047,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -10627,15 +11061,15 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10649,7 +11083,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -10663,15 +11097,15 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10695,7 +11129,7 @@
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
@@ -10731,7 +11165,7 @@
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
@@ -10767,7 +11201,7 @@
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
@@ -10803,7 +11237,7 @@
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
@@ -10829,7 +11263,7 @@
 					sadd;
 					bspush 32;
 					srem;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 12;
 					invokestatic 253;		// org/satochip/applet/Sha512.Maj([SS[SS[SS[SS)V
 					sconst_0;
@@ -10838,15 +11272,15 @@
 					sstore 5;
 					bspush 11;
 					sstore 6;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10860,7 +11294,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -10874,15 +11308,15 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10896,7 +11330,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -10910,15 +11344,15 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10932,7 +11366,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -10946,15 +11380,15 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10964,7 +11398,7 @@
 					sastore;
 					aload_0;
 					sload 9;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 12;
 					invokestatic 254;		// org/satochip/applet/Sha512.E0_opt([SS[SS)V
 					sconst_0;
@@ -10973,15 +11407,15 @@
 					sstore 5;
 					bspush 11;
 					sstore 6;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -10995,7 +11429,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -11009,15 +11443,15 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -11031,7 +11465,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -11045,15 +11479,15 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -11067,7 +11501,7 @@
 					sload 7;
 					sload 8;
 					sor;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sconst_m1;
@@ -11081,15 +11515,15 @@
 					sstore 4;
 					sinc 5 -1;
 					sinc 6 -1;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					saload;
 					sstore 7;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 5;
 					saload;
 					sstore 8;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 6;
 					sload 7;
 					sload 8;
@@ -11103,7 +11537,7 @@
 					sadd;
 					bspush 32;
 					srem;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 8;
 					saload;
 					sastore;
@@ -11113,7 +11547,7 @@
 					sadd;
 					bspush 32;
 					srem;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 9;
 					saload;
 					sastore;
@@ -11123,7 +11557,7 @@
 					sadd;
 					bspush 32;
 					srem;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 10;
 					saload;
 					sastore;
@@ -11133,7 +11567,7 @@
 					sadd;
 					bspush 32;
 					srem;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 11;
 					saload;
 					sastore;
@@ -11152,7 +11586,7 @@
 				L3:	return;
 		}
 
-		.method public static InitW([BS)V 6 {
+		.method public static InitW([BS)V 7 {
 			.stack 5;
 			.locals 2;
 
@@ -11161,7 +11595,7 @@
 					sconst_0;
 					sstore_3;
 					goto L2;
-				L1:	getstatic_a 236;		// reference org/satochip/applet/Sha512.w_short
+				L1:	getstatic_a 235;		// reference org/satochip/applet/Sha512.w_short
 					sload_2;
 					aload_0;
 					sload_1;
@@ -11177,7 +11611,7 @@
 				L3:	return;
 		}
 
-		.method public static updateW([SS[SS)S 7 {
+		.method public static updateW([SS[SS)S 8 {
 			.stack 10;
 			.locals 0;
 
@@ -11248,33 +11682,13 @@
 					sreturn;
 		}
 
-		.method public static InitH([S)V 8 {
-			.stack 4;
-			.locals 1;
-
-				L0:	sconst_0;
-					sstore_1;
-					goto L2;
-				L1:	aload_0;
-					sload_1;
-					getstatic_a 256;		// reference org/satochip/applet/Sha512.H_INIT_SHORT
-					sload_1;
-					saload;
-					sastore;
-					sinc 1 1;
-				L2:	sload_1;
-					bspush 32;
-					if_scmplt L1;
-				L3:	return;
-		}
-
 		.method public static getK(S[SS)V 9 {
 			.stack 5;
 			.locals 0;
 
 				L0:	aload_1;
 					sload_2;
-					getstatic_a 257;		// reference org/satochip/applet/Sha512.K_SHORT
+					getstatic_a 256;		// reference org/satochip/applet/Sha512.K_SHORT
 					sconst_4;
 					sload_0;
 					smul;
@@ -11284,7 +11698,7 @@
 					sload_2;
 					sconst_1;
 					sadd;
-					getstatic_a 257;		// reference org/satochip/applet/Sha512.K_SHORT
+					getstatic_a 256;		// reference org/satochip/applet/Sha512.K_SHORT
 					sconst_4;
 					sload_0;
 					smul;
@@ -11296,7 +11710,7 @@
 					sload_2;
 					sconst_2;
 					sadd;
-					getstatic_a 257;		// reference org/satochip/applet/Sha512.K_SHORT
+					getstatic_a 256;		// reference org/satochip/applet/Sha512.K_SHORT
 					sconst_4;
 					sload_0;
 					smul;
@@ -11308,7 +11722,7 @@
 					sload_2;
 					sconst_3;
 					sadd;
-					getstatic_a 257;		// reference org/satochip/applet/Sha512.K_SHORT
+					getstatic_a 256;		// reference org/satochip/applet/Sha512.K_SHORT
 					sconst_4;
 					sload_0;
 					smul;
@@ -11664,7 +12078,7 @@
 					sstore 8;
 					sconst_4;
 					sstore 4;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_1;
 					aload_0;
 					sload_1;
@@ -11682,7 +12096,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_2;
 					aload_0;
 					sload_1;
@@ -11700,7 +12114,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_3;
 					aload_0;
 					sload_1;
@@ -11720,7 +12134,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_0;
 					aload_0;
 					sload_1;
@@ -11742,7 +12156,7 @@
 					sastore;
 					bspush 14;
 					sstore 4;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					aload_0;
 					sload_1;
@@ -11760,7 +12174,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					aload_0;
 					sload_1;
@@ -11778,7 +12192,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					aload_0;
 					sload_1;
@@ -11798,7 +12212,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					aload_0;
 					sload_1;
@@ -11818,45 +12232,45 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_0;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					saload;
 					sxor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_1;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					saload;
 					sxor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_2;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					saload;
 					sxor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_3;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					saload;
 					sxor;
 					sastore;
 					bspush 9;
 					sstore 4;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					aload_0;
 					sload_1;
@@ -11874,7 +12288,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					aload_0;
 					sload_1;
@@ -11892,7 +12306,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					aload_0;
 					sload_1;
@@ -11912,7 +12326,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					aload_0;
 					sload_1;
@@ -11934,10 +12348,10 @@
 					sastore;
 					aload_2;
 					sload_3;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_0;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					saload;
 					sxor;
@@ -11946,10 +12360,10 @@
 					sload_3;
 					sconst_1;
 					sadd;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_1;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					saload;
 					sxor;
@@ -11958,10 +12372,10 @@
 					sload_3;
 					sconst_2;
 					sadd;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					saload;
 					sxor;
@@ -11970,10 +12384,10 @@
 					sload_3;
 					sconst_3;
 					sadd;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_3;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					saload;
 					sxor;
@@ -11993,7 +12407,7 @@
 					sstore 8;
 					sconst_2;
 					sstore 4;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_0;
 					aload_0;
 					sload_1;
@@ -12011,7 +12425,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_1;
 					aload_0;
 					sload_1;
@@ -12029,7 +12443,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_2;
 					aload_0;
 					sload_1;
@@ -12049,7 +12463,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_3;
 					aload_0;
 					sload_1;
@@ -12071,7 +12485,7 @@
 					sastore;
 					bspush 14;
 					sstore 4;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					aload_0;
 					sload_1;
@@ -12089,7 +12503,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					aload_0;
 					sload_1;
@@ -12107,7 +12521,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					aload_0;
 					sload_1;
@@ -12127,7 +12541,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					aload_0;
 					sload_1;
@@ -12147,45 +12561,45 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_0;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					saload;
 					sxor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_1;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					saload;
 					sxor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_2;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					saload;
 					sxor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_3;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					saload;
 					sxor;
 					sastore;
 					bspush 7;
 					sstore 4;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					aload_0;
 					sload_1;
@@ -12203,7 +12617,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					aload_0;
 					sload_1;
@@ -12221,7 +12635,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					aload_0;
 					sload_1;
@@ -12241,7 +12655,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					aload_0;
 					sload_1;
@@ -12263,10 +12677,10 @@
 					sastore;
 					aload_2;
 					sload_3;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_0;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					saload;
 					sxor;
@@ -12275,10 +12689,10 @@
 					sload_3;
 					sconst_1;
 					sadd;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_1;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					saload;
 					sxor;
@@ -12287,10 +12701,10 @@
 					sload_3;
 					sconst_2;
 					sadd;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					saload;
 					sxor;
@@ -12299,10 +12713,10 @@
 					sload_3;
 					sconst_3;
 					sadd;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_3;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					saload;
 					sxor;
@@ -12322,7 +12736,7 @@
 					sstore 8;
 					bspush 15;
 					sstore 4;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_0;
 					aload_0;
 					sload_1;
@@ -12340,7 +12754,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_1;
 					aload_0;
 					sload_1;
@@ -12358,7 +12772,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_2;
 					aload_0;
 					sload_1;
@@ -12378,7 +12792,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_3;
 					aload_0;
 					sload_1;
@@ -12400,7 +12814,7 @@
 					sastore;
 					bspush 8;
 					sstore 4;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					aload_0;
 					sload_1;
@@ -12418,7 +12832,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					aload_0;
 					sload_1;
@@ -12436,7 +12850,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					aload_0;
 					sload_1;
@@ -12456,7 +12870,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					aload_0;
 					sload_1;
@@ -12476,45 +12890,45 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_0;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					saload;
 					sxor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_1;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					saload;
 					sxor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_2;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					saload;
 					sxor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_3;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					saload;
 					sxor;
 					sastore;
 					bspush 9;
 					sstore 4;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					aload_0;
 					sload_1;
@@ -12524,7 +12938,7 @@
 					sload 7;
 					sand;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					aload_0;
 					sload_1;
@@ -12542,7 +12956,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					aload_0;
 					sload_1;
@@ -12562,7 +12976,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					aload_0;
 					sload_1;
@@ -12584,10 +12998,10 @@
 					sastore;
 					aload_2;
 					sload_3;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_0;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					saload;
 					sxor;
@@ -12596,10 +13010,10 @@
 					sload_3;
 					sconst_1;
 					sadd;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_1;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					saload;
 					sxor;
@@ -12608,10 +13022,10 @@
 					sload_3;
 					sconst_2;
 					sadd;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					saload;
 					sxor;
@@ -12620,10 +13034,10 @@
 					sload_3;
 					sconst_3;
 					sadd;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_3;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					saload;
 					sxor;
@@ -12643,7 +13057,7 @@
 					sstore 8;
 					bspush 13;
 					sstore 4;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_1;
 					aload_0;
 					sload_1;
@@ -12661,7 +13075,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_2;
 					aload_0;
 					sload_1;
@@ -12679,7 +13093,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_3;
 					aload_0;
 					sload_1;
@@ -12699,7 +13113,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_0;
 					aload_0;
 					sload_1;
@@ -12721,7 +13135,7 @@
 					sastore;
 					sconst_3;
 					sstore 4;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					aload_0;
 					sload_1;
@@ -12739,7 +13153,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					aload_0;
 					sload_1;
@@ -12757,7 +13171,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					aload_0;
 					sload_1;
@@ -12777,7 +13191,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					aload_0;
 					sload_1;
@@ -12797,45 +13211,45 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_0;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					saload;
 					sxor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_1;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					saload;
 					sxor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_2;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					saload;
 					sxor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_3;
 					dup2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					saload;
 					sxor;
 					sastore;
 					bspush 10;
 					sstore 4;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					aload_0;
 					sload_1;
@@ -12845,7 +13259,7 @@
 					sload 7;
 					sand;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					aload_0;
 					sload_1;
@@ -12863,7 +13277,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					aload_0;
 					sload_1;
@@ -12883,7 +13297,7 @@
 					sshl;
 					sor;
 					sastore;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					aload_0;
 					sload_1;
@@ -12905,10 +13319,10 @@
 					sastore;
 					aload_2;
 					sload_3;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_0;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_4;
 					saload;
 					sxor;
@@ -12917,10 +13331,10 @@
 					sload_3;
 					sconst_1;
 					sadd;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_1;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_5;
 					saload;
 					sxor;
@@ -12929,10 +13343,10 @@
 					sload_3;
 					sconst_2;
 					sadd;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_2;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 6;
 					saload;
 					sxor;
@@ -12941,10 +13355,10 @@
 					sload_3;
 					sconst_3;
 					sadd;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_3;
 					saload;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					bspush 7;
 					saload;
 					sxor;
@@ -12960,7 +13374,7 @@
 					sload_1;
 					aload 8;
 					sload 9;
-					invokestatic 258;		// org/satochip/applet/Sha512.Sig1_opt([SS[SS)V
+					invokestatic 257;		// org/satochip/applet/Sha512.Sig1_opt([SS[SS)V
 					sconst_0;
 					sstore 10;
 					sload_3;
@@ -13097,9 +13511,9 @@
 					sastore;
 					aload 4;
 					sload 5;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sconst_0;
-					invokestatic 259;		// org/satochip/applet/Sha512.Sig0([SS[SS)V
+					invokestatic 258;		// org/satochip/applet/Sha512.Sig0([SS[SS)V
 					sconst_0;
 					sstore 10;
 					sload 7;
@@ -13246,7 +13660,7 @@
 					sload 12;
 					saload;
 					sstore 13;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 11;
 					saload;
 					sstore 14;
@@ -13282,7 +13696,7 @@
 					sload 12;
 					saload;
 					sstore 13;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 11;
 					saload;
 					sstore 14;
@@ -13318,7 +13732,7 @@
 					sload 12;
 					saload;
 					sstore 13;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 11;
 					saload;
 					sstore 14;
@@ -13354,7 +13768,7 @@
 					sload 12;
 					saload;
 					sstore 13;
-					getstatic_a 238;		// reference org/satochip/applet/Sha512.tmp
+					getstatic_a 237;		// reference org/satochip/applet/Sha512.tmp
 					sload 11;
 					saload;
 					sstore 14;
@@ -13431,8 +13845,8 @@
 
 				L0:	sconst_2;
 					sconst_2;
-					invokestatic 235;		// javacard/framework/JCSystem.makeTransientShortArray(SB)[S
-					putstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					invokestatic 234;		// javacard/framework/JCSystem.makeTransientShortArray(SB)[S
+					putstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					bspush 43;
 					sconst_2;
 					invokestatic 81;		// javacard/framework/JCSystem.makeTransientByteArray(SB)[B
@@ -13450,19 +13864,19 @@
 
 				L0:	getstatic_a 203;		// reference org/satochip/applet/Transaction.digestFull
 					aload_0;
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_0;
 					saload;
 					sload_1;
 					invokevirtual 198;		// update([BSS)V
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					dup2;
 					saload;
 					sload_1;
 					ssub;
 					sastore;
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_0;
 					dup2;
 					saload;
@@ -13476,7 +13890,7 @@
 			.stack 5;
 			.locals 1;
 
-				L0:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L0:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sconst_1;
@@ -13484,7 +13898,7 @@
 				L1:	sconst_0;
 					sreturn;
 				L2:	aload_0;
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_0;
 					saload;
 					baload;
@@ -13499,18 +13913,18 @@
 					sconst_4;
 					sload_3;
 					s2b;
-					invokestatic 261;		// org/satochip/applet/Biginteger.setByte([BSSB)V
+					invokestatic 260;		// org/satochip/applet/Biginteger.setByte([BSSB)V
 					aload_0;
 					sconst_1;
-					invokestatic 262;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
+					invokestatic 261;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
 					goto_w L13;
 				L4:	sload_3;
 					sspush 253;
 					if_scmpne L8;
 				L5:	aload_0;
 					sconst_1;
-					invokestatic 262;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					invokestatic 261;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sconst_2;
@@ -13532,7 +13946,7 @@
 					sconst_2;
 					sadd;
 					aload_0;
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_0;
 					saload;
 					sconst_1;
@@ -13544,22 +13958,22 @@
 					sconst_3;
 					sadd;
 					aload_0;
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_0;
 					saload;
 					baload;
 					bastore;
 					aload_0;
 					sconst_2;
-					invokestatic 262;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
+					invokestatic 261;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
 					goto L13;
 				L8:	sload_3;
 					sspush 254;
 					if_scmpne L12;
 				L9:	aload_0;
 					sconst_1;
-					invokestatic 262;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					invokestatic 261;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sconst_4;
@@ -13569,7 +13983,7 @@
 				L11:	aload_1;
 					sload_2;
 					aload_0;
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_0;
 					saload;
 					sconst_3;
@@ -13581,7 +13995,7 @@
 					sconst_1;
 					sadd;
 					aload_0;
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_0;
 					saload;
 					sconst_2;
@@ -13593,7 +14007,7 @@
 					sconst_2;
 					sadd;
 					aload_0;
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_0;
 					saload;
 					sconst_1;
@@ -13605,14 +14019,14 @@
 					sconst_3;
 					sadd;
 					aload_0;
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_0;
 					saload;
 					baload;
 					bastore;
 					aload_0;
 					sconst_4;
-					invokestatic 262;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
+					invokestatic 261;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
 					goto L13;
 				L12:	sconst_0;
 					sreturn;
@@ -13673,11 +14087,11 @@
 			.stack 5;
 			.locals 2;
 
-				L0:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L0:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_0;
 					sload_1;
 					sastore;
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					sload_2;
 					sastore;
@@ -13685,7 +14099,7 @@
 					bspush 21;
 					baload;
 					ifne L7;
-				L2:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L2:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sconst_4;
@@ -13694,11 +14108,11 @@
 					sreturn;
 				L4:	aload_0;
 					sconst_4;
-					invokestatic 262;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
+					invokestatic 261;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
 					aload_0;
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					sconst_1;
-					invokestatic 263;		// org/satochip/applet/Transaction.parseVarint([B[BS)Z
+					invokestatic 262;		// org/satochip/applet/Transaction.parseVarint([B[BS)Z
 					ifne L6;
 				L5:	bspush 121;
 					sreturn;
@@ -13727,14 +14141,14 @@
 					sconst_3;
 					bastore;
 					goto L1;
-				L12:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L12:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sconst_1;
 					if_scmpge L14;
 				L13:	sconst_0;
 					sreturn;
-				L14:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L14:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					bspush 36;
@@ -13743,11 +14157,11 @@
 					sreturn;
 				L16:	aload_0;
 					bspush 36;
-					invokestatic 262;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
+					invokestatic 261;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
 					aload_0;
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					bspush 17;
-					invokestatic 263;		// org/satochip/applet/Transaction.parseVarint([B[BS)Z
+					invokestatic 262;		// org/satochip/applet/Transaction.parseVarint([B[BS)Z
 					ifne L18;
 				L17:	bspush 121;
 					sreturn;
@@ -13783,7 +14197,7 @@
 					baload;
 					sconst_2;
 					if_scmpne_w L36;
-				L24:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L24:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sconst_1;
@@ -13795,7 +14209,7 @@
 					sconst_4;
 					invokestatic 192;		// org/satochip/applet/Biginteger.equalZero([BSS)Z
 					ifeq L30;
-				L27:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L27:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sconst_4;
@@ -13804,11 +14218,11 @@
 					sreturn;
 				L29:	aload_0;
 					sconst_4;
-					invokestatic 262;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
+					invokestatic 261;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					sconst_1;
 					sconst_4;
-					invokestatic 264;		// org/satochip/applet/Biginteger.subtract1_carry([BSS)Z
+					invokestatic 263;		// org/satochip/applet/Biginteger.subtract1_carry([BSS)Z
 					pop;
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					sconst_5;
@@ -13823,16 +14237,16 @@
 				L30:	getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					bspush 17;
 					sconst_4;
-					invokestatic 265;		// org/satochip/applet/Biginteger.getLSB([BSS)S
+					invokestatic 264;		// org/satochip/applet/Biginteger.getLSB([BSS)S
 					sstore_3;
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sload_3;
 					if_scmple L32;
 				L31:	sload_3;
 					goto L33;
-				L32:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L32:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 				L33:	sstore 4;
@@ -13842,13 +14256,13 @@
 					sreturn;
 				L35:	aload_0;
 					sload 4;
-					invokestatic 262;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
+					invokestatic 261;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					bspush 35;
 					sconst_4;
 					sload 4;
 					s2b;
-					invokestatic 261;		// org/satochip/applet/Biginteger.setByte([BSSB)V
+					invokestatic 260;		// org/satochip/applet/Biginteger.setByte([BSSB)V
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					bspush 17;
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
@@ -13861,7 +14275,7 @@
 					baload;
 					sconst_3;
 					if_scmpne L42;
-				L37:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L37:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sconst_1;
@@ -13871,7 +14285,7 @@
 				L39:	aload_0;
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					bspush 9;
-					invokestatic 263;		// org/satochip/applet/Transaction.parseVarint([B[BS)Z
+					invokestatic 262;		// org/satochip/applet/Transaction.parseVarint([B[BS)Z
 					ifne L41;
 				L40:	bspush 121;
 					sreturn;
@@ -13894,14 +14308,14 @@
 					bspush 6;
 					bastore;
 					goto_w L1;
-				L45:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L45:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sconst_1;
 					if_scmpge L47;
 				L46:	sconst_0;
 					sreturn;
-				L47:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L47:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					bspush 8;
@@ -13909,13 +14323,13 @@
 				L48:	bspush 121;
 					sreturn;
 				L49:	aload_0;
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_0;
 					saload;
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					bspush 35;
 					bspush 8;
-					invokestatic 266;		// org/satochip/applet/Biginteger.swap([BS[BSS)V
+					invokestatic 265;		// org/satochip/applet/Biginteger.swap([BS[BSS)V
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					bspush 22;
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
@@ -13925,11 +14339,11 @@
 					pop;
 					aload_0;
 					bspush 8;
-					invokestatic 262;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
+					invokestatic 261;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
 					aload_0;
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					bspush 17;
-					invokestatic 263;		// org/satochip/applet/Transaction.parseVarint([B[BS)Z
+					invokestatic 262;		// org/satochip/applet/Transaction.parseVarint([B[BS)Z
 					ifne L51;
 				L50:	bspush 121;
 					sreturn;
@@ -13942,7 +14356,7 @@
 					baload;
 					sconst_5;
 					if_scmpne L63;
-				L53:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L53:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sconst_1;
@@ -13957,7 +14371,7 @@
 				L56:	getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					bspush 9;
 					sconst_4;
-					invokestatic 264;		// org/satochip/applet/Biginteger.subtract1_carry([BSS)Z
+					invokestatic 263;		// org/satochip/applet/Biginteger.subtract1_carry([BSS)Z
 					pop;
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					bspush 13;
@@ -13972,16 +14386,16 @@
 				L57:	getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					bspush 17;
 					sconst_4;
-					invokestatic 265;		// org/satochip/applet/Biginteger.getLSB([BSS)S
+					invokestatic 264;		// org/satochip/applet/Biginteger.getLSB([BSS)S
 					sstore_3;
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sload_3;
 					if_scmple L59;
 				L58:	sload_3;
 					goto L60;
-				L59:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L59:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 				L60:	sstore 4;
@@ -13991,13 +14405,13 @@
 					sreturn;
 				L62:	aload_0;
 					sload 4;
-					invokestatic 262;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
+					invokestatic 261;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					bspush 35;
 					sconst_4;
 					sload 4;
 					s2b;
-					invokestatic 261;		// org/satochip/applet/Biginteger.setByte([BSSB)V
+					invokestatic 260;		// org/satochip/applet/Biginteger.setByte([BSSB)V
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					bspush 17;
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
@@ -14010,14 +14424,14 @@
 					baload;
 					bspush 6;
 					if_scmpne_w L1;
-				L64:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L64:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sconst_1;
 					if_scmpge L66;
 				L65:	sconst_0;
 					sreturn;
-				L66:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L66:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sconst_4;
@@ -14026,15 +14440,15 @@
 					sreturn;
 				L68:	aload_0;
 					sconst_4;
-					invokestatic 262;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
-					getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+					invokestatic 261;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
+					getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sconst_1;
 					if_scmpge L70;
 				L69:	sconst_0;
 					sreturn;
-				L70:	getstatic_a 260;		// reference org/satochip/applet/Transaction.h
+				L70:	getstatic_a 259;		// reference org/satochip/applet/Transaction.h
 					sconst_1;
 					saload;
 					sconst_4;
@@ -14043,7 +14457,7 @@
 					sreturn;
 				L72:	aload_0;
 					sconst_4;
-					invokestatic 262;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
+					invokestatic 261;		// org/satochip/applet/Transaction.consumeTransaction([BS)V
 					getstatic_a 202;		// reference org/satochip/applet/Transaction.ctx
 					bspush 21;
 					bspush 7;

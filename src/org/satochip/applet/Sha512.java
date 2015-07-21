@@ -97,6 +97,7 @@ public class Sha512 {
 	  (short) 0x5fcb,(short) 0x6fab,(short) 0x3ad6,(short) 0xfaec,
 	  (short) 0x6c44,(short) 0x198c,(short) 0x4a47,(short) 0x5817
     };
+
 	public static short[] tmp;
 	public static final short TMP1=0;
 	public static final short TMP2=4;
@@ -119,22 +120,22 @@ public class Sha512 {
 
     	w_short= JCSystem.makeTransientShortArray((short) (64), JCSystem.CLEAR_ON_DESELECT);
     	h_short= JCSystem.makeTransientShortArray((short) (32), JCSystem.CLEAR_ON_DESELECT);
+        hashState= JCSystem.makeTransientShortArray((short) (32), JCSystem.CLEAR_ON_DESELECT);
     	tmp= JCSystem.makeTransientShortArray((short) (16), JCSystem.CLEAR_ON_DESELECT);
 
-        hashState= JCSystem.makeTransientShortArray((short) (32), JCSystem.CLEAR_ON_DESELECT);
         buffer= JCSystem.makeTransientByteArray((short) (128), JCSystem.CLEAR_ON_DESELECT);
         dataSize= JCSystem.makeTransientByteArray((short) (8), JCSystem.CLEAR_ON_DESELECT);
     }
 
     public static void reset(){
-        InitH(hashState);
         bufferOff=0;
         bufferLeft=128;
-
+        for (short i=0; i<32; i++){
+    		hashState[i]= H_INIT_SHORT[i];
+    	}
         for (short i=0; i<8; i++){
             dataSize[i]=(byte)0;
         }
-
     }
 
     public static void update(byte[] inBuff, short inOffset, short inLength){
@@ -229,6 +230,75 @@ public class Sha512 {
             outOffset++;
         }
     	reset();
+
+        return (short)64;
+    }
+
+
+	public static short resetUpdateDoFinal(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset){
+
+
+		short akku,posy,posx,addx,addy;
+
+
+		bufferOff=0;
+        bufferLeft=128;
+
+
+
+
+
+		Util.arrayCopyNonAtomic(inBuff, inOffset, buffer, bufferOff, bufferLeft);
+		inOffset+=bufferLeft;
+		bufferLeft=128;
+		bufferOff=0;
+
+
+		for (short i=0; i<32; i++){
+			hashState[i]= H_INIT_SHORT[i];
+			h_short[i]=hashState[i];
+		}
+		CompressionFunction(h_short, (short)0, buffer, (short)0);
+
+		for (short i=0; i<32; i+=4){
+			akku = 0; posy = (short)(((short)i)+3); posx = (short)(((short)i)+3); addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~hashState[posx])) >>15)&1); posy--; posx--; addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~hashState[posx])) >>15)&1); posy--; posx--; addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~hashState[posx])) >>15)&1); posy--; posx--; addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku) ;
+		}
+
+
+		short remainingBytes= (short)(inLength-(short)128);
+        Util.arrayCopyNonAtomic(inBuff, inOffset, buffer, bufferOff, remainingBytes);
+        bufferLeft-=remainingBytes;
+        bufferOff+=remainingBytes;
+
+
+
+
+		buffer[bufferOff]=(byte)0x80;
+		bufferLeft--;
+		bufferOff++;
+		Util.arrayFillNonAtomic(buffer, bufferOff, bufferLeft, (byte)0x00);
+
+
+		buffer[(short)(buffer.length-2)]=(byte)(((short)(8*inLength)>>8)&0xff);
+		buffer[(short)(buffer.length-1)]=(byte)((8*inLength) &0xff);
+
+
+		for (short i=0; i<32; i++){
+			h_short[i]=hashState[i];
+		}
+		CompressionFunction(h_short, (short)0, buffer, (short)0);
+
+		for (short i=0; i<32; i+=4){
+			akku = 0; posy = (short)(((short)i)+3); posx = (short)(((short)i)+3); addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~hashState[posx])) >>15)&1); posy--; posx--; addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~hashState[posx])) >>15)&1); posy--; posx--; addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~hashState[posx])) >>15)&1); posy--; posx--; addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku) ;
+		}
+
+
+        for (short i=0; i<32; i++){
+            outBuff[outOffset]=(byte)((hashState[i]>>8)&0xff);
+            outOffset++;
+            outBuff[outOffset]=(byte)(hashState[i]&0xff);
+            outOffset++;
+        }
 
         return (short)64;
     }
@@ -329,11 +399,6 @@ public class Sha512 {
     	return (short)(((short)(wOff+4))%64);
     }
 
-    public static void InitH(short[] state){
-    	for (short i=0; i<32; i++){
-    		state[i]= H_INIT_SHORT[i];
-    	}
-    }
     public static void getK(short round, short[] dst, short dstOff){
     	dst[dstOff]=K_SHORT[(short)(4*round)];
     	dst[(short)(dstOff+1)]=K_SHORT[(short)(4*round+1)];

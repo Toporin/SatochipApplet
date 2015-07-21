@@ -155,23 +155,6 @@ public class Sha512 {
 	  (short) 0x5fcb,(short) 0x6fab,(short) 0x3ad6,(short) 0xfaec,
 	  (short) 0x6c44,(short) 0x198c,(short) 0x4a47,(short) 0x5817    	
     };
-    
-    // public static final short[] MASK = {
-        // (short)0x0000, (short)0x0001, (short)0x0003, (short)0x0007,  
-        // (short)0x000F, (short)0x001F, (short)0x003F, (short)0x007F,  
-        // (short)0x00FF, (short)0x01FF, (short)0x03FF, (short)0x07FF,  
-        // (short)0x0FFF, (short)0x1FFF, (short)0x3FFF, (short)0x7FFF
-    // };
-	// short mask1= (short)0x7FFF;
-	// short mask2= (short)0x3FFF;
-	// short mask3= (short)0x1FFF;
-	// short mask6= (short)0x03FF;
-	// short mask7= (short)0x01FF;
-	// short mask8= (short)0x00FF;
-	// short mask9= (short)0x007F;
-	// short mask12= (short)0x000F;
-	// short mask13= (short)0x0007;
-	// short mask14= (short)0x0003;
 	
 	public static short[] tmp;
 	public static final short TMP1=0;
@@ -203,14 +186,14 @@ public class Sha512 {
     }	
     
     public static void reset(){
-        InitH(hashState);
         bufferOff=0;
         bufferLeft=128;
-        
+        for (short i=0; i<32; i++){
+    		hashState[i]= H_INIT_SHORT[i];
+    	}
         for (short i=0; i<8; i++){
             dataSize[i]=(byte)0;
         }
-		
     }
    
     public static void update(byte[] inBuff, short inOffset, short inLength){
@@ -309,6 +292,75 @@ public class Sha512 {
         return (short)64;
     }
     
+	// simplified method to hash exactly 2 blocks, i.e. >128 bytes and <=240 bytes, as required for Bip32
+	public static short resetUpdateDoFinal(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset){
+        
+		// variable declaration for inline additions
+		short akku,posy,posx,addx,addy;
+		
+		/* Reset */
+		bufferOff=0;
+        bufferLeft=128;
+        
+		/* Update */
+
+        // perform function compression on first (complete) 1024 blocks
+		// fulfil buffer
+		Util.arrayCopyNonAtomic(inBuff, inOffset, buffer, bufferOff, bufferLeft);
+		inOffset+=bufferLeft;
+		bufferLeft=128;
+		bufferOff=0;
+		
+		// apply compression function
+		for (short i=0; i<32; i++){
+			hashState[i]= H_INIT_SHORT[i];
+			h_short[i]=hashState[i];
+		}
+		CompressionFunction(h_short, (short)0, buffer, (short)0);
+		//add result back in hashState
+		for (short i=0; i<32; i+=4){
+			add_carry(hashState, (short)i, h_short, (short)i);
+		}
+            
+        // save remaining msg in buffer
+		short remainingBytes= (short)(inLength-(short)128);
+        Util.arrayCopyNonAtomic(inBuff, inOffset, buffer, bufferOff, remainingBytes);
+        bufferLeft-=remainingBytes;
+        bufferOff+=remainingBytes;
+		
+		/* DoFinal */
+		
+		// pad remaining bytes in the buffer
+		buffer[bufferOff]=(byte)0x80;
+		bufferLeft--;
+		bufferOff++;
+		Util.arrayFillNonAtomic(buffer, bufferOff, bufferLeft, (byte)0x00);
+		
+		// message size (in bits)
+		buffer[(short)(buffer.length-2)]=(byte)(((short)(8*inLength)>>8)&0xff);
+		buffer[(short)(buffer.length-1)]=(byte)((8*inLength) &0xff);
+				
+		// apply compression function on last block
+		for (short i=0; i<32; i++){
+			h_short[i]=hashState[i];
+		}
+		CompressionFunction(h_short, (short)0, buffer, (short)0);
+		//add result back in hashState
+		for (short i=0; i<32; i+=4){
+			add_carry(hashState, (short)i, h_short, (short)i);
+		} 
+        
+        // copy final state back
+        for (short i=0; i<32; i++){
+            outBuff[outOffset]=(byte)((hashState[i]>>8)&0xff); 
+            outOffset++;
+            outBuff[outOffset]=(byte)(hashState[i]&0xff); 
+            outOffset++;
+        }
+    	
+        return (short)64;
+    } 
+	
     public static void CompressionFunction(short[] state, short stateOff, byte[] msgBlock, short msgOff){
     	
 		// for additions
@@ -405,11 +457,6 @@ public class Sha512 {
     	return (short)(((short)(wOff+4))%64);    	
     }
     
-    public static void InitH(short[] state){
-    	for (short i=0; i<32; i++){
-    		state[i]= H_INIT_SHORT[i];
-    	}
-    }
     public static void getK(short round, short[] dst, short dstOff){
     	dst[dstOff]=K_SHORT[(short)(4*round)];
     	dst[(short)(dstOff+1)]=K_SHORT[(short)(4*round+1)];
