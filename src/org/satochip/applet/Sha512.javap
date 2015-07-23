@@ -60,6 +60,50 @@ import javacard.framework.Util;
 	dst[(short)(dstOffset+2)]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));\
 	dst[(short)(dstOffset+3)]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts))   
 		
+#define Ch(x, xOff, y, yOff, z, zOff, dst, dstOff)\
+	dst[dstOff]= (short) ((x[xOff] & y[yOff]) ^ ((~x[xOff]) & z[zOff]));\
+	dst[(short)(dstOff+1)]= (short) ((x[(short)(xOff+1)] & y[(short)(yOff+1)]) ^ ((~x[(short)(xOff+1)]) & z[(short)(zOff+1)]));\
+	dst[(short)(dstOff+2)]= (short) ((x[(short)(xOff+2)] & y[(short)(yOff+2)]) ^ ((~x[(short)(xOff+2)]) & z[(short)(zOff+2)]));\
+	dst[(short)(dstOff+3)]= (short) ((x[(short)(xOff+3)] & y[(short)(yOff+3)]) ^ ((~x[(short)(xOff+3)]) & z[(short)(zOff+3)]))
+
+#define Maj(x, xOff, y, yOff, z, zOff, dst, dstOff)\
+	dst[dstOff]= (short) ((x[xOff] & y[yOff]) ^ (x[xOff] & z[zOff]) ^ (y[yOff] & z[zOff]));\
+	dst[(short)(dstOff+1)]= (short) ((x[(short)(xOff+1)] & y[(short)(yOff+1)]) ^ (x[(short)(xOff+1)] & z[(short)(zOff+1)]) ^ (y[(short)(yOff+1)] & z[(short)(zOff+1)]));\
+	dst[(short)(dstOff+2)]= (short) ((x[(short)(xOff+2)] & y[(short)(yOff+2)]) ^ (x[(short)(xOff+2)] & z[(short)(zOff+2)]) ^ (y[(short)(yOff+2)] & z[(short)(zOff+2)]));\
+	dst[(short)(dstOff+3)]= (short) ((x[(short)(xOff+3)] & y[(short)(yOff+3)]) ^ (x[(short)(xOff+3)] & z[(short)(zOff+3)]) ^ (y[(short)(yOff+3)] & z[(short)(zOff+3)]))
+
+#define InitW(msgBlock, msgOff)\
+	for (short dstOff=0; dstOff<64; dstOff++){\
+		w_short[dstOff]= Util.getShort(msgBlock, (short)((msgOff)+2*dstOff));\
+	}
+
+#define getK(round, dst, dstOff)\
+	dst[dstOff]=K_SHORT[(short)(4*(round))];\
+	dst[(short)(dstOff+1)]=K_SHORT[(short)(4*(round)+1)];\
+	dst[(short)(dstOff+2)]=K_SHORT[(short)(4*(round)+2)];\
+	dst[(short)(dstOff+3)]=K_SHORT[(short)(4*(round)+3)]
+	
+// short leftShifts;	
+// short mask2= (short)0x3FFF;
+// short mask7= (short)0x01FF;
+// short mask12= (short)0x000F;
+#define E0_opt(x, xOff, dst, dstOff)\
+	Rotnb16b(x, xOff, tmp, TMP1, ((short)12), ((short)0x000F));\
+	Rotnb32b(x, xOff, tmp, TMP2, ((short)2), ((short)0x3FFF));\
+	tmp[0]^=tmp[4];\
+	tmp[1]^=tmp[5];\
+	tmp[2]^=tmp[6];\
+	tmp[3]^=tmp[7];\
+	Rotnb32b(x, xOff, tmp, TMP2, (short)7, ((short)0x01FF));\
+	dst[dstOff]=(short) (tmp[0]^tmp[4]);\
+	dst[(short)(dstOff+1)]=(short) (tmp[1]^tmp[5]);\
+	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);\
+	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7])	
+	
+    
+	
+	
+	
 public class Sha512 {
     
     public static final short[] H_INIT_SHORT={
@@ -182,10 +226,13 @@ public class Sha512 {
 		
         hashState= JCSystem.makeTransientShortArray((short) (32), JCSystem.CLEAR_ON_DESELECT);
         buffer= JCSystem.makeTransientByteArray((short) (128), JCSystem.CLEAR_ON_DESELECT);
-        dataSize= JCSystem.makeTransientByteArray((short) (8), JCSystem.CLEAR_ON_DESELECT);		
+		
+		// used in reset(), update() & doFinal() to store size of msg to hash
+        //dataSize= JCSystem.makeTransientByteArray((short) (8), JCSystem.CLEAR_ON_DESELECT);		
     }	
     
-    public static void reset(){
+	/*     
+	public static void reset(){
         bufferOff=0;
         bufferLeft=128;
         for (short i=0; i<32; i++){
@@ -195,8 +242,10 @@ public class Sha512 {
             dataSize[i]=(byte)0;
         }
     }
-   
-    public static void update(byte[] inBuff, short inOffset, short inLength){
+	*/   
+	
+	/*    
+	public static void update(byte[] inBuff, short inOffset, short inLength){
         
 		// for additions
 		short akku,posy,posx,addx,addy;
@@ -237,8 +286,10 @@ public class Sha512 {
         bufferLeft-=inLength;
         bufferOff+=inLength;
     } 
-    
-    public static short doFinal(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset){
+	 */
+	 
+	/*     
+	public static short doFinal(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset){
         
 		// for additions
 		short akku,posy,posx,addx,addy;
@@ -290,7 +341,8 @@ public class Sha512 {
     	reset();
         
         return (short)64;
-    }
+    } 
+	*/
     
 	// simplified method to hash exactly 2 blocks, i.e. >128 bytes and <=240 bytes, as required for Bip32
 	public static short resetUpdateDoFinal(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset){
@@ -363,19 +415,34 @@ public class Sha512 {
 	
     public static void CompressionFunction(short[] state, short stateOff, byte[] msgBlock, short msgOff){
     	
-		// for additions
-		short akku,posy,posx,addx,addy;
-	
+		// temporary value
+		short akku,posy,posx,addx,addy; // used in add_carry
+		short off1, off2, off3; 
+		short leftShifts;
+    		
 		// stateOff => 32 short state (512 bits)
     	// msgBlock => 128 byte data  (1024 bits)
     	InitW(msgBlock, msgOff);
     	        
     	short hOff=0, wOff=0;
-    	for (short round=0; round<80; round++){
+		for (short round=0; round<80; round++){
     	        
     		// update W and get wCurrent
-    		wOff=updateW(w_short, wOff, tmp, REG1);
-                
+    		//wOff=updateW(w_short, wOff, tmp, REG1);
+			tmp[REG1]= w_short[wOff];
+			tmp[(short)(REG1+1)]= w_short[(short)(wOff+1)];
+			tmp[(short)(REG1+2)]= w_short[(short)(wOff+2)];
+			tmp[(short)(REG1+3)]= w_short[(short)(wOff+3)];
+			off1=(short)(((short)(wOff+56))%64);
+			off2=(short)(((short)(wOff+36))%64);
+			off3=(short)(((short)(wOff+4))%64);
+			Sig1_opt(w_short, off1, w_short, wOff);
+			add_carry(w_short, wOff, w_short, off2);
+			Sig0(w_short, off3, tmp, TMP1);
+			add_carry(w_short, wOff, tmp, REG1);
+			add_carry(w_short, wOff, tmp, TMP1);     
+			wOff=(short)(((short)(wOff+4))%64);               
+			  
     		// get K
     		getK(round, tmp, REG2);
     	        
@@ -386,11 +453,12 @@ public class Sha512 {
     		add_carry(tmp, REG1, state, (short)(((short)(hOff+28))%32));
 
     		// reg2= Ch(e,f,g)
-    		Ch(state, (short)(((short)(hOff+16))%32),
-				state, (short)(((short)(hOff+20))%32),
-				state, (short)(((short)(hOff+24))%32),
-				tmp, REG2);
-    		
+    		//Ch(state, (short)(((short)(hOff+16))%32), state, (short)(((short)(hOff+20))%32), state, (short)(((short)(hOff+24))%32), tmp, REG2);
+    		off1=(short)(((short)(hOff+16))%32); 
+			off2=(short)(((short)(hOff+20))%32);
+			off3=(short)(((short)(hOff+24))%32);
+			Ch(state, off1, state, off2, state, off3, tmp, REG2);
+			
     		// reg1= K+wCurrent+h+Ch(e,f,g)
     		add_carry(tmp, REG1, tmp, REG2);
     		
@@ -404,11 +472,11 @@ public class Sha512 {
     		add_carry(state, (short)(((short)(hOff+12))%32), tmp, REG1);
     		
     		// reg2= Maj(a,b,c)
-    		Maj(state, hOff, 
-    			state, (short)(((short)(hOff+4))%32),
-    			state, (short)(((short)(hOff+8))%32),
-    			tmp, REG2);
-    		
+    		//Maj(state, hOff, state, (short)(((short)(hOff+4))%32), state, (short)(((short)(hOff+8))%32), tmp, REG2);
+    		off1= (short)(((short)(hOff+4))%32);
+			off2= (short)(((short)(hOff+8))%32);
+			Maj(state, hOff, state, off1, state, off2, tmp, REG2);
+			
     		// reg1= reg1+Maj(a,b,c)
     		add_carry(tmp, REG1, tmp, REG2);
     		
@@ -430,42 +498,17 @@ public class Sha512 {
     	}// end for	
     }
     
-    public static void InitW(byte[] msgBlock, short msgOff){	
-    	// initialize W from message block
-    	short dstOff=0;
-    	for (short i=0; i<128; i+=2){
-            //w_short[dstOff]= (short)(((msgBlock[msgOff+i]&0xff)<<8)+((msgBlock[msgOff+i+1]&0xff))); 
-            w_short[dstOff]= Util.getShort(msgBlock, (short)(msgOff+i));
-            dstOff++;	
-    	}
-    }
-    public static short updateW(short[] w, short wOff, short[] dst, short dstOff){	
-    	// copy current block to wCurrent 
-    	dst[dstOff]= w[wOff];
-    	dst[(short)(dstOff+1)]= w[(short)(wOff+1)];
-    	dst[(short)(dstOff+2)]= w[(short)(wOff+2)];
-    	dst[(short)(dstOff+3)]= w[(short)(wOff+3)];
-    	
-    	// update current block
-    	MessageSchedule(w, (short)(((short)(wOff+56))%64),
-    					w, (short)(((short)(wOff+36))%64),
-    					w, (short)(((short)(wOff+4))%64),
-    					dst, dstOff,
-    					w, wOff);
-        
-    	// update offset
-    	return (short)(((short)(wOff+4))%64);    	
-    }
-    
-    public static void getK(short round, short[] dst, short dstOff){
+	/* 
+	public static void getK(short round, short[] dst, short dstOff){
     	dst[dstOff]=K_SHORT[(short)(4*round)];
     	dst[(short)(dstOff+1)]=K_SHORT[(short)(4*round+1)];
     	dst[(short)(dstOff+2)]=K_SHORT[(short)(4*round+2)];
     	dst[(short)(dstOff+3)]=K_SHORT[(short)(4*round+3)];
     }
+	*/
 	
-	public static boolean add_carry_byte(byte[] x, short offsetx, byte[] y, short offsety, short size)
-    {
+	/* 
+	public static boolean add_carry_byte(byte[] x, short offsetx, byte[] y, short offsety, short size){
         short digit_mask = 0xff;
 		short digit_len = 8;
 		short akku = 0;
@@ -476,9 +519,9 @@ public class Sha512 {
             x[j] = (byte)(akku & digit_mask);
             akku = (short)((akku >>> digit_len) & digit_mask);
         }
-        
         return akku != 0;
-    }
+    } 
+	*/
 	
     /**
      *     ROTATION on short[4]
@@ -533,6 +576,7 @@ public class Sha512 {
     /**
      *     Ch(x,y,z) on short[4]
      * */
+	 /* 
     public static void Ch(short[] x, short xOff, short[] y, short yOff, 
     						short[] z, short zOff, short[] dst, short dstOff){
     	
@@ -540,23 +584,28 @@ public class Sha512 {
     	dst[(short)(dstOff+1)]= (short) ((x[(short)(xOff+1)] & y[(short)(yOff+1)]) ^ ((~x[(short)(xOff+1)]) & z[(short)(zOff+1)]));
     	dst[(short)(dstOff+2)]= (short) ((x[(short)(xOff+2)] & y[(short)(yOff+2)]) ^ ((~x[(short)(xOff+2)]) & z[(short)(zOff+2)]));
     	dst[(short)(dstOff+3)]= (short) ((x[(short)(xOff+3)] & y[(short)(yOff+3)]) ^ ((~x[(short)(xOff+3)]) & z[(short)(zOff+3)]));
-    }
-    /**
+    } 
+	*/
+    
+	/**
      *     Maj(x,y,z) on short[4]
      * */
-    public static void Maj(short[] x, short xOff, short[] y, short yOff, 
+    /* 
+	public static void Maj(short[] x, short xOff, short[] y, short yOff, 
     						short[] z, short zOff, short[] dst, short dstOff){
     	
     	dst[dstOff]= (short) ((x[xOff] & y[yOff]) ^ (x[xOff] & z[zOff]) ^ (y[yOff] & z[zOff]));
     	dst[(short)(dstOff+1)]= (short) ((x[(short)(xOff+1)] & y[(short)(yOff+1)]) ^ (x[(short)(xOff+1)] & z[(short)(zOff+1)]) ^ (y[(short)(yOff+1)] & z[(short)(zOff+1)]));
     	dst[(short)(dstOff+2)]= (short) ((x[(short)(xOff+2)] & y[(short)(yOff+2)]) ^ (x[(short)(xOff+2)] & z[(short)(zOff+2)]) ^ (y[(short)(yOff+2)] & z[(short)(zOff+2)]));
     	dst[(short)(dstOff+3)]= (short) ((x[(short)(xOff+3)] & y[(short)(yOff+3)]) ^ (x[(short)(xOff+3)] & z[(short)(zOff+3)]) ^ (y[(short)(yOff+3)] & z[(short)(zOff+3)]));
-    }    
+    } 
+	*/    
     
 	/**
      *     E(x) on short[4]
      * */
-    public static void E0_opt(short[] x, short xOff, short[] dst, short dstOff){
+    /* 
+	public static void E0_opt(short[] x, short xOff, short[] dst, short dstOff){
     	short leftShifts, mask;
 		short mask2= (short)0x3FFF;
 		short mask7= (short)0x01FF;
@@ -583,7 +632,8 @@ public class Sha512 {
     	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);
     	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7]);	
         
-    }
+    } 
+	*/
 
     public static void E1_opt(short[] x, short xOff, short[] dst, short dstOff){
     	short leftShifts, mask;
@@ -671,10 +721,76 @@ public class Sha512 {
     	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);
     	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7]);	
     }
-    /**
+	
+	/**
+     *   MessageSchedule
+     * */
+	/* 	
+	public static void InitW(byte[] msgBlock, short msgOff){	
+    	short dstOff=0;
+    	for (short i=0; i<128; i+=2){
+            w_short[dstOff]= Util.getShort(msgBlock, (short)(msgOff+i));
+            dstOff++;	
+    	}
+    } 
+	*/
+	
+	/* 
+	public static short updateW(short[] w, short wOff, short[] dst, short dstOff){	
+    	
+		// temporary values
+		short akku,posy,posx,addx,addy;
+		short off1, w0ff2, w0ff3;
+	
+		// copy current block to wCurrent 
+    	dst[dstOff]= w[wOff];
+    	dst[(short)(dstOff+1)]= w[(short)(wOff+1)];
+    	dst[(short)(dstOff+2)]= w[(short)(wOff+2)];
+    	dst[(short)(dstOff+3)]= w[(short)(wOff+3)];
+    	
+    	// update current block
+		off1=(short)(((short)(wOff+56))%64);
+		off2=(short)(((short)(wOff+36))%64);
+		off3=(short)(((short)(wOff+4))%64);
+    	
+		// Message Schedule
+		// MessageSchedule(w, off1, w, off2,	w, off3, dst, dstOff, w, wOff);
+		Sig1_opt(w, off1, w, wOff);
+        add_carry(w, wOff, w, off2);
+    	Sig0(w, off3, tmp, TMP1);
+    	add_carry(w, wOff, dst, dstOff);
+    	add_carry(w, wOff, tmp, TMP1);     
+		
+    	// update offset
+    	return (short)(((short)(wOff+4))%64);    	
+    } 
+	*/
+	
+	/* 
+	public static short updateW(short[] w, short wOff, short[] dst, short dstOff){	
+    	// copy current block to wCurrent 
+    	dst[dstOff]= w[wOff];
+    	dst[(short)(dstOff+1)]= w[(short)(wOff+1)];
+    	dst[(short)(dstOff+2)]= w[(short)(wOff+2)];
+    	dst[(short)(dstOff+3)]= w[(short)(wOff+3)];
+    	
+    	// update current block
+    	MessageSchedule(w, (short)(((short)(wOff+56))%64),
+    					w, (short)(((short)(wOff+36))%64),
+    					w, (short)(((short)(wOff+4))%64),
+    					dst, dstOff,
+    					w, wOff);
+        
+    	// update offset
+    	return (short)(((short)(wOff+4))%64);    	
+    } 
+	*/
+	
+	/**
      *   MessageSchedule(w,x,y,z)= Sig1(w)+x+Sig0(y)+z
      * */
-    public static void MessageSchedule(short[] w, short wOff, short[] x, short xOff, 
+    /* 
+	public static void MessageSchedule(short[] w, short wOff, short[] x, short xOff, 
     		short[] y, short yOff, short[] z, short zOff, short[] dst, short dstOff){
     	
 		// for additions
@@ -692,7 +808,8 @@ public class Sha512 {
     	
     	// Sig1(w)+x+z + Sig0(y)
     	add_carry(dst, dstOff, tmp, TMP1);
-    }     
+    } 
+	*/     
 
 }
 

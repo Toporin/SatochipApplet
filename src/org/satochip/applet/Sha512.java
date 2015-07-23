@@ -120,121 +120,14 @@ public class Sha512 {
 
     	w_short= JCSystem.makeTransientShortArray((short) (64), JCSystem.CLEAR_ON_DESELECT);
     	h_short= JCSystem.makeTransientShortArray((short) (32), JCSystem.CLEAR_ON_DESELECT);
-        hashState= JCSystem.makeTransientShortArray((short) (32), JCSystem.CLEAR_ON_DESELECT);
     	tmp= JCSystem.makeTransientShortArray((short) (16), JCSystem.CLEAR_ON_DESELECT);
 
+        hashState= JCSystem.makeTransientShortArray((short) (32), JCSystem.CLEAR_ON_DESELECT);
         buffer= JCSystem.makeTransientByteArray((short) (128), JCSystem.CLEAR_ON_DESELECT);
-        dataSize= JCSystem.makeTransientByteArray((short) (8), JCSystem.CLEAR_ON_DESELECT);
+
+
+
     }
-
-    public static void reset(){
-        bufferOff=0;
-        bufferLeft=128;
-        for (short i=0; i<32; i++){
-    		hashState[i]= H_INIT_SHORT[i];
-    	}
-        for (short i=0; i<8; i++){
-            dataSize[i]=(byte)0;
-        }
-    }
-
-    public static void update(byte[] inBuff, short inOffset, short inLength){
-
-
-		short akku,posy,posx,addx,addy;
-
-
-        dataSize[6]=(byte)(((short)(8*inLength)>>8)&0xff);
-        dataSize[7]=(byte)((8*inLength) &0xff);
-        add_carry_byte(dataSize, MSGSIZE, dataSize, CHUNKSIZE, (short)4);
-
-
-        while (inLength>=bufferLeft){
-
-
-
-            Util.arrayCopyNonAtomic(inBuff, inOffset, buffer, bufferOff, bufferLeft);
-            inOffset+=bufferLeft;
-            inLength-=bufferLeft;
-            bufferLeft=128;
-            bufferOff=0;
-
-
-            for (short i=0; i<32; i++){
-                h_short[i]=hashState[i];
-            }
-            CompressionFunction(h_short, (short)0, buffer, (short)0);
-
-
-            for (short i=0; i<32; i+=4){
-                akku = 0; posy = (short)(((short)i)+3); posx = (short)(((short)i)+3); addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~hashState[posx])) >>15)&1); posy--; posx--; addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~hashState[posx])) >>15)&1); posy--; posx--; addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~hashState[posx])) >>15)&1); posy--; posx--; addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku) ;
-            }
-
-        }
-
-
-
-        Util.arrayCopyNonAtomic(inBuff, inOffset, buffer, bufferOff, inLength);
-        inOffset+=inLength;
-        bufferLeft-=inLength;
-        bufferOff+=inLength;
-    }
-
-    public static short doFinal(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset){
-
-
-		short akku,posy,posx,addx,addy;
-
-
-        update(inBuff, inOffset, inLength);
-
-
-		buffer[bufferOff]=(byte)0x80;
-		bufferLeft--;
-		bufferOff++;
-		Util.arrayFillNonAtomic(buffer, bufferOff, bufferLeft, (byte)0x00);
-
-		if (bufferLeft<16){
-
-            for (short i=0; i<32; i++){
-                h_short[i]=hashState[i];
-            }
-            CompressionFunction(h_short, (short)0, buffer, (short)0);
-
-            for (short i=0; i<32; i+=4){
-                akku = 0; posy = (short)(((short)i)+3); posx = (short)(((short)i)+3); addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~hashState[posx])) >>15)&1); posy--; posx--; addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~hashState[posx])) >>15)&1); posy--; posx--; addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~hashState[posx])) >>15)&1); posy--; posx--; addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku) ;
-            }
-
-			bufferOff=0;
-            bufferLeft=128;
-            Util.arrayFillNonAtomic(buffer, bufferOff, bufferLeft, (byte)0x00);
-		}
-
-		Util.arrayCopyNonAtomic(dataSize, MSGSIZE, buffer, (short)(buffer.length-4), (short)4);
-
-
-		for (short i=0; i<32; i++){
-			h_short[i]=hashState[i];
-		}
-		CompressionFunction(h_short, (short)0, buffer, (short)0);
-
-		for (short i=0; i<32; i+=4){
-			akku = 0; posy = (short)(((short)i)+3); posx = (short)(((short)i)+3); addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~hashState[posx])) >>15)&1); posy--; posx--; addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~hashState[posx])) >>15)&1); posy--; posx--; addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~hashState[posx])) >>15)&1); posy--; posx--; addx=hashState[posx]; addy=h_short[posy]; hashState[posx] = (short)(addx+addy+akku) ;
-		}
-
-
-        for (short i=0; i<32; i++){
-            outBuff[outOffset]=(byte)((hashState[i]>>8)&0xff);
-            outOffset++;
-            outBuff[outOffset]=(byte)(hashState[i]&0xff);
-            outOffset++;
-        }
-    	reset();
-
-        return (short)64;
-    }
-
-
 	public static short resetUpdateDoFinal(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset){
 
 
@@ -307,19 +200,34 @@ public class Sha512 {
 
 
 		short akku,posy,posx,addx,addy;
+		short off1, off2, off3;
+		short leftShifts;
 
 
 
-    	InitW(msgBlock, msgOff);
+    	for (short dstOff=0; dstOff<64; dstOff++){ w_short[dstOff]= Util.getShort(msgBlock, (short)((msgOff)+2*dstOff)); } ;
 
     	short hOff=0, wOff=0;
-    	for (short round=0; round<80; round++){
+		for (short round=0; round<80; round++){
 
 
-    		wOff=updateW(w_short, wOff, tmp, REG1);
+
+			tmp[REG1]= w_short[wOff];
+			tmp[(short)(REG1+1)]= w_short[(short)(wOff+1)];
+			tmp[(short)(REG1+2)]= w_short[(short)(wOff+2)];
+			tmp[(short)(REG1+3)]= w_short[(short)(wOff+3)];
+			off1=(short)(((short)(wOff+56))%64);
+			off2=(short)(((short)(wOff+36))%64);
+			off3=(short)(((short)(wOff+4))%64);
+			Sig1_opt(w_short, off1, w_short, wOff);
+			akku = 0; posy = (short)((off2)+3); posx = (short)((wOff)+3); addx=w_short[posx]; addy=w_short[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=w_short[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=w_short[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=w_short[posy]; w_short[posx] = (short)(addx+addy+akku) ;
+			Sig0(w_short, off3, tmp, TMP1);
+			akku = 0; posy = (short)((REG1)+3); posx = (short)((wOff)+3); addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku) ;
+			akku = 0; posy = (short)((TMP1)+3); posx = (short)((wOff)+3); addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku) ;
+			wOff=(short)(((short)(wOff+4))%64);
 
 
-    		getK(round, tmp, REG2);
+    		tmp[REG2]=K_SHORT[(short)(4*(round))]; tmp[(short)(REG2+1)]=K_SHORT[(short)(4*(round)+1)]; tmp[(short)(REG2+2)]=K_SHORT[(short)(4*(round)+2)]; tmp[(short)(REG2+3)]=K_SHORT[(short)(4*(round)+3)] ;
 
 
     		akku = 0; posy = (short)((REG2)+3); posx = (short)((REG1)+3); addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku) ;
@@ -328,10 +236,11 @@ public class Sha512 {
     		akku = 0; posy = (short)(((short)(((short)(hOff+28))%32))+3); posx = (short)((REG1)+3); addx=tmp[posx]; addy=state[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=state[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=state[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=state[posy]; tmp[posx] = (short)(addx+addy+akku) ;
 
 
-    		Ch(state, (short)(((short)(hOff+16))%32),
-				state, (short)(((short)(hOff+20))%32),
-				state, (short)(((short)(hOff+24))%32),
-				tmp, REG2);
+
+    		off1=(short)(((short)(hOff+16))%32);
+			off2=(short)(((short)(hOff+20))%32);
+			off3=(short)(((short)(hOff+24))%32);
+			tmp[REG2]= (short) ((state[off1] & state[off2]) ^ ((~state[off1]) & state[off3])); tmp[(short)(REG2+1)]= (short) ((state[(short)(off1+1)] & state[(short)(off2+1)]) ^ ((~state[(short)(off1+1)]) & state[(short)(off3+1)])); tmp[(short)(REG2+2)]= (short) ((state[(short)(off1+2)] & state[(short)(off2+2)]) ^ ((~state[(short)(off1+2)]) & state[(short)(off3+2)])); tmp[(short)(REG2+3)]= (short) ((state[(short)(off1+3)] & state[(short)(off2+3)]) ^ ((~state[(short)(off1+3)]) & state[(short)(off3+3)])) ;
 
 
     		akku = 0; posy = (short)((REG2)+3); posx = (short)((REG1)+3); addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku) ;
@@ -346,16 +255,16 @@ public class Sha512 {
     		akku = 0; posy = (short)((REG1)+3); posx = (short)(((short)(((short)(hOff+12))%32))+3); addx=state[posx]; addy=tmp[posy]; state[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~state[posx])) >>15)&1); posy--; posx--; addx=state[posx]; addy=tmp[posy]; state[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~state[posx])) >>15)&1); posy--; posx--; addx=state[posx]; addy=tmp[posy]; state[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~state[posx])) >>15)&1); posy--; posx--; addx=state[posx]; addy=tmp[posy]; state[posx] = (short)(addx+addy+akku) ;
 
 
-    		Maj(state, hOff,
-    			state, (short)(((short)(hOff+4))%32),
-    			state, (short)(((short)(hOff+8))%32),
-    			tmp, REG2);
+
+    		off1= (short)(((short)(hOff+4))%32);
+			off2= (short)(((short)(hOff+8))%32);
+			tmp[REG2]= (short) ((state[hOff] & state[off1]) ^ (state[hOff] & state[off2]) ^ (state[off1] & state[off2])); tmp[(short)(REG2+1)]= (short) ((state[(short)(hOff+1)] & state[(short)(off1+1)]) ^ (state[(short)(hOff+1)] & state[(short)(off2+1)]) ^ (state[(short)(off1+1)] & state[(short)(off2+1)])); tmp[(short)(REG2+2)]= (short) ((state[(short)(hOff+2)] & state[(short)(off1+2)]) ^ (state[(short)(hOff+2)] & state[(short)(off2+2)]) ^ (state[(short)(off1+2)] & state[(short)(off2+2)])); tmp[(short)(REG2+3)]= (short) ((state[(short)(hOff+3)] & state[(short)(off1+3)]) ^ (state[(short)(hOff+3)] & state[(short)(off2+3)]) ^ (state[(short)(off1+3)] & state[(short)(off2+3)])) ;
 
 
     		akku = 0; posy = (short)((REG2)+3); posx = (short)((REG1)+3); addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku) ;
 
 
-            E0_opt(state, hOff, tmp, REG2);
+            leftShifts = (short)(16-((short)12)); tmp[(short)(TMP1+1)]= (short) (((state[hOff]>>((short)12))&((short)0x000F)) | (state[(short)(hOff+3)]<<leftShifts)); tmp[(short)(TMP1+2)]= (short) (((state[(short)(hOff+1)]>>((short)12))&((short)0x000F)) | (state[hOff]<<leftShifts)); tmp[(short)(TMP1+3)]= (short) (((state[(short)(hOff+2)]>>((short)12))&((short)0x000F)) | (state[(short)(hOff+1)]<<leftShifts)); tmp[TMP1]= (short) (((state[(short)(hOff+3)]>>((short)12))&((short)0x000F)) | (state[(short)(hOff+2)]<<leftShifts)) ; leftShifts = (short)(16-((short)2)); tmp[(short)(TMP2+2)]= (short) (((state[hOff]>>((short)2))&((short)0x3FFF)) | (state[(short)(hOff+3)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((state[(short)(hOff+1)]>>((short)2))&((short)0x3FFF)) | (state[hOff]<<leftShifts)); tmp[TMP2]= (short) (((state[(short)(hOff+2)]>>((short)2))&((short)0x3FFF)) | (state[(short)(hOff+1)]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((state[(short)(hOff+3)]>>((short)2))&((short)0x3FFF)) | (state[(short)(hOff+2)]<<leftShifts)) ; tmp[0]^=tmp[4]; tmp[1]^=tmp[5]; tmp[2]^=tmp[6]; tmp[3]^=tmp[7]; leftShifts = (short)(16-(short)7); tmp[(short)(TMP2+2)]= (short) (((state[hOff]>>(short)7)&((short)0x01FF)) | (state[(short)(hOff+3)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((state[(short)(hOff+1)]>>(short)7)&((short)0x01FF)) | (state[hOff]<<leftShifts)); tmp[TMP2]= (short) (((state[(short)(hOff+2)]>>(short)7)&((short)0x01FF)) | (state[(short)(hOff+1)]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((state[(short)(hOff+3)]>>(short)7)&((short)0x01FF)) | (state[(short)(hOff+2)]<<leftShifts)) ; tmp[REG2]=(short) (tmp[0]^tmp[4]); tmp[(short)(REG2+1)]=(short) (tmp[1]^tmp[5]); tmp[(short)(REG2+2)]=(short) (tmp[2]^tmp[6]); tmp[(short)(REG2+3)]=(short) (tmp[3]^tmp[7]) ;
 
 
     		akku = 0; posy = (short)((REG2)+3); posx = (short)((REG1)+3); addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku) ;
@@ -371,101 +280,6 @@ public class Sha512 {
 
     	}
     }
-
-    public static void InitW(byte[] msgBlock, short msgOff){
-
-    	short dstOff=0;
-    	for (short i=0; i<128; i+=2){
-
-            w_short[dstOff]= Util.getShort(msgBlock, (short)(msgOff+i));
-            dstOff++;
-    	}
-    }
-    public static short updateW(short[] w, short wOff, short[] dst, short dstOff){
-
-    	dst[dstOff]= w[wOff];
-    	dst[(short)(dstOff+1)]= w[(short)(wOff+1)];
-    	dst[(short)(dstOff+2)]= w[(short)(wOff+2)];
-    	dst[(short)(dstOff+3)]= w[(short)(wOff+3)];
-
-
-    	MessageSchedule(w, (short)(((short)(wOff+56))%64),
-    					w, (short)(((short)(wOff+36))%64),
-    					w, (short)(((short)(wOff+4))%64),
-    					dst, dstOff,
-    					w, wOff);
-
-
-    	return (short)(((short)(wOff+4))%64);
-    }
-
-    public static void getK(short round, short[] dst, short dstOff){
-    	dst[dstOff]=K_SHORT[(short)(4*round)];
-    	dst[(short)(dstOff+1)]=K_SHORT[(short)(4*round+1)];
-    	dst[(short)(dstOff+2)]=K_SHORT[(short)(4*round+2)];
-    	dst[(short)(dstOff+3)]=K_SHORT[(short)(4*round+3)];
-    }
-
-	public static boolean add_carry_byte(byte[] x, short offsetx, byte[] y, short offsety, short size)
-    {
-        short digit_mask = 0xff;
-		short digit_len = 8;
-		short akku = 0;
-        short j = (short)(offsetx+size-1);
-        for(short i = (short)(offsety+size-1); i >= offsety; i--, j--) {
-            akku = (short)(akku + (x[j] & digit_mask) + (y[i] & digit_mask));
-
-            x[j] = (byte)(akku & digit_mask);
-            akku = (short)((akku >>> digit_len) & digit_mask);
-        }
-
-        return akku != 0;
-    }
-    public static void Ch(short[] x, short xOff, short[] y, short yOff,
-    						short[] z, short zOff, short[] dst, short dstOff){
-
-    	dst[dstOff]= (short) ((x[xOff] & y[yOff]) ^ ((~x[xOff]) & z[zOff]));
-    	dst[(short)(dstOff+1)]= (short) ((x[(short)(xOff+1)] & y[(short)(yOff+1)]) ^ ((~x[(short)(xOff+1)]) & z[(short)(zOff+1)]));
-    	dst[(short)(dstOff+2)]= (short) ((x[(short)(xOff+2)] & y[(short)(yOff+2)]) ^ ((~x[(short)(xOff+2)]) & z[(short)(zOff+2)]));
-    	dst[(short)(dstOff+3)]= (short) ((x[(short)(xOff+3)] & y[(short)(yOff+3)]) ^ ((~x[(short)(xOff+3)]) & z[(short)(zOff+3)]));
-    }
-    public static void Maj(short[] x, short xOff, short[] y, short yOff,
-    						short[] z, short zOff, short[] dst, short dstOff){
-
-    	dst[dstOff]= (short) ((x[xOff] & y[yOff]) ^ (x[xOff] & z[zOff]) ^ (y[yOff] & z[zOff]));
-    	dst[(short)(dstOff+1)]= (short) ((x[(short)(xOff+1)] & y[(short)(yOff+1)]) ^ (x[(short)(xOff+1)] & z[(short)(zOff+1)]) ^ (y[(short)(yOff+1)] & z[(short)(zOff+1)]));
-    	dst[(short)(dstOff+2)]= (short) ((x[(short)(xOff+2)] & y[(short)(yOff+2)]) ^ (x[(short)(xOff+2)] & z[(short)(zOff+2)]) ^ (y[(short)(yOff+2)] & z[(short)(zOff+2)]));
-    	dst[(short)(dstOff+3)]= (short) ((x[(short)(xOff+3)] & y[(short)(yOff+3)]) ^ (x[(short)(xOff+3)] & z[(short)(zOff+3)]) ^ (y[(short)(yOff+3)] & z[(short)(zOff+3)]));
-    }
-    public static void E0_opt(short[] x, short xOff, short[] dst, short dstOff){
-    	short leftShifts, mask;
-		short mask2= (short)0x3FFF;
-		short mask7= (short)0x01FF;
-		short mask12= (short)0x000F;
-
-
-    	leftShifts = (short)(16-(short)12); tmp[(short)(TMP1+1)]= (short) (((x[xOff]>>(short)12)&mask12) | (x[(short)(xOff+3)]<<leftShifts)); tmp[(short)(TMP1+2)]= (short) (((x[(short)(xOff+1)]>>(short)12)&mask12) | (x[xOff]<<leftShifts)); tmp[(short)(TMP1+3)]= (short) (((x[(short)(xOff+2)]>>(short)12)&mask12) | (x[(short)(xOff+1)]<<leftShifts)); tmp[TMP1]= (short) (((x[(short)(xOff+3)]>>(short)12)&mask12) | (x[(short)(xOff+2)]<<leftShifts)) ;
-
-
-    	leftShifts = (short)(16-(short)2); tmp[(short)(TMP2+2)]= (short) (((x[xOff]>>(short)2)&mask2) | (x[(short)(xOff+3)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((x[(short)(xOff+1)]>>(short)2)&mask2) | (x[xOff]<<leftShifts)); tmp[TMP2]= (short) (((x[(short)(xOff+2)]>>(short)2)&mask2) | (x[(short)(xOff+1)]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((x[(short)(xOff+3)]>>(short)2)&mask2) | (x[(short)(xOff+2)]<<leftShifts)) ;
-
-
-    	tmp[0]^=tmp[4];
-    	tmp[1]^=tmp[5];
-    	tmp[2]^=tmp[6];
-    	tmp[3]^=tmp[7];
-
-
-    	leftShifts = (short)(16-(short)7); tmp[(short)(TMP2+2)]= (short) (((x[xOff]>>(short)7)&mask7) | (x[(short)(xOff+3)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((x[(short)(xOff+1)]>>(short)7)&mask7) | (x[xOff]<<leftShifts)); tmp[TMP2]= (short) (((x[(short)(xOff+2)]>>(short)7)&mask7) | (x[(short)(xOff+1)]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((x[(short)(xOff+3)]>>(short)7)&mask7) | (x[(short)(xOff+2)]<<leftShifts)) ;
-
-
-    	dst[dstOff]=(short) (tmp[0]^tmp[4]);
-    	dst[(short)(dstOff+1)]=(short) (tmp[1]^tmp[5]);
-    	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);
-    	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7]);
-
-    }
-
     public static void E1_opt(short[] x, short xOff, short[] dst, short dstOff){
     	short leftShifts, mask;
 		short mask2= (short)0x3FFF;
@@ -548,24 +362,4 @@ public class Sha512 {
     	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);
     	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7]);
     }
-    public static void MessageSchedule(short[] w, short wOff, short[] x, short xOff,
-    		short[] y, short yOff, short[] z, short zOff, short[] dst, short dstOff){
-
-
-		short akku,posy,posx,addx,addy;
-
-        Sig1_opt(w, wOff, dst, dstOff);
-
-
-    	akku = 0; posy = (short)((xOff)+3); posx = (short)((dstOff)+3); addx=dst[posx]; addy=x[posy]; dst[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~dst[posx])) >>15)&1); posy--; posx--; addx=dst[posx]; addy=x[posy]; dst[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~dst[posx])) >>15)&1); posy--; posx--; addx=dst[posx]; addy=x[posy]; dst[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~dst[posx])) >>15)&1); posy--; posx--; addx=dst[posx]; addy=x[posy]; dst[posx] = (short)(addx+addy+akku) ;
-
-        Sig0(y, yOff, tmp, TMP1);
-
-
-    	akku = 0; posy = (short)((zOff)+3); posx = (short)((dstOff)+3); addx=dst[posx]; addy=z[posy]; dst[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~dst[posx])) >>15)&1); posy--; posx--; addx=dst[posx]; addy=z[posy]; dst[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~dst[posx])) >>15)&1); posy--; posx--; addx=dst[posx]; addy=z[posy]; dst[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~dst[posx])) >>15)&1); posy--; posx--; addx=dst[posx]; addy=z[posy]; dst[posx] = (short)(addx+addy+akku) ;
-
-
-    	akku = 0; posy = (short)((TMP1)+3); posx = (short)((dstOff)+3); addx=dst[posx]; addy=tmp[posy]; dst[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~dst[posx])) >>15)&1); posy--; posx--; addx=dst[posx]; addy=tmp[posy]; dst[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~dst[posx])) >>15)&1); posy--; posx--; addx=dst[posx]; addy=tmp[posy]; dst[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~dst[posx])) >>15)&1); posy--; posx--; addx=dst[posx]; addy=tmp[posy]; dst[posx] = (short)(addx+addy+akku) ;
-    }
-
 }

@@ -53,13 +53,7 @@ public class HmacSha512 {
 		for (short i=0; i<key_length; i++){
 			data[i]= (byte) (key[(short)(key_offset+i)] ^ (0x36));
 		}
-//		for (short i=key_length; i<BLOCKSIZE; i++){
-//			data[i]= (byte) 0x36;
-//		}
 		Util.arrayFillNonAtomic(data, key_length, (short)(BLOCKSIZE-key_length), (byte)0x36);		
-//		for (short i=0; i<message_length; i++){
-//			data[(short)(BLOCKSIZE+i)]= message[(short)(message_offset+i)];
-//		}
 		Util.arrayCopyNonAtomic(message, message_offset, data, BLOCKSIZE, message_length);
 		//Sha512.reset();
 		//Sha512.doFinal(data, (short)0, (short)(BLOCKSIZE+message_length), data, BLOCKSIZE); // copy hash result to data buffer!
@@ -69,9 +63,6 @@ public class HmacSha512 {
 		for (short i=0; i<key_length; i++){
 			data[i]= (byte) (key[(short)(key_offset+i)] ^ (0x5c));
 		}
-//		for (short i=key_length; i<BLOCKSIZE; i++){
-//			data[i]= (byte) 0x5c;
-//		}
 		Util.arrayFillNonAtomic(data, key_length, (short)(BLOCKSIZE-key_length), (byte)0x5c);
 		// previous hash already copied to correct offset in data
 		//Sha512.reset();
