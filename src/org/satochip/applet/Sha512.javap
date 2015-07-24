@@ -24,7 +24,7 @@ import javacard.framework.Util;
 	posy--; posx--;\
 	addx=x[posx]; addy=y[posy];\
 	x[posx] = (short)(addx+addy+akku)
-
+	
 #define Rotnb(src, srcOffset, dst, dstOffset, rightShifts, mask)\
 	leftShifts = (short)(16-rightShifts);\
 	dst[dstOffset]= (short) (((src[srcOffset]>>rightShifts)&mask) | (src[(short)(srcOffset+3)]<<leftShifts));\
@@ -83,10 +83,6 @@ import javacard.framework.Util;
 	dst[(short)(dstOff+2)]=K_SHORT[(short)(4*(round)+2)];\
 	dst[(short)(dstOff+3)]=K_SHORT[(short)(4*(round)+3)]
 	
-// short leftShifts;	
-// short mask2= (short)0x3FFF;
-// short mask7= (short)0x01FF;
-// short mask12= (short)0x000F;
 #define E0_opt(x, xOff, dst, dstOff)\
 	Rotnb16b(x, xOff, tmp, TMP1, ((short)12), ((short)0x000F));\
 	Rotnb32b(x, xOff, tmp, TMP2, ((short)2), ((short)0x3FFF));\
@@ -99,11 +95,64 @@ import javacard.framework.Util;
 	dst[(short)(dstOff+1)]=(short) (tmp[1]^tmp[5]);\
 	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);\
 	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7])	
+
+#define E1_opt(x, xOff, dst, dstOff)\
+	Rotnb(x, xOff, tmp, TMP1, (short)14, ((short)0x0003));\
+	Rotnb16b(x, xOff, tmp, TMP2, (short)2, ((short)0x3FFF));\
+	tmp[0]^=tmp[4];\
+	tmp[1]^=tmp[5];\
+	tmp[2]^=tmp[6];\
+	tmp[3]^=tmp[7];\
+	Rotnb32b(x, xOff, tmp, TMP2, (short)9, ((short)0x007F));\
+	dst[dstOff]=(short) (tmp[0]^tmp[4]);\
+	dst[(short)(dstOff+1)]=(short) (tmp[1]^tmp[5]);\
+	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);\
+	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7])	
 	
-    
+#define Sig0(x, xOff, dst, dstOff)\
+	Rotnb(x, xOff, tmp, TMP1, (short)1, ((short)0x7FFF));\
+	Rotnb(x, xOff, tmp, TMP2, (short)8, ((short)0x00FF));\
+	tmp[0]^=tmp[4];\
+	tmp[1]^=tmp[5];\
+	tmp[2]^=tmp[6];\
+	tmp[3]^=tmp[7];\
+	Shiftnb(x, xOff, tmp, TMP2, (short)7, ((short)0x01FF));\
+	dst[dstOff]=(short) (tmp[0]^tmp[4]);\
+	dst[(short)(dstOff+1)]=(short) (tmp[1]^tmp[5]);\
+	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);\
+	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7])	
+
+#define Sig1_opt(x, xOff, dst, dstOff)\
+	Rotnb16b(x, xOff, tmp, TMP1, (short)3, ((short)0x1FFF));\
+	Rotnb48b(x, xOff, tmp, TMP2, (short)13, ((short)0x0007));\
+	tmp[0]^=tmp[4];\
+	tmp[1]^=tmp[5];\
+	tmp[2]^=tmp[6];\
+	tmp[3]^=tmp[7];\
+	Shiftnb(x, xOff, tmp, TMP2, (short)6, ((short)0x03FF));\
+	dst[dstOff]=(short) (tmp[0]^tmp[4]);\
+	dst[(short)(dstOff+1)]=(short) (tmp[1]^tmp[5]);\
+	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);\
+	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7])
 	
+#define MessageSchedule(w, wOff, x, xOff, y, yOff, z, zOff, dst, dstOff)\
+	Sig1_opt(w, wOff, dst, dstOff);\
+	add_carry(dst, dstOff, x, xOff);\
+	Sig0(y, yOff, tmp, TMP1);\
+	add_carry(dst, dstOff, z, zOff);\
+	add_carry(dst, dstOff, tmp, TMP1)
 	
-	
+#define updateW(w, wOff, dst, dstOff)\
+	dst[dstOff]= w[wOff];\
+	dst[(short)(dstOff+1)]= w[(short)(wOff+1)];\
+	dst[(short)(dstOff+2)]= w[(short)(wOff+2)];\
+	dst[(short)(dstOff+3)]= w[(short)(wOff+3)];\
+	off1=(short)(((short)(wOff+56))%64);\
+	off2=(short)(((short)(wOff+36))%64);\
+	off3=(short)(((short)(wOff+4))%64);\
+	MessageSchedule(w, off1, w, off2, w, off3, dst, dstOff, w, wOff);\
+	wOff=(short)(((short)(wOff+4))%64)	
+		
 public class Sha512 {
     
     public static final short[] H_INIT_SHORT={
@@ -371,7 +420,7 @@ public class Sha512 {
 		CompressionFunction(h_short, (short)0, buffer, (short)0);
 		//add result back in hashState
 		for (short i=0; i<32; i+=4){
-			add_carry(hashState, (short)i, h_short, (short)i);
+			add_carry(hashState, i, h_short, i);
 		}
             
         // save remaining msg in buffer
@@ -399,7 +448,7 @@ public class Sha512 {
 		CompressionFunction(h_short, (short)0, buffer, (short)0);
 		//add result back in hashState
 		for (short i=0; i<32; i+=4){
-			add_carry(hashState, (short)i, h_short, (short)i);
+			add_carry(hashState, i, h_short, i);
 		} 
         
         // copy final state back
@@ -415,10 +464,10 @@ public class Sha512 {
 	
     public static void CompressionFunction(short[] state, short stateOff, byte[] msgBlock, short msgOff){
     	
-		// temporary value
+		// temporary value for inline method
 		short akku,posy,posx,addx,addy; // used in add_carry
 		short off1, off2, off3; 
-		short leftShifts;
+		short leftShifts; // used in E0, E1, Sig0, Sig1
     		
 		// stateOff => 32 short state (512 bits)
     	// msgBlock => 128 byte data  (1024 bits)
@@ -429,19 +478,7 @@ public class Sha512 {
     	        
     		// update W and get wCurrent
     		//wOff=updateW(w_short, wOff, tmp, REG1);
-			tmp[REG1]= w_short[wOff];
-			tmp[(short)(REG1+1)]= w_short[(short)(wOff+1)];
-			tmp[(short)(REG1+2)]= w_short[(short)(wOff+2)];
-			tmp[(short)(REG1+3)]= w_short[(short)(wOff+3)];
-			off1=(short)(((short)(wOff+56))%64);
-			off2=(short)(((short)(wOff+36))%64);
-			off3=(short)(((short)(wOff+4))%64);
-			Sig1_opt(w_short, off1, w_short, wOff);
-			add_carry(w_short, wOff, w_short, off2);
-			Sig0(w_short, off3, tmp, TMP1);
-			add_carry(w_short, wOff, tmp, REG1);
-			add_carry(w_short, wOff, tmp, TMP1);     
-			wOff=(short)(((short)(wOff+4))%64);               
+			updateW(w_short, wOff, tmp, REG1);               
 			  
     		// get K
     		getK(round, tmp, REG2);
@@ -450,10 +487,10 @@ public class Sha512 {
     		add_carry(tmp, REG1, tmp, REG2);
     		
     		// reg1= K+wCurrent+h
-    		add_carry(tmp, REG1, state, (short)(((short)(hOff+28))%32));
+			off1= (short)(((short)(hOff+28))%32);
+    		add_carry(tmp, REG1, state, off1);
 
     		// reg2= Ch(e,f,g)
-    		//Ch(state, (short)(((short)(hOff+16))%32), state, (short)(((short)(hOff+20))%32), state, (short)(((short)(hOff+24))%32), tmp, REG2);
     		off1=(short)(((short)(hOff+16))%32); 
 			off2=(short)(((short)(hOff+20))%32);
 			off3=(short)(((short)(hOff+24))%32);
@@ -463,13 +500,15 @@ public class Sha512 {
     		add_carry(tmp, REG1, tmp, REG2);
     		
     		// reg2= E1(e)
-            E1_opt(state, (short)(((short)(hOff+16))%32), tmp, REG2);
+			off1=(short)(((short)(hOff+16))%32);
+            E1_opt(state, off1, tmp, REG2);
     		
     		// reg1= K+wCurrent+Ch(e,f,g)+E1
     		add_carry(tmp, REG1, tmp, REG2);
     		
     		// d= d+reg1
-    		add_carry(state, (short)(((short)(hOff+12))%32), tmp, REG1);
+			off1= (short)(((short)(hOff+12))%32);
+    		add_carry(state, off1, tmp, REG1);
     		
     		// reg2= Maj(a,b,c)
     		//Maj(state, hOff, state, (short)(((short)(hOff+4))%32), state, (short)(((short)(hOff+8))%32), tmp, REG2);
@@ -526,52 +565,56 @@ public class Sha512 {
     /**
      *     ROTATION on short[4]
      * */    
-    // public static void Rotnb(short[] src, short srcOffset, short[] dst, short dstOffset, short rightShifts){
+	/*    
+	public static void Rotnb(short[] src, short srcOffset, short[] dst, short dstOffset, short rightShifts){
     	//0<rightShift<16!
-    	// short leftShifts = (short)(16-rightShifts);
-    	// short mask= MASK[leftShifts];
-		// dst[dstOffset]= (short) (((src[srcOffset]>>rightShifts)&mask) | (src[(short)(srcOffset+3)]<<leftShifts));
-        // dst[(short)(dstOffset+1)]= (short) (((src[(short)(srcOffset+1)]>>rightShifts)&mask) | (src[srcOffset]<<leftShifts));
-        // dst[(short)(dstOffset+2)]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));
-    	// dst[(short)(dstOffset+3)]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts));
-    // }
-    // combining Rotnb and Rot16b, Rot32b or Rot48b in one step...
-    // public static void Rotnb16b(short[] src, short srcOffset, short[] dst, short dstOffset, short rightShifts){
-        // // 0<rightShift<16!
-        // short leftShifts = (short)(16-rightShifts);
-        // short mask= MASK[leftShifts];
-        // dst[(short)(dstOffset+1)]= (short) (((src[srcOffset]>>rightShifts)&mask) | (src[(short)(srcOffset+3)]<<leftShifts));
-        // dst[(short)(dstOffset+2)]= (short) (((src[(short)(srcOffset+1)]>>rightShifts)&mask) | (src[srcOffset]<<leftShifts));
-        // dst[(short)(dstOffset+3)]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));
-        // dst[dstOffset]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts));
-    // }
-    // public static void Rotnb32b(short[] src, short srcOffset, short[] dst, short dstOffset, short rightShifts){
-    	// // 0<rightShift<16!
-    	// short leftShifts = (short)(16-rightShifts);
-    	// short mask= MASK[leftShifts];
-        // dst[(short)(dstOffset+2)]= (short) (((src[srcOffset]>>rightShifts)&mask) | (src[(short)(srcOffset+3)]<<leftShifts));
-        // dst[(short)(dstOffset+3)]= (short) (((src[(short)(srcOffset+1)]>>rightShifts)&mask) | (src[srcOffset]<<leftShifts));
-        // dst[dstOffset]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));
-    	// dst[(short)(dstOffset+1)]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts));
-    // }
-    // public static void Rotnb48b(short[] src, short srcOffset, short[] dst, short dstOffset, short rightShifts){
-    	// // 0<rightShift<16!
-    	// short leftShifts = (short)(16-rightShifts);
-    	// short mask= MASK[leftShifts];
-        // dst[(short)(dstOffset+3)]= (short) (((src[srcOffset]>>rightShifts)&mask) | (src[(short)(srcOffset+3)]<<leftShifts));
-        // dst[dstOffset]= (short) (((src[(short)(srcOffset+1)]>>rightShifts)&mask) | (src[srcOffset]<<leftShifts));
-        // dst[(short)(dstOffset+1)]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));
-    	// dst[(short)(dstOffset+2)]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts));
-    // }    
-    // public static void Shiftnb(short[] src, short srcOffset, short[] dst, short dstOffset, short rightShifts){
-    	// // 0<rightShift<16!
-    	// short leftShifts = (short)(16-rightShifts);
-    	// short mask= MASK[leftShifts];
-        // dst[dstOffset]= (short) ((src[srcOffset]>>rightShifts)&mask);
-    	// dst[(short)(dstOffset+1)]= (short) (((src[(short)(srcOffset+1)]>>rightShifts)&mask) | (src[srcOffset]<<leftShifts));
-    	// dst[(short)(dstOffset+2)]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));
-    	// dst[(short)(dstOffset+3)]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts));    
-    // }
+    	short leftShifts = (short)(16-rightShifts);
+    	short mask= MASK[leftShifts];
+		dst[dstOffset]= (short) (((src[srcOffset]>>rightShifts)&mask) | (src[(short)(srcOffset+3)]<<leftShifts));
+        dst[(short)(dstOffset+1)]= (short) (((src[(short)(srcOffset+1)]>>rightShifts)&mask) | (src[srcOffset]<<leftShifts));
+        dst[(short)(dstOffset+2)]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));
+    	dst[(short)(dstOffset+3)]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts));
+    }
+	*/
+	/*
+    //combining Rotnb and Rot16b, Rot32b or Rot48b in one step...
+    public static void Rotnb16b(short[] src, short srcOffset, short[] dst, short dstOffset, short rightShifts){
+        // 0<rightShift<16!
+        short leftShifts = (short)(16-rightShifts);
+        short mask= MASK[leftShifts];
+        dst[(short)(dstOffset+1)]= (short) (((src[srcOffset]>>rightShifts)&mask) | (src[(short)(srcOffset+3)]<<leftShifts));
+        dst[(short)(dstOffset+2)]= (short) (((src[(short)(srcOffset+1)]>>rightShifts)&mask) | (src[srcOffset]<<leftShifts));
+        dst[(short)(dstOffset+3)]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));
+        dst[dstOffset]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts));
+    }
+    public static void Rotnb32b(short[] src, short srcOffset, short[] dst, short dstOffset, short rightShifts){
+    	// 0<rightShift<16!
+    	short leftShifts = (short)(16-rightShifts);
+    	short mask= MASK[leftShifts];
+        dst[(short)(dstOffset+2)]= (short) (((src[srcOffset]>>rightShifts)&mask) | (src[(short)(srcOffset+3)]<<leftShifts));
+        dst[(short)(dstOffset+3)]= (short) (((src[(short)(srcOffset+1)]>>rightShifts)&mask) | (src[srcOffset]<<leftShifts));
+        dst[dstOffset]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));
+    	dst[(short)(dstOffset+1)]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts));
+    }
+    public static void Rotnb48b(short[] src, short srcOffset, short[] dst, short dstOffset, short rightShifts){
+    	// 0<rightShift<16!
+    	short leftShifts = (short)(16-rightShifts);
+    	short mask= MASK[leftShifts];
+        dst[(short)(dstOffset+3)]= (short) (((src[srcOffset]>>rightShifts)&mask) | (src[(short)(srcOffset+3)]<<leftShifts));
+        dst[dstOffset]= (short) (((src[(short)(srcOffset+1)]>>rightShifts)&mask) | (src[srcOffset]<<leftShifts));
+        dst[(short)(dstOffset+1)]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));
+    	dst[(short)(dstOffset+2)]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts));
+    }    
+    public static void Shiftnb(short[] src, short srcOffset, short[] dst, short dstOffset, short rightShifts){
+    	// 0<rightShift<16!
+    	short leftShifts = (short)(16-rightShifts);
+    	short mask= MASK[leftShifts];
+        dst[dstOffset]= (short) ((src[srcOffset]>>rightShifts)&mask);
+    	dst[(short)(dstOffset+1)]= (short) (((src[(short)(srcOffset+1)]>>rightShifts)&mask) | (src[srcOffset]<<leftShifts));
+    	dst[(short)(dstOffset+2)]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));
+    	dst[(short)(dstOffset+3)]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts));    
+    } 
+	*/
 	
     /**
      *     Ch(x,y,z) on short[4]
@@ -635,7 +678,8 @@ public class Sha512 {
     } 
 	*/
 
-    public static void E1_opt(short[] x, short xOff, short[] dst, short dstOff){
+    /* 
+	public static void E1_opt(short[] x, short xOff, short[] dst, short dstOff){
     	short leftShifts, mask;
 		short mask2= (short)0x3FFF;
 		short mask9= (short)0x007F;
@@ -662,11 +706,13 @@ public class Sha512 {
     	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);
     	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7]);	
     }
+	*/
     
     /**
      *     Sig(x) on short[4]
      * */
-    public static void Sig0(short[] x, short xOff, short[] dst, short dstOff){
+    /* 
+	public static void Sig0(short[] x, short xOff, short[] dst, short dstOff){
     	short leftShifts, mask;
 		short mask1= (short)0x7FFF;
 		short mask7= (short)0x01FF;
@@ -692,9 +738,11 @@ public class Sha512 {
     	dst[(short)(dstOff+1)]=(short) (tmp[1]^tmp[5]);
     	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);
     	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7]);	
-    }
+    } 
+	*/
 
-    public static void Sig1_opt(short[] x, short xOff, short[] dst, short dstOff){
+    /* 
+	public static void Sig1_opt(short[] x, short xOff, short[] dst, short dstOff){
     	short leftShifts, mask;
 		short mask3= (short)0x1FFF;
 		short mask6= (short)0x03FF;
@@ -720,7 +768,8 @@ public class Sha512 {
     	dst[(short)(dstOff+1)]=(short) (tmp[1]^tmp[5]);
     	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);
     	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7]);	
-    }
+    } 
+	*/
 	
 	/**
      *   MessageSchedule
@@ -754,38 +803,13 @@ public class Sha512 {
 		off3=(short)(((short)(wOff+4))%64);
     	
 		// Message Schedule
-		// MessageSchedule(w, off1, w, off2,	w, off3, dst, dstOff, w, wOff);
-		Sig1_opt(w, off1, w, wOff);
-        add_carry(w, wOff, w, off2);
-    	Sig0(w, off3, tmp, TMP1);
-    	add_carry(w, wOff, dst, dstOff);
-    	add_carry(w, wOff, tmp, TMP1);     
+		MessageSchedule(w, off1, w, off2,	w, off3, dst, dstOff, w, wOff);
 		
     	// update offset
     	return (short)(((short)(wOff+4))%64);    	
     } 
 	*/
-	
-	/* 
-	public static short updateW(short[] w, short wOff, short[] dst, short dstOff){	
-    	// copy current block to wCurrent 
-    	dst[dstOff]= w[wOff];
-    	dst[(short)(dstOff+1)]= w[(short)(wOff+1)];
-    	dst[(short)(dstOff+2)]= w[(short)(wOff+2)];
-    	dst[(short)(dstOff+3)]= w[(short)(wOff+3)];
-    	
-    	// update current block
-    	MessageSchedule(w, (short)(((short)(wOff+56))%64),
-    					w, (short)(((short)(wOff+36))%64),
-    					w, (short)(((short)(wOff+4))%64),
-    					dst, dstOff,
-    					w, wOff);
-        
-    	// update offset
-    	return (short)(((short)(wOff+4))%64);    	
-    } 
-	*/
-	
+		
 	/**
      *   MessageSchedule(w,x,y,z)= Sig1(w)+x+Sig0(y)+z
      * */
