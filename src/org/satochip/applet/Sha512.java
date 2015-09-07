@@ -116,6 +116,9 @@ public class Sha512 {
 	public static final short MSGSIZE=0;
 	public static final short CHUNKSIZE=4;
 
+
+	public static short[] w_short2;
+
     public static void init(){
 
     	w_short= JCSystem.makeTransientShortArray((short) (64), JCSystem.CLEAR_ON_DESELECT);
@@ -127,7 +130,12 @@ public class Sha512 {
 
 
 
+
+
+		w_short2= JCSystem.makeTransientShortArray((short) (64), JCSystem.CLEAR_ON_DESELECT);
     }
+
+
 	public static short resetUpdateDoFinal(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset){
 
 
@@ -195,13 +203,13 @@ public class Sha512 {
 
         return (short)64;
     }
-
     public static void CompressionFunction(short[] state, short stateOff, byte[] msgBlock, short msgOff){
 
 
-		short akku,posy,posx,addx,addy;
 		short off1, off2, off3;
-		short leftShifts;
+		short regA0, regA1, regA2, regA3;
+		short regB0, regB1, regB2, regB3;
+		short tmpA0, tmpA1, tmpA2, tmpA3;
 
 
 
@@ -211,63 +219,351 @@ public class Sha512 {
 		for (short round=0; round<80; round++){
 
 
-
-			tmp[REG1]= w_short[wOff]; tmp[(short)(REG1+1)]= w_short[(short)(wOff+1)]; tmp[(short)(REG1+2)]= w_short[(short)(wOff+2)]; tmp[(short)(REG1+3)]= w_short[(short)(wOff+3)]; off1=(short)(((short)(wOff+56))%64); off2=(short)(((short)(wOff+36))%64); off3=(short)(((short)(wOff+4))%64); leftShifts = (short)(16-(short)3); tmp[(short)(TMP1+1)]= (short) (((w_short[off1]>>(short)3)&((short)0x1FFF)) | (w_short[(short)(off1+3)]<<leftShifts)); tmp[(short)(TMP1+2)]= (short) (((w_short[(short)(off1+1)]>>(short)3)&((short)0x1FFF)) | (w_short[off1]<<leftShifts)); tmp[(short)(TMP1+3)]= (short) (((w_short[(short)(off1+2)]>>(short)3)&((short)0x1FFF)) | (w_short[(short)(off1+1)]<<leftShifts)); tmp[TMP1]= (short) (((w_short[(short)(off1+3)]>>(short)3)&((short)0x1FFF)) | (w_short[(short)(off1+2)]<<leftShifts)) ; leftShifts = (short)(16-(short)13); tmp[(short)(TMP2+3)]= (short) (((w_short[off1]>>(short)13)&((short)0x0007)) | (w_short[(short)(off1+3)]<<leftShifts)); tmp[TMP2]= (short) (((w_short[(short)(off1+1)]>>(short)13)&((short)0x0007)) | (w_short[off1]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((w_short[(short)(off1+2)]>>(short)13)&((short)0x0007)) | (w_short[(short)(off1+1)]<<leftShifts)); tmp[(short)(TMP2+2)]= (short) (((w_short[(short)(off1+3)]>>(short)13)&((short)0x0007)) | (w_short[(short)(off1+2)]<<leftShifts)) ; tmp[0]^=tmp[4]; tmp[1]^=tmp[5]; tmp[2]^=tmp[6]; tmp[3]^=tmp[7]; leftShifts = (short)(16-(short)6); tmp[TMP2]= (short) ((w_short[off1]>>(short)6)&((short)0x03FF)); tmp[(short)(TMP2+1)]= (short) (((w_short[(short)(off1+1)]>>(short)6)&((short)0x03FF)) | (w_short[off1]<<leftShifts)); tmp[(short)(TMP2+2)]= (short) (((w_short[(short)(off1+2)]>>(short)6)&((short)0x03FF)) | (w_short[(short)(off1+1)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((w_short[(short)(off1+3)]>>(short)6)&((short)0x03FF)) | (w_short[(short)(off1+2)]<<leftShifts)) ; w_short[wOff]=(short) (tmp[0]^tmp[4]); w_short[(short)(wOff+1)]=(short) (tmp[1]^tmp[5]); w_short[(short)(wOff+2)]=(short) (tmp[2]^tmp[6]); w_short[(short)(wOff+3)]=(short) (tmp[3]^tmp[7]) ; akku = 0; posy = (short)((off2)+3); posx = (short)((wOff)+3); addx=w_short[posx]; addy=w_short[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=w_short[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=w_short[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=w_short[posy]; w_short[posx] = (short)(addx+addy+akku) ; leftShifts = (short)(16-(short)1); tmp[TMP1]= (short) (((w_short[off3]>>(short)1)&((short)0x7FFF)) | (w_short[(short)(off3+3)]<<leftShifts)); tmp[(short)(TMP1+1)]= (short) (((w_short[(short)(off3+1)]>>(short)1)&((short)0x7FFF)) | (w_short[off3]<<leftShifts)); tmp[(short)(TMP1+2)]= (short) (((w_short[(short)(off3+2)]>>(short)1)&((short)0x7FFF)) | (w_short[(short)(off3+1)]<<leftShifts)); tmp[(short)(TMP1+3)]= (short) (((w_short[(short)(off3+3)]>>(short)1)&((short)0x7FFF)) | (w_short[(short)(off3+2)]<<leftShifts)); ; leftShifts = (short)(16-(short)8); tmp[TMP2]= (short) (((w_short[off3]>>(short)8)&((short)0x00FF)) | (w_short[(short)(off3+3)]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((w_short[(short)(off3+1)]>>(short)8)&((short)0x00FF)) | (w_short[off3]<<leftShifts)); tmp[(short)(TMP2+2)]= (short) (((w_short[(short)(off3+2)]>>(short)8)&((short)0x00FF)) | (w_short[(short)(off3+1)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((w_short[(short)(off3+3)]>>(short)8)&((short)0x00FF)) | (w_short[(short)(off3+2)]<<leftShifts)); ; tmp[0]^=tmp[4]; tmp[1]^=tmp[5]; tmp[2]^=tmp[6]; tmp[3]^=tmp[7]; leftShifts = (short)(16-(short)7); tmp[TMP2]= (short) ((w_short[off3]>>(short)7)&((short)0x01FF)); tmp[(short)(TMP2+1)]= (short) (((w_short[(short)(off3+1)]>>(short)7)&((short)0x01FF)) | (w_short[off3]<<leftShifts)); tmp[(short)(TMP2+2)]= (short) (((w_short[(short)(off3+2)]>>(short)7)&((short)0x01FF)) | (w_short[(short)(off3+1)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((w_short[(short)(off3+3)]>>(short)7)&((short)0x01FF)) | (w_short[(short)(off3+2)]<<leftShifts)) ; tmp[TMP1]=(short) (tmp[0]^tmp[4]); tmp[(short)(TMP1+1)]=(short) (tmp[1]^tmp[5]); tmp[(short)(TMP1+2)]=(short) (tmp[2]^tmp[6]); tmp[(short)(TMP1+3)]=(short) (tmp[3]^tmp[7]) ; akku = 0; posy = (short)((REG1)+3); posx = (short)((wOff)+3); addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku) ; akku = 0; posy = (short)((TMP1)+3); posx = (short)((wOff)+3); addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku) ; wOff=(short)(((short)(wOff+4))%64) ;
-
-
-    		tmp[REG2]=K_SHORT[(short)(4*(round))]; tmp[(short)(REG2+1)]=K_SHORT[(short)(4*(round)+1)]; tmp[(short)(REG2+2)]=K_SHORT[(short)(4*(round)+2)]; tmp[(short)(REG2+3)]=K_SHORT[(short)(4*(round)+3)] ;
-
-
-    		akku = 0; posy = (short)((REG2)+3); posx = (short)((REG1)+3); addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku) ;
+    		off1=(short)(((short)(wOff+56))%64); off2=(short)(((short)(wOff+36))%64); off3=(short)(((short)(wOff+4))%64); tmpA0 = w_short[off1]; tmpA1 = w_short[(short)(off1+1)]; tmpA2 = w_short[(short)(off1+2)]; tmpA3 = w_short[(short)(off1+3)]; regA0 = (short) ( (short) ( (tmpA3 >>>3) & (short)8191 | ((short)(tmpA2 <<(13))) ) ^ (short) ( (tmpA1 >>>13) & (short)7 | ((short)(tmpA0 <<(3))) ) ^ (short) ((tmpA0 >>>6) & (short)1023) ); regA1 = (short) ( (short) ( (tmpA0 >>>3) & (short)8191 | ((short)(tmpA3 <<(13))) ) ^ (short) ( (tmpA2 >>>13) & (short)7 | ((short)(tmpA1 <<(3))) ) ^ (short) ( (tmpA1 >>>6) & (short)1023 | ((short)(tmpA0 <<(10))) ) ); regA2 = (short) ( (short) ( (tmpA1 >>>3) & (short)8191 | ((short)(tmpA0 <<(13))) ) ^ (short) ( (tmpA3 >>>13) & (short)7 | ((short)(tmpA2 <<(3))) ) ^ (short) ( (tmpA2 >>>6) & (short)1023 | ((short)(tmpA1 <<(10))) ) ); regA3 = (short) ( (short) ( (tmpA2 >>>3) & (short)8191 | ((short)(tmpA1 <<(13))) ) ^ (short) ( (tmpA0 >>>13) & (short)7 | ((short)(tmpA3 <<(3))) ) ^ (short) ( (tmpA3 >>>6) & (short)1023 | ((short)(tmpA2 <<(10))) ) ) ; regB0 = w_short[off2]; regB1 = w_short[(short)(off2+1)]; regB2 =w_short[(short)(off2+2)]; regB3 =w_short[(short)(off2+3)]; tmpA0 = regA3 ; regA3 = (short)((regA3 )+(regB3 )); tmpA2 = (short)(( ((tmpA0 &(regB3 ))|((tmpA0 |(regB3 )) & ~(regA3 ))) >>15)&1); tmpA0 =regA2 ; regA2 = (short)((regA2 )+(regB2 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB2 ))|((tmpA0 |(regB2 )) & ~(regA2 ))) >>15)&1); tmpA0 =regA1 ; regA1 = (short)((regA1 )+(regB1 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB1 ))|((tmpA0 |(regB1 )) & ~(regA1 ))) >>15)&1); regA0 = (short)((regA0 )+(regB0 )+tmpA2 ) ; tmpA0 = w_short[off3]; tmpA1 = w_short[(short)(off3+1)]; tmpA2 = w_short[(short)(off3+2)]; tmpA3 = w_short[(short)(off3+3)]; regB0 = (short) ( (short) ( (tmpA0 >>>1) & (short)32767 | ((short)(tmpA3 <<(15))) ) ^ (short) ( (tmpA0 >>>8) & (short)255 | ((short)(tmpA3 <<(8))) ) ^ (short) ((tmpA0 >>>7) & (short)511) ); regB1 = (short) ( (short) ( (tmpA1 >>>1) & (short)32767 | ((short)(tmpA0 <<(15))) ) ^ (short) ( (tmpA1 >>>8) & (short)255 | ((short)(tmpA0 <<(8))) ) ^ (short) ( (tmpA1 >>>7) & (short)511 | ((short)(tmpA0 <<(9))) ) ); regB2 = (short) ( (short) ( (tmpA2 >>>1) & (short)32767 | ((short)(tmpA1 <<(15))) ) ^ (short) ( (tmpA2 >>>8) & (short)255 | ((short)(tmpA1 <<(8))) ) ^ (short) ( (tmpA2 >>>7) & (short)511 | ((short)(tmpA1 <<(9))) ) ); regB3 = (short) ( (short) ( (tmpA3 >>>1) & (short)32767 | ((short)(tmpA2 <<(15))) ) ^ (short) ( (tmpA3 >>>8) & (short)255 | ((short)(tmpA2 <<(8))) ) ^ (short) ( (tmpA3 >>>7) & (short)511 | ((short)(tmpA2 <<(9))) ) ) ; tmpA0 = regA3 ; regA3 = (short)((regA3 )+(regB3 )); tmpA2 = (short)(( ((tmpA0 &(regB3 ))|((tmpA0 |(regB3 )) & ~(regA3 ))) >>15)&1); tmpA0 =regA2 ; regA2 = (short)((regA2 )+(regB2 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB2 ))|((tmpA0 |(regB2 )) & ~(regA2 ))) >>15)&1); tmpA0 =regA1 ; regA1 = (short)((regA1 )+(regB1 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB1 ))|((tmpA0 |(regB1 )) & ~(regA1 ))) >>15)&1); regA0 = (short)((regA0 )+(regB0 )+tmpA2 ) ; regB0 = w_short[wOff]; regB1 = w_short[(short)(wOff+1)]; regB2 =w_short[(short)(wOff+2)]; regB3 =w_short[(short)(wOff+3)]; tmpA0 = regA3 ; regA3 = (short)((regA3 )+(regB3 )); tmpA2 = (short)(( ((tmpA0 &(regB3 ))|((tmpA0 |(regB3 )) & ~(regA3 ))) >>15)&1); tmpA0 =regA2 ; regA2 = (short)((regA2 )+(regB2 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB2 ))|((tmpA0 |(regB2 )) & ~(regA2 ))) >>15)&1); tmpA0 =regA1 ; regA1 = (short)((regA1 )+(regB1 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB1 ))|((tmpA0 |(regB1 )) & ~(regA1 ))) >>15)&1); regA0 = (short)((regA0 )+(regB0 )+tmpA2 ) ; regB0 = w_short[wOff]; regB1 = w_short[(short)(wOff+1)]; regB2 = w_short[(short)(wOff+2)]; regB3 = w_short[(short)(wOff+3)]; w_short[wOff]= regA0 ; w_short[(short)(wOff+1)]= regA1 ; w_short[(short)(wOff+2)]= regA2 ; w_short[(short)(wOff+3)]= regA3 ; wOff=(short)(((short)(wOff+4))%64) ;
 
 
 			off1= (short)(((short)(hOff+28))%32);
-    		akku = 0; posy = (short)((off1)+3); posx = (short)((REG1)+3); addx=tmp[posx]; addy=state[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=state[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=state[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=state[posy]; tmp[posx] = (short)(addx+addy+akku) ;
+			off2= (short)(4*(round));
+			tmpA0 =state[(short)((off1)+3)]; tmpA1 =K_SHORT[(short)((off2)+3)]; regA3 = (short)(tmpA0 +tmpA1 ); tmpA2 = (short)(( ((tmpA0 &tmpA1 )|((tmpA0 |tmpA1 ) & ~regA3 )) >>15)&1); tmpA0 =state[(short)((off1)+2)]; tmpA1 =K_SHORT[(short)((off2)+2)]; regA2 = (short)(tmpA0 +tmpA1 +tmpA2 ); tmpA2 = (short)(( ((tmpA0 &tmpA1 )|((tmpA0 |tmpA1 ) & ~regA2 )) >>15)&1); tmpA0 =state[(short)((off1)+1)]; tmpA1 =K_SHORT[(short)((off2)+1)]; regA1 = (short)(tmpA0 +tmpA1 +tmpA2 ); tmpA2 = (short)(( ((tmpA0 &tmpA1 )|((tmpA0 |tmpA1 ) & ~regA1 )) >>15)&1); regA0 = (short)(state[(off1)]+K_SHORT[(off2)]+tmpA2 ); ;
+
+
+    		tmpA0 = regA3 ; regA3 = (short)((regA3 )+(regB3 )); tmpA2 = (short)(( ((tmpA0 &(regB3 ))|((tmpA0 |(regB3 )) & ~(regA3 ))) >>15)&1); tmpA0 =regA2 ; regA2 = (short)((regA2 )+(regB2 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB2 ))|((tmpA0 |(regB2 )) & ~(regA2 ))) >>15)&1); tmpA0 =regA1 ; regA1 = (short)((regA1 )+(regB1 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB1 ))|((tmpA0 |(regB1 )) & ~(regA1 ))) >>15)&1); regA0 = (short)((regA0 )+(regB0 )+tmpA2 ) ;
 
 
     		off1=(short)(((short)(hOff+16))%32);
 			off2=(short)(((short)(hOff+20))%32);
 			off3=(short)(((short)(hOff+24))%32);
-			tmp[REG2]= (short) ((state[off1] & state[off2]) ^ ((~state[off1]) & state[off3])); tmp[(short)(REG2+1)]= (short) ((state[(short)(off1+1)] & state[(short)(off2+1)]) ^ ((~state[(short)(off1+1)]) & state[(short)(off3+1)])); tmp[(short)(REG2+2)]= (short) ((state[(short)(off1+2)] & state[(short)(off2+2)]) ^ ((~state[(short)(off1+2)]) & state[(short)(off3+2)])); tmp[(short)(REG2+3)]= (short) ((state[(short)(off1+3)] & state[(short)(off2+3)]) ^ ((~state[(short)(off1+3)]) & state[(short)(off3+3)])) ;
+			tmpA0 = state[off1]; regB0 = (short) ((tmpA0 & state[off2]) ^ ((~tmpA0 ) & state[off3])); tmpA0 = state[(short)(off1+1)]; regB1 = (short) ((tmpA0 & state[(short)(off2+1)]) ^ ((~tmpA0 ) & state[(short)(off3+1)])); tmpA0 = state[(short)(off1+2)]; regB2 = (short) ((tmpA0 & state[(short)(off2+2)]) ^ ((~tmpA0 ) & state[(short)(off3+2)])); tmpA0 = state[(short)(off1+3)]; regB3 = (short) ((tmpA0 & state[(short)(off2+3)]) ^ ((~tmpA0 ) & state[(short)(off3+3)])); ;
 
 
-    		akku = 0; posy = (short)((REG2)+3); posx = (short)((REG1)+3); addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku) ;
+    		tmpA0 = regA3 ; regA3 = (short)((regA3 )+(regB3 )); tmpA2 = (short)(( ((tmpA0 &(regB3 ))|((tmpA0 |(regB3 )) & ~(regA3 ))) >>15)&1); tmpA0 =regA2 ; regA2 = (short)((regA2 )+(regB2 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB2 ))|((tmpA0 |(regB2 )) & ~(regA2 ))) >>15)&1); tmpA0 =regA1 ; regA1 = (short)((regA1 )+(regB1 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB1 ))|((tmpA0 |(regB1 )) & ~(regA1 ))) >>15)&1); regA0 = (short)((regA0 )+(regB0 )+tmpA2 ) ;
 
 
 			off1=(short)(((short)(hOff+16))%32);
-            leftShifts = (short)(16-(short)14); tmp[TMP1]= (short) (((state[off1]>>(short)14)&((short)0x0003)) | (state[(short)(off1+3)]<<leftShifts)); tmp[(short)(TMP1+1)]= (short) (((state[(short)(off1+1)]>>(short)14)&((short)0x0003)) | (state[off1]<<leftShifts)); tmp[(short)(TMP1+2)]= (short) (((state[(short)(off1+2)]>>(short)14)&((short)0x0003)) | (state[(short)(off1+1)]<<leftShifts)); tmp[(short)(TMP1+3)]= (short) (((state[(short)(off1+3)]>>(short)14)&((short)0x0003)) | (state[(short)(off1+2)]<<leftShifts)); ; leftShifts = (short)(16-(short)2); tmp[(short)(TMP2+1)]= (short) (((state[off1]>>(short)2)&((short)0x3FFF)) | (state[(short)(off1+3)]<<leftShifts)); tmp[(short)(TMP2+2)]= (short) (((state[(short)(off1+1)]>>(short)2)&((short)0x3FFF)) | (state[off1]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((state[(short)(off1+2)]>>(short)2)&((short)0x3FFF)) | (state[(short)(off1+1)]<<leftShifts)); tmp[TMP2]= (short) (((state[(short)(off1+3)]>>(short)2)&((short)0x3FFF)) | (state[(short)(off1+2)]<<leftShifts)) ; tmp[0]^=tmp[4]; tmp[1]^=tmp[5]; tmp[2]^=tmp[6]; tmp[3]^=tmp[7]; leftShifts = (short)(16-(short)9); tmp[(short)(TMP2+2)]= (short) (((state[off1]>>(short)9)&((short)0x007F)) | (state[(short)(off1+3)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((state[(short)(off1+1)]>>(short)9)&((short)0x007F)) | (state[off1]<<leftShifts)); tmp[TMP2]= (short) (((state[(short)(off1+2)]>>(short)9)&((short)0x007F)) | (state[(short)(off1+1)]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((state[(short)(off1+3)]>>(short)9)&((short)0x007F)) | (state[(short)(off1+2)]<<leftShifts)) ; tmp[REG2]=(short) (tmp[0]^tmp[4]); tmp[(short)(REG2+1)]=(short) (tmp[1]^tmp[5]); tmp[(short)(REG2+2)]=(short) (tmp[2]^tmp[6]); tmp[(short)(REG2+3)]=(short) (tmp[3]^tmp[7]) ;
+            tmpA0 = state[off1]; tmpA1 = state[(short)(off1+1)]; tmpA2 = state[(short)(off1+2)]; tmpA3 = state[(short)(off1+3)]; regB0 = (short) ( (short) ( (tmpA0 >>>14) & (short)3 | ((short)(tmpA3 <<(2))) ) ^ (short) ( (tmpA3 >>>2) & (short)16383 | ((short)(tmpA2 <<(14))) ) ^ (short) ( (tmpA2 >>>9) & (short)127 | ((short)(tmpA1 <<(7))) ) ); regB1 = (short) ( (short) ( (tmpA1 >>>14) & (short)3 | ((short)(tmpA0 <<(2))) ) ^ (short) ( (tmpA0 >>>2) & (short)16383 | ((short)(tmpA3 <<(14))) ) ^ (short) ( (tmpA3 >>>9) & (short)127 | ((short)(tmpA2 <<(7))) ) ); regB2 = (short) ( (short) ( (tmpA2 >>>14) & (short)3 | ((short)(tmpA1 <<(2))) ) ^ (short) ( (tmpA1 >>>2) & (short)16383 | ((short)(tmpA0 <<(14))) ) ^ (short) ( (tmpA0 >>>9) & (short)127 | ((short)(tmpA3 <<(7))) ) ); regB3 = (short) ( (short) ( (tmpA3 >>>14) & (short)3 | ((short)(tmpA2 <<(2))) ) ^ (short) ( (tmpA2 >>>2) & (short)16383 | ((short)(tmpA1 <<(14))) ) ^ (short) ( (tmpA1 >>>9) & (short)127 | ((short)(tmpA0 <<(7))) ) ) ;
 
 
-    		akku = 0; posy = (short)((REG2)+3); posx = (short)((REG1)+3); addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku) ;
+    		tmpA0 = regA3 ; regA3 = (short)((regA3 )+(regB3 )); tmpA2 = (short)(( ((tmpA0 &(regB3 ))|((tmpA0 |(regB3 )) & ~(regA3 ))) >>15)&1); tmpA0 =regA2 ; regA2 = (short)((regA2 )+(regB2 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB2 ))|((tmpA0 |(regB2 )) & ~(regA2 ))) >>15)&1); tmpA0 =regA1 ; regA1 = (short)((regA1 )+(regB1 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB1 ))|((tmpA0 |(regB1 )) & ~(regA1 ))) >>15)&1); regA0 = (short)((regA0 )+(regB0 )+tmpA2 ) ;
 
 
 			off1= (short)(((short)(hOff+12))%32);
-    		akku = 0; posy = (short)((REG1)+3); posx = (short)((off1)+3); addx=state[posx]; addy=tmp[posy]; state[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~state[posx])) >>15)&1); posy--; posx--; addx=state[posx]; addy=tmp[posy]; state[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~state[posx])) >>15)&1); posy--; posx--; addx=state[posx]; addy=tmp[posy]; state[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~state[posx])) >>15)&1); posy--; posx--; addx=state[posx]; addy=tmp[posy]; state[posx] = (short)(addx+addy+akku) ;
+    		tmpA0 =(short)((off1)+3); tmpA1 =state[tmpA0 ]; state[tmpA0 ] = (short)(tmpA1 +regA3 ); tmpA2 = (short)(( ((tmpA1 &regA3 )|((tmpA1 |regA3 ) & ~state[tmpA0 ])) >>15)&1); tmpA0 =(short)((off1)+2); tmpA1 =state[tmpA0 ]; state[tmpA0 ] = (short)(tmpA1 +regA2 +tmpA2 ); tmpA2 = (short)(( ((tmpA1 &regA2 )|((tmpA1 |regA2 ) & ~state[tmpA0 ])) >>15)&1); tmpA0 =(short)((off1)+1); tmpA1 =state[tmpA0 ]; state[tmpA0 ] = (short)(tmpA1 +regA1 +tmpA2 ); tmpA2 = (short)(( ((tmpA1 &regA1 )|((tmpA1 |regA1 ) & ~state[tmpA0 ])) >>15)&1); tmpA0 =(short)(off1); tmpA1 =state[tmpA0 ]; state[tmpA0 ] = (short)(tmpA1 +regA0 +tmpA2 );
 
 
 
     		off1= (short)(((short)(hOff+4))%32);
 			off2= (short)(((short)(hOff+8))%32);
-			tmp[REG2]= (short) ((state[hOff] & state[off1]) ^ (state[hOff] & state[off2]) ^ (state[off1] & state[off2])); tmp[(short)(REG2+1)]= (short) ((state[(short)(hOff+1)] & state[(short)(off1+1)]) ^ (state[(short)(hOff+1)] & state[(short)(off2+1)]) ^ (state[(short)(off1+1)] & state[(short)(off2+1)])); tmp[(short)(REG2+2)]= (short) ((state[(short)(hOff+2)] & state[(short)(off1+2)]) ^ (state[(short)(hOff+2)] & state[(short)(off2+2)]) ^ (state[(short)(off1+2)] & state[(short)(off2+2)])); tmp[(short)(REG2+3)]= (short) ((state[(short)(hOff+3)] & state[(short)(off1+3)]) ^ (state[(short)(hOff+3)] & state[(short)(off2+3)]) ^ (state[(short)(off1+3)] & state[(short)(off2+3)])) ;
+			tmpA0 =state[hOff]; tmpA1 =state[off1]; tmpA2 =state[off2]; regB0 = (short) ((tmpA0 & tmpA1 ) ^ (tmpA0 & tmpA2 ) ^ (tmpA1 & tmpA2 )); tmpA0 =state[(short)(hOff+1)]; tmpA1 =state[(short)(off1+1)]; tmpA2 =state[(short)(off2+1)]; regB1 = (short) ((tmpA0 & tmpA1 ) ^ (tmpA0 & tmpA2 ) ^ (tmpA1 & tmpA2 )); tmpA0 =state[(short)(hOff+2)]; tmpA1 =state[(short)(off1+2)]; tmpA2 =state[(short)(off2+2)]; regB2 = (short) ((tmpA0 & tmpA1 ) ^ (tmpA0 & tmpA2 ) ^ (tmpA1 & tmpA2 )); tmpA0 =state[(short)(hOff+3)]; tmpA1 =state[(short)(off1+3)]; tmpA2 =state[(short)(off2+3)]; regB3 = (short) ((tmpA0 & tmpA1 ) ^ (tmpA0 & tmpA2 ) ^ (tmpA1 & tmpA2 ));
 
 
-    		akku = 0; posy = (short)((REG2)+3); posx = (short)((REG1)+3); addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku) ;
+    		tmpA0 = regA3 ; regA3 = (short)((regA3 )+(regB3 )); tmpA2 = (short)(( ((tmpA0 &(regB3 ))|((tmpA0 |(regB3 )) & ~(regA3 ))) >>15)&1); tmpA0 =regA2 ; regA2 = (short)((regA2 )+(regB2 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB2 ))|((tmpA0 |(regB2 )) & ~(regA2 ))) >>15)&1); tmpA0 =regA1 ; regA1 = (short)((regA1 )+(regB1 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB1 ))|((tmpA0 |(regB1 )) & ~(regA1 ))) >>15)&1); regA0 = (short)((regA0 )+(regB0 )+tmpA2 ) ;
 
 
-            leftShifts = (short)(16-((short)12)); tmp[(short)(TMP1+1)]= (short) (((state[hOff]>>((short)12))&((short)0x000F)) | (state[(short)(hOff+3)]<<leftShifts)); tmp[(short)(TMP1+2)]= (short) (((state[(short)(hOff+1)]>>((short)12))&((short)0x000F)) | (state[hOff]<<leftShifts)); tmp[(short)(TMP1+3)]= (short) (((state[(short)(hOff+2)]>>((short)12))&((short)0x000F)) | (state[(short)(hOff+1)]<<leftShifts)); tmp[TMP1]= (short) (((state[(short)(hOff+3)]>>((short)12))&((short)0x000F)) | (state[(short)(hOff+2)]<<leftShifts)) ; leftShifts = (short)(16-((short)2)); tmp[(short)(TMP2+2)]= (short) (((state[hOff]>>((short)2))&((short)0x3FFF)) | (state[(short)(hOff+3)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((state[(short)(hOff+1)]>>((short)2))&((short)0x3FFF)) | (state[hOff]<<leftShifts)); tmp[TMP2]= (short) (((state[(short)(hOff+2)]>>((short)2))&((short)0x3FFF)) | (state[(short)(hOff+1)]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((state[(short)(hOff+3)]>>((short)2))&((short)0x3FFF)) | (state[(short)(hOff+2)]<<leftShifts)) ; tmp[0]^=tmp[4]; tmp[1]^=tmp[5]; tmp[2]^=tmp[6]; tmp[3]^=tmp[7]; leftShifts = (short)(16-(short)7); tmp[(short)(TMP2+2)]= (short) (((state[hOff]>>(short)7)&((short)0x01FF)) | (state[(short)(hOff+3)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((state[(short)(hOff+1)]>>(short)7)&((short)0x01FF)) | (state[hOff]<<leftShifts)); tmp[TMP2]= (short) (((state[(short)(hOff+2)]>>(short)7)&((short)0x01FF)) | (state[(short)(hOff+1)]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((state[(short)(hOff+3)]>>(short)7)&((short)0x01FF)) | (state[(short)(hOff+2)]<<leftShifts)) ; tmp[REG2]=(short) (tmp[0]^tmp[4]); tmp[(short)(REG2+1)]=(short) (tmp[1]^tmp[5]); tmp[(short)(REG2+2)]=(short) (tmp[2]^tmp[6]); tmp[(short)(REG2+3)]=(short) (tmp[3]^tmp[7]) ;
+            tmpA0 = state[hOff]; tmpA1 = state[(short)(hOff+1)]; tmpA2 = state[(short)(hOff+2)]; tmpA3 = state[(short)(hOff+3)]; regB0 = (short) ( (short) ( (tmpA3 >>>12) & (short)15 | ((short)(tmpA2 <<(4))) ) ^ (short) ( (tmpA2 >>>2) & (short)16383 | ((short)(tmpA1 <<(14))) ) ^ (short) ( (tmpA2 >>>7) & (short)511 | ((short)(tmpA1 <<(9))) ) ); regB1 = (short) ( (short) ( (tmpA0 >>>12) & (short)15 | ((short)(tmpA3 <<(4))) ) ^ (short) ( (tmpA3 >>>2) & (short)16383 | ((short)(tmpA2 <<(14))) ) ^ (short) ( (tmpA3 >>>7) & (short)511 | ((short)(tmpA2 <<(9))) ) ); regB2 = (short) ( (short) ( (tmpA1 >>>12) & (short)15 | ((short)(tmpA0 <<(4))) ) ^ (short) ( (tmpA0 >>>2) & (short)16383 | ((short)(tmpA3 <<(14))) ) ^ (short) ( (tmpA0 >>>7) & (short)511 | ((short)(tmpA3 <<(9))) ) ); regB3 = (short) ( (short) ( (tmpA2 >>>12) & (short)15 | ((short)(tmpA1 <<(4))) ) ^ (short) ( (tmpA1 >>>2) & (short)16383 | ((short)(tmpA0 <<(14))) ) ^ (short) ( (tmpA1 >>>7) & (short)511 | ((short)(tmpA0 <<(9))) ) ) ;
 
 
-    		akku = 0; posy = (short)((REG2)+3); posx = (short)((REG1)+3); addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~tmp[posx])) >>15)&1); posy--; posx--; addx=tmp[posx]; addy=tmp[posy]; tmp[posx] = (short)(addx+addy+akku) ;
+    		tmpA0 = regA3 ; regA3 = (short)((regA3 )+(regB3 )); tmpA2 = (short)(( ((tmpA0 &(regB3 ))|((tmpA0 |(regB3 )) & ~(regA3 ))) >>15)&1); tmpA0 =regA2 ; regA2 = (short)((regA2 )+(regB2 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB2 ))|((tmpA0 |(regB2 )) & ~(regA2 ))) >>15)&1); tmpA0 =regA1 ; regA1 = (short)((regA1 )+(regB1 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB1 ))|((tmpA0 |(regB1 )) & ~(regA1 ))) >>15)&1); regA0 = (short)((regA0 )+(regB0 )+tmpA2 ) ;
 
 
-    		state[(short)(((short)(hOff+28))%32)]= tmp[8];
-    		state[(short)(((short)(hOff+29))%32)]= tmp[9];
-    		state[(short)(((short)(hOff+30))%32)]= tmp[10];
-    		state[(short)(((short)(hOff+31))%32)]= tmp[11];
+    		state[(short)(((short)(hOff+28))%32)]= regA0;
+    		state[(short)(((short)(hOff+29))%32)]= regA1;
+    		state[(short)(((short)(hOff+30))%32)]= regA2;
+    		state[(short)(((short)(hOff+31))%32)]= regA3;
 
 
     		hOff= (short)(((short)(32+hOff-4))%32);
 
     	}
     }
+	public static void test_add_carry(byte[] x, short offsetx, byte[] y, short offsety){
+		short akku,posy,posx,addx,addy;
+		h_short[(short)0]=Util.getShort(x, offsetx);
+		h_short[(short)1]=Util.getShort(x, (short)(offsetx+2));
+		h_short[(short)2]=Util.getShort(x, (short)(offsetx+4));
+		h_short[(short)3]=Util.getShort(x, (short)(offsetx+6));
+		h_short[(short)4]=Util.getShort(y, offsety);
+		h_short[(short)5]=Util.getShort(y, (short)(offsety+2));
+		h_short[(short)6]=Util.getShort(y, (short)(offsety+4));
+		h_short[(short)7]=Util.getShort(y, (short)(offsety+6));
+		akku = 0; posy = (short)(((short)4)+3); posx = (short)(((short)0)+3); addx=h_short[posx]; addy=h_short[posy]; h_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~h_short[posx])) >>15)&1); posy--; posx--; addx=h_short[posx]; addy=h_short[posy]; h_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~h_short[posx])) >>15)&1); posy--; posx--; addx=h_short[posx]; addy=h_short[posy]; h_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~h_short[posx])) >>15)&1); posy--; posx--; addx=h_short[posx]; addy=h_short[posy]; h_short[posx] = (short)(addx+addy+akku) ;
+		Util.setShort(x, (short)(offsetx), h_short[(short)0]);
+		Util.setShort(x, (short)(offsetx+2), h_short[(short)1]);
+		Util.setShort(x, (short)(offsetx+4), h_short[(short)2]);
+		Util.setShort(x, (short)(offsetx+6), h_short[(short)3]);
+	}
+	public static void test_add_carry_fast(byte[] x, short offsetx, byte[] y, short offsety){
+		short off1, off2, off3;
+		short regA0, regA1, regA2, regA3;
+		short regB0, regB1, regB2, regB3;
+		short tmpA0, tmpA1, tmpA2, tmpA3;
+		regA0= Util.getShort(x, offsetx);
+		regA1= Util.getShort(x, (short)(offsetx+2));
+		regA2= Util.getShort(x, (short)(offsetx+4));
+		regA3= Util.getShort(x, (short)(offsetx+6));
+		regB0= Util.getShort(y, offsety);
+		regB1= Util.getShort(y, (short)(offsety+2));
+		regB2= Util.getShort(y, (short)(offsety+4));
+		regB3= Util.getShort(y, (short)(offsety+6));
+		tmpA0 = regA3 ; regA3 = (short)((regA3 )+(regB3 )); tmpA2 = (short)(( ((tmpA0 &(regB3 ))|((tmpA0 |(regB3 )) & ~(regA3 ))) >>15)&1); tmpA0 =regA2 ; regA2 = (short)((regA2 )+(regB2 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB2 ))|((tmpA0 |(regB2 )) & ~(regA2 ))) >>15)&1); tmpA0 =regA1 ; regA1 = (short)((regA1 )+(regB1 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB1 ))|((tmpA0 |(regB1 )) & ~(regA1 ))) >>15)&1); regA0 = (short)((regA0 )+(regB0 )+tmpA2 ) ;
+		Util.setShort(x, (short)(offsetx), regA0);
+		Util.setShort(x, (short)(offsetx+2), regA1);
+		Util.setShort(x, (short)(offsetx+4), regA2);
+		Util.setShort(x, (short)(offsetx+6), regA3);
+	}
+	public static void test_add_carry_fast2(byte[] x, short offsetx, byte[] y, short offsety){
+		short off1, off2, off3;
+		short regA0, regA1, regA2, regA3;
+		short tmpA0, tmpA1, tmpA2, tmpA3;
+		h_short[(short)0]=Util.getShort(x, offsetx);
+		h_short[(short)1]=Util.getShort(x, (short)(offsetx+2));
+		h_short[(short)2]=Util.getShort(x, (short)(offsetx+4));
+		h_short[(short)3]=Util.getShort(x, (short)(offsetx+6));
+		h_short[(short)4]=Util.getShort(y, offsety);
+		h_short[(short)5]=Util.getShort(y, (short)(offsety+2));
+		h_short[(short)6]=Util.getShort(y, (short)(offsety+4));
+		h_short[(short)7]=Util.getShort(y, (short)(offsety+6));
+		tmpA0 =h_short[(short)(((short)0)+3)]; tmpA1 =h_short[(short)(((short)4)+3)]; regA3 = (short)(tmpA0 +tmpA1 ); tmpA2 = (short)(( ((tmpA0 &tmpA1 )|((tmpA0 |tmpA1 ) & ~regA3 )) >>15)&1); tmpA0 =h_short[(short)(((short)0)+2)]; tmpA1 =h_short[(short)(((short)4)+2)]; regA2 = (short)(tmpA0 +tmpA1 +tmpA2 ); tmpA2 = (short)(( ((tmpA0 &tmpA1 )|((tmpA0 |tmpA1 ) & ~regA2 )) >>15)&1); tmpA0 =h_short[(short)(((short)0)+1)]; tmpA1 =h_short[(short)(((short)4)+1)]; regA1 = (short)(tmpA0 +tmpA1 +tmpA2 ); tmpA2 = (short)(( ((tmpA0 &tmpA1 )|((tmpA0 |tmpA1 ) & ~regA1 )) >>15)&1); regA0 = (short)(h_short[((short)0)]+h_short[((short)4)]+tmpA2 ); ;
+		Util.setShort(x, (short)(offsetx), regA0);
+		Util.setShort(x, (short)(offsetx+2), regA1);
+		Util.setShort(x, (short)(offsetx+4), regA2);
+		Util.setShort(x, (short)(offsetx+6), regA3);
+	}
+	public static void test_add_carry_fast3(byte[] x, short offsetx, byte[] y, short offsety){
+		short off1, off2, off3;
+		short regA0, regA1, regA2, regA3;
+		short regB0, regB1, regB2, regB3;
+		short tmpA0, tmpA1, tmpA2, tmpA3;
+		h_short[(short)0]=Util.getShort(x, offsetx);
+		h_short[(short)1]=Util.getShort(x, (short)(offsetx+2));
+		h_short[(short)2]=Util.getShort(x, (short)(offsetx+4));
+		h_short[(short)3]=Util.getShort(x, (short)(offsetx+6));
+		regB0= Util.getShort(y, offsety);
+		regB1= Util.getShort(y, (short)(offsety+2));
+		regB2= Util.getShort(y, (short)(offsety+4));
+		regB3= Util.getShort(y, (short)(offsety+6));
+		tmpA0 =(short)(((short)0)+3); tmpA1 =h_short[tmpA0 ]; h_short[tmpA0 ] = (short)(tmpA1 +regB3 ); tmpA2 = (short)(( ((tmpA1 &regB3 )|((tmpA1 |regB3 ) & ~h_short[tmpA0 ])) >>15)&1); tmpA0 =(short)(((short)0)+2); tmpA1 =h_short[tmpA0 ]; h_short[tmpA0 ] = (short)(tmpA1 +regB2 +tmpA2 ); tmpA2 = (short)(( ((tmpA1 &regB2 )|((tmpA1 |regB2 ) & ~h_short[tmpA0 ])) >>15)&1); tmpA0 =(short)(((short)0)+1); tmpA1 =h_short[tmpA0 ]; h_short[tmpA0 ] = (short)(tmpA1 +regB1 +tmpA2 ); tmpA2 = (short)(( ((tmpA1 &regB1 )|((tmpA1 |regB1 ) & ~h_short[tmpA0 ])) >>15)&1); tmpA0 =(short)((short)0); tmpA1 =h_short[tmpA0 ]; h_short[tmpA0 ] = (short)(tmpA1 +regB0 +tmpA2 ); ;
+		Util.setShort(x, (short)(offsetx), h_short[(short)0]);
+		Util.setShort(x, (short)(offsetx+2), h_short[(short)1]);
+		Util.setShort(x, (short)(offsetx+4), h_short[(short)2]);
+		Util.setShort(x, (short)(offsetx+6), h_short[(short)3]);
+	}
+
+	public static void test_Ch(byte[] x, short xOff, byte[] y, short yOff, byte[] z, short zOff, byte[] dst, short dstOff){
+		h_short[(short)0]=Util.getShort(x, xOff);
+		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
+		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
+		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
+		h_short[(short)4]=Util.getShort(y, yOff);
+		h_short[(short)5]=Util.getShort(y, (short)(yOff+2));
+		h_short[(short)6]=Util.getShort(y, (short)(yOff+4));
+		h_short[(short)7]=Util.getShort(y, (short)(yOff+6));
+		h_short[(short)8]=Util.getShort(z, zOff);
+		h_short[(short)9]=Util.getShort(z, (short)(zOff+2));
+		h_short[(short)10]=Util.getShort(z, (short)(zOff+4));
+		h_short[(short)11]=Util.getShort(z, (short)(zOff+6));
+		h_short[(short)12]= (short) ((h_short[(short)0] & h_short[(short)4]) ^ ((~h_short[(short)0]) & h_short[(short)8])); h_short[(short)((short)12+1)]= (short) ((h_short[(short)((short)0+1)] & h_short[(short)((short)4+1)]) ^ ((~h_short[(short)((short)0+1)]) & h_short[(short)((short)8+1)])); h_short[(short)((short)12+2)]= (short) ((h_short[(short)((short)0+2)] & h_short[(short)((short)4+2)]) ^ ((~h_short[(short)((short)0+2)]) & h_short[(short)((short)8+2)])); h_short[(short)((short)12+3)]= (short) ((h_short[(short)((short)0+3)] & h_short[(short)((short)4+3)]) ^ ((~h_short[(short)((short)0+3)]) & h_short[(short)((short)8+3)])) ;
+		Util.setShort(dst, (short)(dstOff), h_short[(short)12]);
+		Util.setShort(dst, (short)(dstOff+2), h_short[(short)13]);
+		Util.setShort(dst, (short)(dstOff+4), h_short[(short)14]);
+		Util.setShort(dst, (short)(dstOff+6), h_short[(short)15]);
+	}
+	public static void test_Ch_fast(byte[] x, short xOff, byte[] y, short yOff, byte[] z, short zOff, byte[] dst, short dstOff){
+		short regA0, regA1, regA2, regA3;
+		short tmpA0, tmpA1, tmpA2, tmpA3;
+		h_short[(short)0]=Util.getShort(x, xOff);
+		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
+		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
+		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
+		h_short[(short)4]=Util.getShort(y, yOff);
+		h_short[(short)5]=Util.getShort(y, (short)(yOff+2));
+		h_short[(short)6]=Util.getShort(y, (short)(yOff+4));
+		h_short[(short)7]=Util.getShort(y, (short)(yOff+6));
+		h_short[(short)8]=Util.getShort(z, zOff);
+		h_short[(short)9]=Util.getShort(z, (short)(zOff+2));
+		h_short[(short)10]=Util.getShort(z, (short)(zOff+4));
+		h_short[(short)11]=Util.getShort(z, (short)(zOff+6));
+		tmpA0 = h_short[(short)0]; regA0 = (short) ((tmpA0 & h_short[(short)4]) ^ ((~tmpA0 ) & h_short[(short)8])); tmpA0 = h_short[(short)((short)0+1)]; regA1 = (short) ((tmpA0 & h_short[(short)((short)4+1)]) ^ ((~tmpA0 ) & h_short[(short)((short)8+1)])); tmpA0 = h_short[(short)((short)0+2)]; regA2 = (short) ((tmpA0 & h_short[(short)((short)4+2)]) ^ ((~tmpA0 ) & h_short[(short)((short)8+2)])); tmpA0 = h_short[(short)((short)0+3)]; regA3 = (short) ((tmpA0 & h_short[(short)((short)4+3)]) ^ ((~tmpA0 ) & h_short[(short)((short)8+3)])); ;
+		Util.setShort(dst, (short)(dstOff), regA0);
+		Util.setShort(dst, (short)(dstOff+2), regA1);
+		Util.setShort(dst, (short)(dstOff+4), regA2);
+		Util.setShort(dst, (short)(dstOff+6), regA3);
+	}
+	public static void test_Maj(byte[] x, short xOff, byte[] y, short yOff, byte[] z, short zOff, byte[] dst, short dstOff){
+		h_short[(short)0]=Util.getShort(x, xOff);
+		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
+		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
+		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
+		h_short[(short)4]=Util.getShort(y, yOff);
+		h_short[(short)5]=Util.getShort(y, (short)(yOff+2));
+		h_short[(short)6]=Util.getShort(y, (short)(yOff+4));
+		h_short[(short)7]=Util.getShort(y, (short)(yOff+6));
+		h_short[(short)8]=Util.getShort(z, zOff);
+		h_short[(short)9]=Util.getShort(z, (short)(zOff+2));
+		h_short[(short)10]=Util.getShort(z, (short)(zOff+4));
+		h_short[(short)11]=Util.getShort(z, (short)(zOff+6));
+		h_short[(short)12]= (short) ((h_short[(short)0] & h_short[(short)4]) ^ (h_short[(short)0] & h_short[(short)8]) ^ (h_short[(short)4] & h_short[(short)8])); h_short[(short)((short)12+1)]= (short) ((h_short[(short)((short)0+1)] & h_short[(short)((short)4+1)]) ^ (h_short[(short)((short)0+1)] & h_short[(short)((short)8+1)]) ^ (h_short[(short)((short)4+1)] & h_short[(short)((short)8+1)])); h_short[(short)((short)12+2)]= (short) ((h_short[(short)((short)0+2)] & h_short[(short)((short)4+2)]) ^ (h_short[(short)((short)0+2)] & h_short[(short)((short)8+2)]) ^ (h_short[(short)((short)4+2)] & h_short[(short)((short)8+2)])); h_short[(short)((short)12+3)]= (short) ((h_short[(short)((short)0+3)] & h_short[(short)((short)4+3)]) ^ (h_short[(short)((short)0+3)] & h_short[(short)((short)8+3)]) ^ (h_short[(short)((short)4+3)] & h_short[(short)((short)8+3)])) ;
+		Util.setShort(dst, (short)(dstOff), h_short[(short)12]);
+		Util.setShort(dst, (short)(dstOff+2), h_short[(short)13]);
+		Util.setShort(dst, (short)(dstOff+4), h_short[(short)14]);
+		Util.setShort(dst, (short)(dstOff+6), h_short[(short)15]);
+	}
+	public static void test_Maj_fast(byte[] x, short xOff, byte[] y, short yOff, byte[] z, short zOff, byte[] dst, short dstOff){
+		short regA0, regA1, regA2, regA3;
+		short tmpA0, tmpA1, tmpA2, tmpA3;
+		h_short[(short)0]=Util.getShort(x, xOff);
+		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
+		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
+		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
+		h_short[(short)4]=Util.getShort(y, yOff);
+		h_short[(short)5]=Util.getShort(y, (short)(yOff+2));
+		h_short[(short)6]=Util.getShort(y, (short)(yOff+4));
+		h_short[(short)7]=Util.getShort(y, (short)(yOff+6));
+		h_short[(short)8]=Util.getShort(z, zOff);
+		h_short[(short)9]=Util.getShort(z, (short)(zOff+2));
+		h_short[(short)10]=Util.getShort(z, (short)(zOff+4));
+		h_short[(short)11]=Util.getShort(z, (short)(zOff+6));
+		tmpA0 =h_short[(short)0]; tmpA1 =h_short[(short)4]; tmpA2 =h_short[(short)8]; regA0 = (short) ((tmpA0 & tmpA1 ) ^ (tmpA0 & tmpA2 ) ^ (tmpA1 & tmpA2 )); tmpA0 =h_short[(short)((short)0+1)]; tmpA1 =h_short[(short)((short)4+1)]; tmpA2 =h_short[(short)((short)8+1)]; regA1 = (short) ((tmpA0 & tmpA1 ) ^ (tmpA0 & tmpA2 ) ^ (tmpA1 & tmpA2 )); tmpA0 =h_short[(short)((short)0+2)]; tmpA1 =h_short[(short)((short)4+2)]; tmpA2 =h_short[(short)((short)8+2)]; regA2 = (short) ((tmpA0 & tmpA1 ) ^ (tmpA0 & tmpA2 ) ^ (tmpA1 & tmpA2 )); tmpA0 =h_short[(short)((short)0+3)]; tmpA1 =h_short[(short)((short)4+3)]; tmpA2 =h_short[(short)((short)8+3)]; regA3 = (short) ((tmpA0 & tmpA1 ) ^ (tmpA0 & tmpA2 ) ^ (tmpA1 & tmpA2 )); ;
+		Util.setShort(dst, (short)(dstOff), regA0);
+		Util.setShort(dst, (short)(dstOff+2), regA1);
+		Util.setShort(dst, (short)(dstOff+4), regA2);
+		Util.setShort(dst, (short)(dstOff+6), regA3);
+	}
+	public static void test_E0_opt(byte[] x, short xOff, byte[] dst, short dstOff){
+		short leftShifts;
+		h_short[(short)0]=Util.getShort(x, xOff);
+		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
+		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
+		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
+		leftShifts = (short)(16-((short)12)); tmp[(short)(TMP1+1)]= (short) (((h_short[(short)0]>>((short)12))&((short)0x000F)) | (h_short[(short)((short)0+3)]<<leftShifts)); tmp[(short)(TMP1+2)]= (short) (((h_short[(short)((short)0+1)]>>((short)12))&((short)0x000F)) | (h_short[(short)0]<<leftShifts)); tmp[(short)(TMP1+3)]= (short) (((h_short[(short)((short)0+2)]>>((short)12))&((short)0x000F)) | (h_short[(short)((short)0+1)]<<leftShifts)); tmp[TMP1]= (short) (((h_short[(short)((short)0+3)]>>((short)12))&((short)0x000F)) | (h_short[(short)((short)0+2)]<<leftShifts)) ; leftShifts = (short)(16-((short)2)); tmp[(short)(TMP2+2)]= (short) (((h_short[(short)0]>>((short)2))&((short)0x3FFF)) | (h_short[(short)((short)0+3)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((h_short[(short)((short)0+1)]>>((short)2))&((short)0x3FFF)) | (h_short[(short)0]<<leftShifts)); tmp[TMP2]= (short) (((h_short[(short)((short)0+2)]>>((short)2))&((short)0x3FFF)) | (h_short[(short)((short)0+1)]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((h_short[(short)((short)0+3)]>>((short)2))&((short)0x3FFF)) | (h_short[(short)((short)0+2)]<<leftShifts)) ; tmp[0]^=tmp[4]; tmp[1]^=tmp[5]; tmp[2]^=tmp[6]; tmp[3]^=tmp[7]; leftShifts = (short)(16-(short)7); tmp[(short)(TMP2+2)]= (short) (((h_short[(short)0]>>(short)7)&((short)0x01FF)) | (h_short[(short)((short)0+3)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((h_short[(short)((short)0+1)]>>(short)7)&((short)0x01FF)) | (h_short[(short)0]<<leftShifts)); tmp[TMP2]= (short) (((h_short[(short)((short)0+2)]>>(short)7)&((short)0x01FF)) | (h_short[(short)((short)0+1)]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((h_short[(short)((short)0+3)]>>(short)7)&((short)0x01FF)) | (h_short[(short)((short)0+2)]<<leftShifts)) ; h_short[(short)4]=(short) (tmp[0]^tmp[4]); h_short[(short)((short)4+1)]=(short) (tmp[1]^tmp[5]); h_short[(short)((short)4+2)]=(short) (tmp[2]^tmp[6]); h_short[(short)((short)4+3)]=(short) (tmp[3]^tmp[7]) ;
+		Util.setShort(dst, (short)(dstOff), h_short[(short)4]);
+		Util.setShort(dst, (short)(dstOff+2), h_short[(short)5]);
+		Util.setShort(dst, (short)(dstOff+4), h_short[(short)6]);
+		Util.setShort(dst, (short)(dstOff+6), h_short[(short)7]);
+	}
+	public static void test_E1_opt(byte[] x, short xOff, byte[] dst, short dstOff){
+		short leftShifts;
+		h_short[(short)0]=Util.getShort(x, xOff);
+		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
+		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
+		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
+		leftShifts = (short)(16-(short)14); tmp[TMP1]= (short) (((h_short[(short)0]>>(short)14)&((short)0x0003)) | (h_short[(short)((short)0+3)]<<leftShifts)); tmp[(short)(TMP1+1)]= (short) (((h_short[(short)((short)0+1)]>>(short)14)&((short)0x0003)) | (h_short[(short)0]<<leftShifts)); tmp[(short)(TMP1+2)]= (short) (((h_short[(short)((short)0+2)]>>(short)14)&((short)0x0003)) | (h_short[(short)((short)0+1)]<<leftShifts)); tmp[(short)(TMP1+3)]= (short) (((h_short[(short)((short)0+3)]>>(short)14)&((short)0x0003)) | (h_short[(short)((short)0+2)]<<leftShifts)); ; leftShifts = (short)(16-(short)2); tmp[(short)(TMP2+1)]= (short) (((h_short[(short)0]>>(short)2)&((short)0x3FFF)) | (h_short[(short)((short)0+3)]<<leftShifts)); tmp[(short)(TMP2+2)]= (short) (((h_short[(short)((short)0+1)]>>(short)2)&((short)0x3FFF)) | (h_short[(short)0]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((h_short[(short)((short)0+2)]>>(short)2)&((short)0x3FFF)) | (h_short[(short)((short)0+1)]<<leftShifts)); tmp[TMP2]= (short) (((h_short[(short)((short)0+3)]>>(short)2)&((short)0x3FFF)) | (h_short[(short)((short)0+2)]<<leftShifts)) ; tmp[0]^=tmp[4]; tmp[1]^=tmp[5]; tmp[2]^=tmp[6]; tmp[3]^=tmp[7]; leftShifts = (short)(16-(short)9); tmp[(short)(TMP2+2)]= (short) (((h_short[(short)0]>>(short)9)&((short)0x007F)) | (h_short[(short)((short)0+3)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((h_short[(short)((short)0+1)]>>(short)9)&((short)0x007F)) | (h_short[(short)0]<<leftShifts)); tmp[TMP2]= (short) (((h_short[(short)((short)0+2)]>>(short)9)&((short)0x007F)) | (h_short[(short)((short)0+1)]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((h_short[(short)((short)0+3)]>>(short)9)&((short)0x007F)) | (h_short[(short)((short)0+2)]<<leftShifts)) ; h_short[(short)4]=(short) (tmp[0]^tmp[4]); h_short[(short)((short)4+1)]=(short) (tmp[1]^tmp[5]); h_short[(short)((short)4+2)]=(short) (tmp[2]^tmp[6]); h_short[(short)((short)4+3)]=(short) (tmp[3]^tmp[7]) ;
+		Util.setShort(dst, (short)(dstOff), h_short[(short)4]);
+		Util.setShort(dst, (short)(dstOff+2), h_short[(short)5]);
+		Util.setShort(dst, (short)(dstOff+4), h_short[(short)6]);
+		Util.setShort(dst, (short)(dstOff+6), h_short[(short)7]);
+	}
+	public static void test_Sig0_opt(byte[] x, short xOff, byte[] dst, short dstOff){
+		short leftShifts;
+		h_short[(short)0]=Util.getShort(x, xOff);
+		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
+		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
+		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
+		leftShifts = (short)(16-(short)1); tmp[TMP1]= (short) (((h_short[(short)0]>>(short)1)&((short)0x7FFF)) | (h_short[(short)((short)0+3)]<<leftShifts)); tmp[(short)(TMP1+1)]= (short) (((h_short[(short)((short)0+1)]>>(short)1)&((short)0x7FFF)) | (h_short[(short)0]<<leftShifts)); tmp[(short)(TMP1+2)]= (short) (((h_short[(short)((short)0+2)]>>(short)1)&((short)0x7FFF)) | (h_short[(short)((short)0+1)]<<leftShifts)); tmp[(short)(TMP1+3)]= (short) (((h_short[(short)((short)0+3)]>>(short)1)&((short)0x7FFF)) | (h_short[(short)((short)0+2)]<<leftShifts)); ; leftShifts = (short)(16-(short)8); tmp[TMP2]= (short) (((h_short[(short)0]>>(short)8)&((short)0x00FF)) | (h_short[(short)((short)0+3)]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((h_short[(short)((short)0+1)]>>(short)8)&((short)0x00FF)) | (h_short[(short)0]<<leftShifts)); tmp[(short)(TMP2+2)]= (short) (((h_short[(short)((short)0+2)]>>(short)8)&((short)0x00FF)) | (h_short[(short)((short)0+1)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((h_short[(short)((short)0+3)]>>(short)8)&((short)0x00FF)) | (h_short[(short)((short)0+2)]<<leftShifts)); ; tmp[0]^=tmp[4]; tmp[1]^=tmp[5]; tmp[2]^=tmp[6]; tmp[3]^=tmp[7]; leftShifts = (short)(16-(short)7); tmp[TMP2]= (short) ((h_short[(short)0]>>(short)7)&((short)0x01FF)); tmp[(short)(TMP2+1)]= (short) (((h_short[(short)((short)0+1)]>>(short)7)&((short)0x01FF)) | (h_short[(short)0]<<leftShifts)); tmp[(short)(TMP2+2)]= (short) (((h_short[(short)((short)0+2)]>>(short)7)&((short)0x01FF)) | (h_short[(short)((short)0+1)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((h_short[(short)((short)0+3)]>>(short)7)&((short)0x01FF)) | (h_short[(short)((short)0+2)]<<leftShifts)) ; h_short[(short)4]=(short) (tmp[0]^tmp[4]); h_short[(short)((short)4+1)]=(short) (tmp[1]^tmp[5]); h_short[(short)((short)4+2)]=(short) (tmp[2]^tmp[6]); h_short[(short)((short)4+3)]=(short) (tmp[3]^tmp[7]) ;
+		Util.setShort(dst, (short)(dstOff), h_short[(short)4]);
+		Util.setShort(dst, (short)(dstOff+2), h_short[(short)5]);
+		Util.setShort(dst, (short)(dstOff+4), h_short[(short)6]);
+		Util.setShort(dst, (short)(dstOff+6), h_short[(short)7]);
+	}
+	public static void test_Sig1_opt(byte[] x, short xOff, byte[] dst, short dstOff){
+		short leftShifts;
+		h_short[(short)0]=Util.getShort(x, xOff);
+		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
+		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
+		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
+		leftShifts = (short)(16-(short)3); tmp[(short)(TMP1+1)]= (short) (((h_short[(short)0]>>(short)3)&((short)0x1FFF)) | (h_short[(short)((short)0+3)]<<leftShifts)); tmp[(short)(TMP1+2)]= (short) (((h_short[(short)((short)0+1)]>>(short)3)&((short)0x1FFF)) | (h_short[(short)0]<<leftShifts)); tmp[(short)(TMP1+3)]= (short) (((h_short[(short)((short)0+2)]>>(short)3)&((short)0x1FFF)) | (h_short[(short)((short)0+1)]<<leftShifts)); tmp[TMP1]= (short) (((h_short[(short)((short)0+3)]>>(short)3)&((short)0x1FFF)) | (h_short[(short)((short)0+2)]<<leftShifts)) ; leftShifts = (short)(16-(short)13); tmp[(short)(TMP2+3)]= (short) (((h_short[(short)0]>>(short)13)&((short)0x0007)) | (h_short[(short)((short)0+3)]<<leftShifts)); tmp[TMP2]= (short) (((h_short[(short)((short)0+1)]>>(short)13)&((short)0x0007)) | (h_short[(short)0]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((h_short[(short)((short)0+2)]>>(short)13)&((short)0x0007)) | (h_short[(short)((short)0+1)]<<leftShifts)); tmp[(short)(TMP2+2)]= (short) (((h_short[(short)((short)0+3)]>>(short)13)&((short)0x0007)) | (h_short[(short)((short)0+2)]<<leftShifts)) ; tmp[0]^=tmp[4]; tmp[1]^=tmp[5]; tmp[2]^=tmp[6]; tmp[3]^=tmp[7]; leftShifts = (short)(16-(short)6); tmp[TMP2]= (short) ((h_short[(short)0]>>(short)6)&((short)0x03FF)); tmp[(short)(TMP2+1)]= (short) (((h_short[(short)((short)0+1)]>>(short)6)&((short)0x03FF)) | (h_short[(short)0]<<leftShifts)); tmp[(short)(TMP2+2)]= (short) (((h_short[(short)((short)0+2)]>>(short)6)&((short)0x03FF)) | (h_short[(short)((short)0+1)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((h_short[(short)((short)0+3)]>>(short)6)&((short)0x03FF)) | (h_short[(short)((short)0+2)]<<leftShifts)) ; h_short[(short)4]=(short) (tmp[0]^tmp[4]); h_short[(short)((short)4+1)]=(short) (tmp[1]^tmp[5]); h_short[(short)((short)4+2)]=(short) (tmp[2]^tmp[6]); h_short[(short)((short)4+3)]=(short) (tmp[3]^tmp[7]) ;
+		Util.setShort(dst, (short)(dstOff), h_short[(short)4]);
+		Util.setShort(dst, (short)(dstOff+2), h_short[(short)5]);
+		Util.setShort(dst, (short)(dstOff+4), h_short[(short)6]);
+		Util.setShort(dst, (short)(dstOff+6), h_short[(short)7]);
+	}
+	public static void test_E0_fast(byte[] x, short xOff, byte[] dst, short dstOff){
+		short regA0, regA1, regA2, regA3;
+		short tmpA0, tmpA1, tmpA2, tmpA3;
+		h_short[(short)0]=Util.getShort(x, xOff);
+		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
+		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
+		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
+		tmpA0 = h_short[(short)0]; tmpA1 = h_short[(short)((short)0+1)]; tmpA2 = h_short[(short)((short)0+2)]; tmpA3 = h_short[(short)((short)0+3)]; regA0 = (short) ( (short) ( (tmpA3 >>>12) & (short)15 | ((short)(tmpA2 <<(4))) ) ^ (short) ( (tmpA2 >>>2) & (short)16383 | ((short)(tmpA1 <<(14))) ) ^ (short) ( (tmpA2 >>>7) & (short)511 | ((short)(tmpA1 <<(9))) ) ); regA1 = (short) ( (short) ( (tmpA0 >>>12) & (short)15 | ((short)(tmpA3 <<(4))) ) ^ (short) ( (tmpA3 >>>2) & (short)16383 | ((short)(tmpA2 <<(14))) ) ^ (short) ( (tmpA3 >>>7) & (short)511 | ((short)(tmpA2 <<(9))) ) ); regA2 = (short) ( (short) ( (tmpA1 >>>12) & (short)15 | ((short)(tmpA0 <<(4))) ) ^ (short) ( (tmpA0 >>>2) & (short)16383 | ((short)(tmpA3 <<(14))) ) ^ (short) ( (tmpA0 >>>7) & (short)511 | ((short)(tmpA3 <<(9))) ) ); regA3 = (short) ( (short) ( (tmpA2 >>>12) & (short)15 | ((short)(tmpA1 <<(4))) ) ^ (short) ( (tmpA1 >>>2) & (short)16383 | ((short)(tmpA0 <<(14))) ) ^ (short) ( (tmpA1 >>>7) & (short)511 | ((short)(tmpA0 <<(9))) ) ) ;
+		Util.setShort(dst, (short)(dstOff), regA0);
+		Util.setShort(dst, (short)(dstOff+2), regA1);
+		Util.setShort(dst, (short)(dstOff+4), regA2);
+		Util.setShort(dst, (short)(dstOff+6), regA3);
+	}
+	public static void test_E1_fast(byte[] x, short xOff, byte[] dst, short dstOff){
+		short regA0, regA1, regA2, regA3;
+		short tmpA0, tmpA1, tmpA2, tmpA3;
+		h_short[(short)0]=Util.getShort(x, xOff);
+		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
+		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
+		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
+		tmpA0 = h_short[(short)0]; tmpA1 = h_short[(short)((short)0+1)]; tmpA2 = h_short[(short)((short)0+2)]; tmpA3 = h_short[(short)((short)0+3)]; regA0 = (short) ( (short) ( (tmpA0 >>>14) & (short)3 | ((short)(tmpA3 <<(2))) ) ^ (short) ( (tmpA3 >>>2) & (short)16383 | ((short)(tmpA2 <<(14))) ) ^ (short) ( (tmpA2 >>>9) & (short)127 | ((short)(tmpA1 <<(7))) ) ); regA1 = (short) ( (short) ( (tmpA1 >>>14) & (short)3 | ((short)(tmpA0 <<(2))) ) ^ (short) ( (tmpA0 >>>2) & (short)16383 | ((short)(tmpA3 <<(14))) ) ^ (short) ( (tmpA3 >>>9) & (short)127 | ((short)(tmpA2 <<(7))) ) ); regA2 = (short) ( (short) ( (tmpA2 >>>14) & (short)3 | ((short)(tmpA1 <<(2))) ) ^ (short) ( (tmpA1 >>>2) & (short)16383 | ((short)(tmpA0 <<(14))) ) ^ (short) ( (tmpA0 >>>9) & (short)127 | ((short)(tmpA3 <<(7))) ) ); regA3 = (short) ( (short) ( (tmpA3 >>>14) & (short)3 | ((short)(tmpA2 <<(2))) ) ^ (short) ( (tmpA2 >>>2) & (short)16383 | ((short)(tmpA1 <<(14))) ) ^ (short) ( (tmpA1 >>>9) & (short)127 | ((short)(tmpA0 <<(7))) ) ) ;
+		Util.setShort(dst, (short)(dstOff), regA0);
+		Util.setShort(dst, (short)(dstOff+2), regA1);
+		Util.setShort(dst, (short)(dstOff+4), regA2);
+		Util.setShort(dst, (short)(dstOff+6), regA3);
+	}
+	public static void test_Sig0_fast(byte[] x, short xOff, byte[] dst, short dstOff){
+		short regA0, regA1, regA2, regA3;
+		short tmpA0, tmpA1, tmpA2, tmpA3;
+		h_short[(short)0]=Util.getShort(x, xOff);
+		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
+		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
+		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
+		tmpA0 = h_short[(short)0]; tmpA1 = h_short[(short)((short)0+1)]; tmpA2 = h_short[(short)((short)0+2)]; tmpA3 = h_short[(short)((short)0+3)]; regA0 = (short) ( (short) ( (tmpA0 >>>1) & (short)32767 | ((short)(tmpA3 <<(15))) ) ^ (short) ( (tmpA0 >>>8) & (short)255 | ((short)(tmpA3 <<(8))) ) ^ (short) ((tmpA0 >>>7) & (short)511) ); regA1 = (short) ( (short) ( (tmpA1 >>>1) & (short)32767 | ((short)(tmpA0 <<(15))) ) ^ (short) ( (tmpA1 >>>8) & (short)255 | ((short)(tmpA0 <<(8))) ) ^ (short) ( (tmpA1 >>>7) & (short)511 | ((short)(tmpA0 <<(9))) ) ); regA2 = (short) ( (short) ( (tmpA2 >>>1) & (short)32767 | ((short)(tmpA1 <<(15))) ) ^ (short) ( (tmpA2 >>>8) & (short)255 | ((short)(tmpA1 <<(8))) ) ^ (short) ( (tmpA2 >>>7) & (short)511 | ((short)(tmpA1 <<(9))) ) ); regA3 = (short) ( (short) ( (tmpA3 >>>1) & (short)32767 | ((short)(tmpA2 <<(15))) ) ^ (short) ( (tmpA3 >>>8) & (short)255 | ((short)(tmpA2 <<(8))) ) ^ (short) ( (tmpA3 >>>7) & (short)511 | ((short)(tmpA2 <<(9))) ) ) ;
+		Util.setShort(dst, (short)(dstOff), regA0);
+		Util.setShort(dst, (short)(dstOff+2), regA1);
+		Util.setShort(dst, (short)(dstOff+4), regA2);
+		Util.setShort(dst, (short)(dstOff+6), regA3);
+	}
+	public static void test_Sig1_fast(byte[] x, short xOff, byte[] dst, short dstOff){
+		short regA0, regA1, regA2, regA3;
+		short tmpA0, tmpA1, tmpA2, tmpA3;
+		h_short[(short)0]=Util.getShort(x, xOff);
+		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
+		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
+		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
+		tmpA0 = h_short[(short)0]; tmpA1 = h_short[(short)((short)0+1)]; tmpA2 = h_short[(short)((short)0+2)]; tmpA3 = h_short[(short)((short)0+3)]; regA0 = (short) ( (short) ( (tmpA3 >>>3) & (short)8191 | ((short)(tmpA2 <<(13))) ) ^ (short) ( (tmpA1 >>>13) & (short)7 | ((short)(tmpA0 <<(3))) ) ^ (short) ((tmpA0 >>>6) & (short)1023) ); regA1 = (short) ( (short) ( (tmpA0 >>>3) & (short)8191 | ((short)(tmpA3 <<(13))) ) ^ (short) ( (tmpA2 >>>13) & (short)7 | ((short)(tmpA1 <<(3))) ) ^ (short) ( (tmpA1 >>>6) & (short)1023 | ((short)(tmpA0 <<(10))) ) ); regA2 = (short) ( (short) ( (tmpA1 >>>3) & (short)8191 | ((short)(tmpA0 <<(13))) ) ^ (short) ( (tmpA3 >>>13) & (short)7 | ((short)(tmpA2 <<(3))) ) ^ (short) ( (tmpA2 >>>6) & (short)1023 | ((short)(tmpA1 <<(10))) ) ); regA3 = (short) ( (short) ( (tmpA2 >>>3) & (short)8191 | ((short)(tmpA1 <<(13))) ) ^ (short) ( (tmpA0 >>>13) & (short)7 | ((short)(tmpA3 <<(3))) ) ^ (short) ( (tmpA3 >>>6) & (short)1023 | ((short)(tmpA2 <<(10))) ) ) ;
+		Util.setShort(dst, (short)(dstOff), regA0);
+		Util.setShort(dst, (short)(dstOff+2), regA1);
+		Util.setShort(dst, (short)(dstOff+4), regA2);
+		Util.setShort(dst, (short)(dstOff+6), regA3);
+	}
+
+	public static boolean test_updateW(byte[] msgBlock, short msgOff, short roundmax){
+
+		short akku,posy,posx,addx,addy;
+		short off1, off2, off3;
+		short leftShifts;
+
+		short wOff=0;
+		for (short dstOff=0; dstOff<64; dstOff++){ w_short[dstOff]= Util.getShort(msgBlock, (short)((msgOff)+2*dstOff)); } ;
+		for (short round=0; round<roundmax; round++){
+			tmp[REG1]= w_short[wOff]; tmp[(short)(REG1+1)]= w_short[(short)(wOff+1)]; tmp[(short)(REG1+2)]= w_short[(short)(wOff+2)]; tmp[(short)(REG1+3)]= w_short[(short)(wOff+3)]; off1=(short)(((short)(wOff+56))%64); off2=(short)(((short)(wOff+36))%64); off3=(short)(((short)(wOff+4))%64); leftShifts = (short)(16-(short)3); tmp[(short)(TMP1+1)]= (short) (((w_short[off1]>>(short)3)&((short)0x1FFF)) | (w_short[(short)(off1+3)]<<leftShifts)); tmp[(short)(TMP1+2)]= (short) (((w_short[(short)(off1+1)]>>(short)3)&((short)0x1FFF)) | (w_short[off1]<<leftShifts)); tmp[(short)(TMP1+3)]= (short) (((w_short[(short)(off1+2)]>>(short)3)&((short)0x1FFF)) | (w_short[(short)(off1+1)]<<leftShifts)); tmp[TMP1]= (short) (((w_short[(short)(off1+3)]>>(short)3)&((short)0x1FFF)) | (w_short[(short)(off1+2)]<<leftShifts)) ; leftShifts = (short)(16-(short)13); tmp[(short)(TMP2+3)]= (short) (((w_short[off1]>>(short)13)&((short)0x0007)) | (w_short[(short)(off1+3)]<<leftShifts)); tmp[TMP2]= (short) (((w_short[(short)(off1+1)]>>(short)13)&((short)0x0007)) | (w_short[off1]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((w_short[(short)(off1+2)]>>(short)13)&((short)0x0007)) | (w_short[(short)(off1+1)]<<leftShifts)); tmp[(short)(TMP2+2)]= (short) (((w_short[(short)(off1+3)]>>(short)13)&((short)0x0007)) | (w_short[(short)(off1+2)]<<leftShifts)) ; tmp[0]^=tmp[4]; tmp[1]^=tmp[5]; tmp[2]^=tmp[6]; tmp[3]^=tmp[7]; leftShifts = (short)(16-(short)6); tmp[TMP2]= (short) ((w_short[off1]>>(short)6)&((short)0x03FF)); tmp[(short)(TMP2+1)]= (short) (((w_short[(short)(off1+1)]>>(short)6)&((short)0x03FF)) | (w_short[off1]<<leftShifts)); tmp[(short)(TMP2+2)]= (short) (((w_short[(short)(off1+2)]>>(short)6)&((short)0x03FF)) | (w_short[(short)(off1+1)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((w_short[(short)(off1+3)]>>(short)6)&((short)0x03FF)) | (w_short[(short)(off1+2)]<<leftShifts)) ; w_short[wOff]=(short) (tmp[0]^tmp[4]); w_short[(short)(wOff+1)]=(short) (tmp[1]^tmp[5]); w_short[(short)(wOff+2)]=(short) (tmp[2]^tmp[6]); w_short[(short)(wOff+3)]=(short) (tmp[3]^tmp[7]) ; akku = 0; posy = (short)((off2)+3); posx = (short)((wOff)+3); addx=w_short[posx]; addy=w_short[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=w_short[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=w_short[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=w_short[posy]; w_short[posx] = (short)(addx+addy+akku) ; leftShifts = (short)(16-(short)1); tmp[TMP1]= (short) (((w_short[off3]>>(short)1)&((short)0x7FFF)) | (w_short[(short)(off3+3)]<<leftShifts)); tmp[(short)(TMP1+1)]= (short) (((w_short[(short)(off3+1)]>>(short)1)&((short)0x7FFF)) | (w_short[off3]<<leftShifts)); tmp[(short)(TMP1+2)]= (short) (((w_short[(short)(off3+2)]>>(short)1)&((short)0x7FFF)) | (w_short[(short)(off3+1)]<<leftShifts)); tmp[(short)(TMP1+3)]= (short) (((w_short[(short)(off3+3)]>>(short)1)&((short)0x7FFF)) | (w_short[(short)(off3+2)]<<leftShifts)); ; leftShifts = (short)(16-(short)8); tmp[TMP2]= (short) (((w_short[off3]>>(short)8)&((short)0x00FF)) | (w_short[(short)(off3+3)]<<leftShifts)); tmp[(short)(TMP2+1)]= (short) (((w_short[(short)(off3+1)]>>(short)8)&((short)0x00FF)) | (w_short[off3]<<leftShifts)); tmp[(short)(TMP2+2)]= (short) (((w_short[(short)(off3+2)]>>(short)8)&((short)0x00FF)) | (w_short[(short)(off3+1)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((w_short[(short)(off3+3)]>>(short)8)&((short)0x00FF)) | (w_short[(short)(off3+2)]<<leftShifts)); ; tmp[0]^=tmp[4]; tmp[1]^=tmp[5]; tmp[2]^=tmp[6]; tmp[3]^=tmp[7]; leftShifts = (short)(16-(short)7); tmp[TMP2]= (short) ((w_short[off3]>>(short)7)&((short)0x01FF)); tmp[(short)(TMP2+1)]= (short) (((w_short[(short)(off3+1)]>>(short)7)&((short)0x01FF)) | (w_short[off3]<<leftShifts)); tmp[(short)(TMP2+2)]= (short) (((w_short[(short)(off3+2)]>>(short)7)&((short)0x01FF)) | (w_short[(short)(off3+1)]<<leftShifts)); tmp[(short)(TMP2+3)]= (short) (((w_short[(short)(off3+3)]>>(short)7)&((short)0x01FF)) | (w_short[(short)(off3+2)]<<leftShifts)) ; tmp[TMP1]=(short) (tmp[0]^tmp[4]); tmp[(short)(TMP1+1)]=(short) (tmp[1]^tmp[5]); tmp[(short)(TMP1+2)]=(short) (tmp[2]^tmp[6]); tmp[(short)(TMP1+3)]=(short) (tmp[3]^tmp[7]) ; akku = 0; posy = (short)((REG1)+3); posx = (short)((wOff)+3); addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku) ; akku = 0; posy = (short)((TMP1)+3); posx = (short)((wOff)+3); addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku); akku= (short)(( ((addx&addy)|((addx|addy) & ~w_short[posx])) >>15)&1); posy--; posx--; addx=w_short[posx]; addy=tmp[posy]; w_short[posx] = (short)(addx+addy+akku) ; wOff=(short)(((short)(wOff+4))%64) ;
+		}
+
+
+		for (short i=0; i<64; i++){
+			Util.setShort(msgBlock, (short)(2*i), w_short[i]);
+		}
+		return true;
+	}
+	public static boolean test_updateW_fast(byte[] msgBlock, short msgOff, short roundmax){
+
+		short regA0, regA1, regA2, regA3;
+		short regB0, regB1, regB2, regB3;
+		short tmpA0, tmpA1, tmpA2, tmpA3;
+		short off1, off2, off3;
+
+		short wOff=0;
+		for (short dstOff=0; dstOff<64; dstOff++){ w_short[dstOff]= Util.getShort(msgBlock, (short)((msgOff)+2*dstOff)); } ;
+		for (short round=0; round<roundmax; round++){
+			off1=(short)(((short)(wOff+56))%64); off2=(short)(((short)(wOff+36))%64); off3=(short)(((short)(wOff+4))%64); tmpA0 = w_short[off1]; tmpA1 = w_short[(short)(off1+1)]; tmpA2 = w_short[(short)(off1+2)]; tmpA3 = w_short[(short)(off1+3)]; regA0 = (short) ( (short) ( (tmpA3 >>>3) & (short)8191 | ((short)(tmpA2 <<(13))) ) ^ (short) ( (tmpA1 >>>13) & (short)7 | ((short)(tmpA0 <<(3))) ) ^ (short) ((tmpA0 >>>6) & (short)1023) ); regA1 = (short) ( (short) ( (tmpA0 >>>3) & (short)8191 | ((short)(tmpA3 <<(13))) ) ^ (short) ( (tmpA2 >>>13) & (short)7 | ((short)(tmpA1 <<(3))) ) ^ (short) ( (tmpA1 >>>6) & (short)1023 | ((short)(tmpA0 <<(10))) ) ); regA2 = (short) ( (short) ( (tmpA1 >>>3) & (short)8191 | ((short)(tmpA0 <<(13))) ) ^ (short) ( (tmpA3 >>>13) & (short)7 | ((short)(tmpA2 <<(3))) ) ^ (short) ( (tmpA2 >>>6) & (short)1023 | ((short)(tmpA1 <<(10))) ) ); regA3 = (short) ( (short) ( (tmpA2 >>>3) & (short)8191 | ((short)(tmpA1 <<(13))) ) ^ (short) ( (tmpA0 >>>13) & (short)7 | ((short)(tmpA3 <<(3))) ) ^ (short) ( (tmpA3 >>>6) & (short)1023 | ((short)(tmpA2 <<(10))) ) ) ; regB0 = w_short[off2]; regB1 = w_short[(short)(off2+1)]; regB2 =w_short[(short)(off2+2)]; regB3 =w_short[(short)(off2+3)]; tmpA0 = regA3 ; regA3 = (short)((regA3 )+(regB3 )); tmpA2 = (short)(( ((tmpA0 &(regB3 ))|((tmpA0 |(regB3 )) & ~(regA3 ))) >>15)&1); tmpA0 =regA2 ; regA2 = (short)((regA2 )+(regB2 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB2 ))|((tmpA0 |(regB2 )) & ~(regA2 ))) >>15)&1); tmpA0 =regA1 ; regA1 = (short)((regA1 )+(regB1 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB1 ))|((tmpA0 |(regB1 )) & ~(regA1 ))) >>15)&1); regA0 = (short)((regA0 )+(regB0 )+tmpA2 ) ; tmpA0 = w_short[off3]; tmpA1 = w_short[(short)(off3+1)]; tmpA2 = w_short[(short)(off3+2)]; tmpA3 = w_short[(short)(off3+3)]; regB0 = (short) ( (short) ( (tmpA0 >>>1) & (short)32767 | ((short)(tmpA3 <<(15))) ) ^ (short) ( (tmpA0 >>>8) & (short)255 | ((short)(tmpA3 <<(8))) ) ^ (short) ((tmpA0 >>>7) & (short)511) ); regB1 = (short) ( (short) ( (tmpA1 >>>1) & (short)32767 | ((short)(tmpA0 <<(15))) ) ^ (short) ( (tmpA1 >>>8) & (short)255 | ((short)(tmpA0 <<(8))) ) ^ (short) ( (tmpA1 >>>7) & (short)511 | ((short)(tmpA0 <<(9))) ) ); regB2 = (short) ( (short) ( (tmpA2 >>>1) & (short)32767 | ((short)(tmpA1 <<(15))) ) ^ (short) ( (tmpA2 >>>8) & (short)255 | ((short)(tmpA1 <<(8))) ) ^ (short) ( (tmpA2 >>>7) & (short)511 | ((short)(tmpA1 <<(9))) ) ); regB3 = (short) ( (short) ( (tmpA3 >>>1) & (short)32767 | ((short)(tmpA2 <<(15))) ) ^ (short) ( (tmpA3 >>>8) & (short)255 | ((short)(tmpA2 <<(8))) ) ^ (short) ( (tmpA3 >>>7) & (short)511 | ((short)(tmpA2 <<(9))) ) ) ; tmpA0 = regA3 ; regA3 = (short)((regA3 )+(regB3 )); tmpA2 = (short)(( ((tmpA0 &(regB3 ))|((tmpA0 |(regB3 )) & ~(regA3 ))) >>15)&1); tmpA0 =regA2 ; regA2 = (short)((regA2 )+(regB2 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB2 ))|((tmpA0 |(regB2 )) & ~(regA2 ))) >>15)&1); tmpA0 =regA1 ; regA1 = (short)((regA1 )+(regB1 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB1 ))|((tmpA0 |(regB1 )) & ~(regA1 ))) >>15)&1); regA0 = (short)((regA0 )+(regB0 )+tmpA2 ) ; regB0 = w_short[wOff]; regB1 = w_short[(short)(wOff+1)]; regB2 =w_short[(short)(wOff+2)]; regB3 =w_short[(short)(wOff+3)]; tmpA0 = regA3 ; regA3 = (short)((regA3 )+(regB3 )); tmpA2 = (short)(( ((tmpA0 &(regB3 ))|((tmpA0 |(regB3 )) & ~(regA3 ))) >>15)&1); tmpA0 =regA2 ; regA2 = (short)((regA2 )+(regB2 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB2 ))|((tmpA0 |(regB2 )) & ~(regA2 ))) >>15)&1); tmpA0 =regA1 ; regA1 = (short)((regA1 )+(regB1 )+tmpA2 ); tmpA2 = (short)(( ((tmpA0 &(regB1 ))|((tmpA0 |(regB1 )) & ~(regA1 ))) >>15)&1); regA0 = (short)((regA0 )+(regB0 )+tmpA2 ) ; regB0 = w_short[wOff]; regB1 = w_short[(short)(wOff+1)]; regB2 = w_short[(short)(wOff+2)]; regB3 = w_short[(short)(wOff+3)]; w_short[wOff]= regA0 ; w_short[(short)(wOff+1)]= regA1 ; w_short[(short)(wOff+2)]= regA2 ; w_short[(short)(wOff+3)]= regA3 ; wOff=(short)(((short)(wOff+4))%64) ;
+		}
+
+
+		for (short i=0; i<64; i++){
+			Util.setShort(msgBlock, (short)(2*i), w_short[i]);
+		}
+		return true;
+	}
 }
