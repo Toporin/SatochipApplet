@@ -72,47 +72,6 @@ import javacard.framework.Util;
 	tmp##1=x[tmp##0];\
 	x[tmp##0] = (short)(tmp##1+y##0+tmp##2);\
 	
-#define Rotnb(src, srcOffset, dst, dstOffset, rightShifts, mask)\
-	leftShifts = (short)(16-rightShifts);\
-	dst[dstOffset]= (short) (((src[srcOffset]>>rightShifts)&mask) | (src[(short)(srcOffset+3)]<<leftShifts));\
-	dst[(short)(dstOffset+1)]= (short) (((src[(short)(srcOffset+1)]>>rightShifts)&mask) | (src[srcOffset]<<leftShifts));\
-	dst[(short)(dstOffset+2)]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));\
-	dst[(short)(dstOffset+3)]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts));\
-	
-#define Rotnb16b(src, srcOffset, dst, dstOffset, rightShifts, mask)\
-	leftShifts = (short)(16-rightShifts);\
-	dst[(short)(dstOffset+1)]= (short) (((src[srcOffset]>>rightShifts)&mask) | (src[(short)(srcOffset+3)]<<leftShifts));\
-	dst[(short)(dstOffset+2)]= (short) (((src[(short)(srcOffset+1)]>>rightShifts)&mask) | (src[srcOffset]<<leftShifts));\
-	dst[(short)(dstOffset+3)]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));\
-	dst[dstOffset]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts))
-
-#define Rotnb32b(src, srcOffset, dst, dstOffset, rightShifts, mask)\
-	leftShifts = (short)(16-rightShifts);\
-	dst[(short)(dstOffset+2)]= (short) (((src[srcOffset]>>rightShifts)&mask) | (src[(short)(srcOffset+3)]<<leftShifts));\
-	dst[(short)(dstOffset+3)]= (short) (((src[(short)(srcOffset+1)]>>rightShifts)&mask) | (src[srcOffset]<<leftShifts));\
-	dst[dstOffset]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));\
-	dst[(short)(dstOffset+1)]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts))
-
-#define Rotnb48b(src, srcOffset, dst, dstOffset, rightShifts, mask)\
-	leftShifts = (short)(16-rightShifts);\
-	dst[(short)(dstOffset+3)]= (short) (((src[srcOffset]>>rightShifts)&mask) | (src[(short)(srcOffset+3)]<<leftShifts));\
-	dst[dstOffset]= (short) (((src[(short)(srcOffset+1)]>>rightShifts)&mask) | (src[srcOffset]<<leftShifts));\
-	dst[(short)(dstOffset+1)]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));\
-	dst[(short)(dstOffset+2)]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts))
-	
-#define Shiftnb(src, srcOffset, dst, dstOffset, rightShifts, mask)\
-	leftShifts = (short)(16-rightShifts);\
-	dst[dstOffset]= (short) ((src[srcOffset]>>rightShifts)&mask);\
-	dst[(short)(dstOffset+1)]= (short) (((src[(short)(srcOffset+1)]>>rightShifts)&mask) | (src[srcOffset]<<leftShifts));\
-	dst[(short)(dstOffset+2)]= (short) (((src[(short)(srcOffset+2)]>>rightShifts)&mask) | (src[(short)(srcOffset+1)]<<leftShifts));\
-	dst[(short)(dstOffset+3)]= (short) (((src[(short)(srcOffset+3)]>>rightShifts)&mask) | (src[(short)(srcOffset+2)]<<leftShifts))   
-		
-#define Ch(x, xOff, y, yOff, z, zOff, dst, dstOff)\
-	dst[dstOff]= (short) ((x[xOff] & y[yOff]) ^ ((~x[xOff]) & z[zOff]));\
-	dst[(short)(dstOff+1)]= (short) ((x[(short)(xOff+1)] & y[(short)(yOff+1)]) ^ ((~x[(short)(xOff+1)]) & z[(short)(zOff+1)]));\
-	dst[(short)(dstOff+2)]= (short) ((x[(short)(xOff+2)] & y[(short)(yOff+2)]) ^ ((~x[(short)(xOff+2)]) & z[(short)(zOff+2)]));\
-	dst[(short)(dstOff+3)]= (short) ((x[(short)(xOff+3)] & y[(short)(yOff+3)]) ^ ((~x[(short)(xOff+3)]) & z[(short)(zOff+3)]))
-
 #define Ch_fast(x, xOff, y, yOff, z, zOff, dst, tmp)\
 	tmp##0= x[xOff];\
 	dst##0= (short) ((tmp##0 & y[yOff]) ^ ((~tmp##0) & z[zOff]));\
@@ -123,12 +82,6 @@ import javacard.framework.Util;
 	tmp##0= x[(short)(xOff+3)];\
 	dst##3= (short) ((tmp##0 & y[(short)(yOff+3)]) ^ ((~tmp##0) & z[(short)(zOff+3)]));	
 	
-#define Maj(x, xOff, y, yOff, z, zOff, dst, dstOff)\
-	dst[dstOff]= (short) ((x[xOff] & y[yOff]) ^ (x[xOff] & z[zOff]) ^ (y[yOff] & z[zOff]));\
-	dst[(short)(dstOff+1)]= (short) ((x[(short)(xOff+1)] & y[(short)(yOff+1)]) ^ (x[(short)(xOff+1)] & z[(short)(zOff+1)]) ^ (y[(short)(yOff+1)] & z[(short)(zOff+1)]));\
-	dst[(short)(dstOff+2)]= (short) ((x[(short)(xOff+2)] & y[(short)(yOff+2)]) ^ (x[(short)(xOff+2)] & z[(short)(zOff+2)]) ^ (y[(short)(yOff+2)] & z[(short)(zOff+2)]));\
-	dst[(short)(dstOff+3)]= (short) ((x[(short)(xOff+3)] & y[(short)(yOff+3)]) ^ (x[(short)(xOff+3)] & z[(short)(zOff+3)]) ^ (y[(short)(yOff+3)] & z[(short)(zOff+3)]))
-
 #define Maj_fast(x, xOff, y, yOff, z, zOff, dst, tmp)\
 	tmp##0=x[xOff];\
 	tmp##1=y[yOff];\
@@ -146,78 +99,9 @@ import javacard.framework.Util;
 	tmp##1=y[(short)(yOff+3)];\
 	tmp##2=z[(short)(zOff+3)];\
 	dst##3= (short) ((tmp##0 & tmp##1) ^ (tmp##0 & tmp##2) ^ (tmp##1 & tmp##2));\
-	
-#define InitW(msgBlock, msgOff)\
-	for (short dstOff=0; dstOff<64; dstOff++){\
-		w_short[dstOff]= Util.getShort(msgBlock, (short)((msgOff)+2*dstOff));\
-	}
-
-#define getK(round, dst, dstOff)\
-	dst[dstOff]=K_SHORT[(short)(4*(round))];\
-	dst[(short)(dstOff+1)]=K_SHORT[(short)(4*(round)+1)];\
-	dst[(short)(dstOff+2)]=K_SHORT[(short)(4*(round)+2)];\
-	dst[(short)(dstOff+3)]=K_SHORT[(short)(4*(round)+3)]
-	
-#define getK_fast(round, dst)\
-	dst##0=K_SHORT[(short)(4*(round))];\
-	dst##1=K_SHORT[(short)(4*(round)+1)];\
-	dst##2=K_SHORT[(short)(4*(round)+2)];\
-	dst##3=K_SHORT[(short)(4*(round)+3)]	
-	
-#define E0_opt(x, xOff, dst, dstOff)\
-	Rotnb16b(x, xOff, tmp, TMP1, ((short)12), ((short)0x000F));\
-	Rotnb32b(x, xOff, tmp, TMP2, ((short)2), ((short)0x3FFF));\
-	tmp[0]^=tmp[4];\
-	tmp[1]^=tmp[5];\
-	tmp[2]^=tmp[6];\
-	tmp[3]^=tmp[7];\
-	Rotnb32b(x, xOff, tmp, TMP2, (short)7, ((short)0x01FF));\
-	dst[dstOff]=(short) (tmp[0]^tmp[4]);\
-	dst[(short)(dstOff+1)]=(short) (tmp[1]^tmp[5]);\
-	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);\
-	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7])	
-
-#define E1_opt(x, xOff, dst, dstOff)\
-	Rotnb(x, xOff, tmp, TMP1, (short)14, ((short)0x0003));\
-	Rotnb16b(x, xOff, tmp, TMP2, (short)2, ((short)0x3FFF));\
-	tmp[0]^=tmp[4];\
-	tmp[1]^=tmp[5];\
-	tmp[2]^=tmp[6];\
-	tmp[3]^=tmp[7];\
-	Rotnb32b(x, xOff, tmp, TMP2, (short)9, ((short)0x007F));\
-	dst[dstOff]=(short) (tmp[0]^tmp[4]);\
-	dst[(short)(dstOff+1)]=(short) (tmp[1]^tmp[5]);\
-	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);\
-	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7])	
-	
-#define Sig0(x, xOff, dst, dstOff)\
-	Rotnb(x, xOff, tmp, TMP1, (short)1, ((short)0x7FFF));\
-	Rotnb(x, xOff, tmp, TMP2, (short)8, ((short)0x00FF));\
-	tmp[0]^=tmp[4];\
-	tmp[1]^=tmp[5];\
-	tmp[2]^=tmp[6];\
-	tmp[3]^=tmp[7];\
-	Shiftnb(x, xOff, tmp, TMP2, (short)7, ((short)0x01FF));\
-	dst[dstOff]=(short) (tmp[0]^tmp[4]);\
-	dst[(short)(dstOff+1)]=(short) (tmp[1]^tmp[5]);\
-	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);\
-	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7])	
-
-#define Sig1_opt(x, xOff, dst, dstOff)\
-	Rotnb16b(x, xOff, tmp, TMP1, (short)3, ((short)0x1FFF));\
-	Rotnb48b(x, xOff, tmp, TMP2, (short)13, ((short)0x0007));\
-	tmp[0]^=tmp[4];\
-	tmp[1]^=tmp[5];\
-	tmp[2]^=tmp[6];\
-	tmp[3]^=tmp[7];\
-	Shiftnb(x, xOff, tmp, TMP2, (short)6, ((short)0x03FF));\
-	dst[dstOff]=(short) (tmp[0]^tmp[4]);\
-	dst[(short)(dstOff+1)]=(short) (tmp[1]^tmp[5]);\
-	dst[(short)(dstOff+2)]=(short) (tmp[2]^tmp[6]);\
-	dst[(short)(dstOff+3)]=(short) (tmp[3]^tmp[7])
-
-
+		
 /*
+ Based on https://github.com/LedgerHQ/ledger-javacard/blob/master/src-preprocessed/com/ledger/wallet/SHA512.javap
  Unrolled versions of
   
  #define r0(h,l,n) \
@@ -225,58 +109,48 @@ import javacard.framework.Util;
       ( (h>>>n) & ~(((short)0xFFFF<<(16-n)) )  | \
         ((short)(l<<(16-n)))              )
 */        
- 
  #define r0_6(h,l) \
- 	(short) \
-      ( (h>>>6) & (short)1023  | \
+ 	  ( (h>>>6) & (short)1023  | \
         ((short)(l<<(10)))              )
 
 #define r0_7(h,l) \
- 	(short) \
-      ( (h>>>7) & (short)511  | \
+ 	  ( (h>>>7) & (short)511  | \
         ((short)(l<<(9)))              )
 
 #define r0_3(h,l) \
- 	(short) \
-      ( (h>>>3) & (short)8191  | \
+ 	  ( (h>>>3) & (short)8191  | \
         ((short)(l<<(13)))              )
 
 #define r0_13(h,l) \
- 	(short) \
-      ( (h>>>13) & (short)7  | \
+ 	  ( (h>>>13) & (short)7  | \
         ((short)(l<<(3)))              )
         
 #define r0_1(h,l) \
- 	(short) \
-      ( (h>>>1) & (short)32767  | \
+ 	  ( (h>>>1) & (short)32767  | \
         ((short)(l<<(15)))              )
         
 #define r0_8(h,l) \
- 	(short) \
-      ( (h>>>8) & (short)255  | \
+ 	  ( (h>>>8) & (short)255  | \
         ((short)(l<<(8)))              )
 
 #define r0_14(h,l) \
- 	(short) \
-      ( (h>>>14) & (short)3  | \
+ 	  ( (h>>>14) & (short)3  | \
         ((short)(l<<(2)))              )
 
 #define r0_2(h,l) \
- 	(short) \
-      ( (h>>>2) & (short)16383  | \
+ 	  ( (h>>>2) & (short)16383  | \
         ((short)(l<<(14)))              )
 
 #define r0_9(h,l) \
- 	(short) \
-      ( (h>>>9) & (short)127  | \
+ 	  ( (h>>>9) & (short)127  | \
         ((short)(l<<(7)))              )
 
 #define r0_12(h,l) \
- 	(short) \
-      ( (h>>>12) & (short)15  | \
+ 	  ( (h>>>12) & (short)15  | \
         ((short)(l<<(4)))              )
 
 /*
+ Based on https://github.com/LedgerHQ/ledger-javacard/blob/master/src-preprocessed/com/ledger/wallet/SHA512.javap
  Unrolled versions of
               
  #define s0(h,n) \
@@ -285,15 +159,11 @@ import javacard.framework.Util;
 */
          
 #define s0_6(h) \
-    (short) \
       ((h>>>6) & (short)1023)
 
 #define s0_7(h) \
-    (short) \
       ((h>>>7) & (short)511)
-	
-	
-	
+		
 #define E0_fast(x, xOff, dst, tmp)\
 	tmp##0= x[xOff];\
 	tmp##1= x[(short)(xOff+1)];\
@@ -334,23 +204,16 @@ import javacard.framework.Util;
 	dst##2= (short) (r0_3(tmp##1,tmp##0) ^ r0_13(tmp##3,tmp##2) ^ r0_6(tmp##2,tmp##1));\
 	dst##3= (short) (r0_3(tmp##2,tmp##1) ^ r0_13(tmp##0,tmp##3) ^ r0_6(tmp##3,tmp##2))
 	
-#define updateW(w, wOff, dst, dstOff)\
-	dst[dstOff]= w[wOff];\
-	dst[(short)(dstOff+1)]= w[(short)(wOff+1)];\
-	dst[(short)(dstOff+2)]= w[(short)(wOff+2)];\
-	dst[(short)(dstOff+3)]= w[(short)(wOff+3)];\
-	off1=(short)(((short)(wOff+56))%64);\
-	off2=(short)(((short)(wOff+36))%64);\
-	off3=(short)(((short)(wOff+4))%64);\
-	MessageSchedule(w, off1, w, off2, w, off3, dst, dstOff, w, wOff);\
-	wOff=(short)(((short)(wOff+4))%64)	
-
-#define MessageSchedule(w, wOff, x, xOff, y, yOff, z, zOff, dst, dstOff)\
-	Sig1_opt(w, wOff, dst, dstOff);\
-	add_carry(dst, dstOff, x, xOff);\
-	Sig0(y, yOff, tmp, TMP1);\
-	add_carry(dst, dstOff, z, zOff);\
-	add_carry(dst, dstOff, tmp, TMP1)
+#define getK_fast(round, dst)\
+	dst##0=K_SHORT[(short)(4*(round))];\
+	dst##1=K_SHORT[(short)(4*(round)+1)];\
+	dst##2=K_SHORT[(short)(4*(round)+2)];\
+	dst##3=K_SHORT[(short)(4*(round)+3)]		
+	
+#define InitW(msgBlock, msgOff)\
+	for (short dstOff=0; dstOff<64; dstOff++){\
+		w_short[dstOff]= Util.getShort(msgBlock, (short)((msgOff)+2*dstOff));\
+	}
 	
 #define updateW_fast(w, wOff, dstcpy, dstnew, tmp)\
 	off1=(short)(((short)(wOff+56))%64);\
@@ -377,7 +240,6 @@ import javacard.framework.Util;
 	add_carry_fast(dstnew, dstcpy, tmp);\
 	dstcpy##0= z[zOff]; dstcpy##1= z[(short)(zOff+1)]; dstcpy##2=z[(short)(zOff+2)]; dstcpy##3=z[(short)(zOff+3)];\
 	add_carry_fast(dstnew, dstcpy, tmp)
-
 	
 public class Sha512 {
     
@@ -475,12 +337,6 @@ public class Sha512 {
 	  (short) 0x6c44,(short) 0x198c,(short) 0x4a47,(short) 0x5817    	
     };
 	
-	public static short[] tmp;
-	public static final short TMP1=0;
-	public static final short TMP2=4;
-	public static final short REG1=8;
-	public static final short REG2=12;
-    
     public static short[] h_short;
     public static short[] w_short;
     
@@ -489,16 +345,16 @@ public class Sha512 {
     public static short bufferOff;
     public static short bufferLeft;
 	
-    public static byte[] dataSize; 
-	public static final short MSGSIZE=0;
-	public static final short CHUNKSIZE=4;	
+	// used in reset(), update() & doFinal() to store size of msg to hash
+    // public static byte[] dataSize; 
+	// public static final short MSGSIZE=0;
+	// public static final short CHUNKSIZE=4;	
 	
     public static void init(){
     	
     	w_short= JCSystem.makeTransientShortArray((short) (64), JCSystem.CLEAR_ON_DESELECT);
     	h_short= JCSystem.makeTransientShortArray((short) (32), JCSystem.CLEAR_ON_DESELECT);
-    	//tmp= JCSystem.makeTransientShortArray((short) (16), JCSystem.CLEAR_ON_DESELECT);    
-		
+    	
         hashState= JCSystem.makeTransientShortArray((short) (32), JCSystem.CLEAR_ON_DESELECT);
         buffer= JCSystem.makeTransientByteArray((short) (128), JCSystem.CLEAR_ON_DESELECT);
 		
@@ -574,83 +430,6 @@ public class Sha512 {
     	
         return (short)64;
     } 
-	
-	/*
-    public static void CompressionFunction(short[] state, short stateOff, byte[] msgBlock, short msgOff){
-    	
-		// temporary value for inline method
-		short akku,posy,posx,addx,addy; // used in add_carry
-		short off1, off2, off3; 
-		short leftShifts; // used in E0, E1, Sig0, Sig1
-    		
-		// stateOff => 32 short state (512 bits)
-    	// msgBlock => 128 byte data  (1024 bits)
-    	InitW(msgBlock, msgOff);
-    	        
-    	short hOff=0, wOff=0;
-		for (short round=0; round<80; round++){
-    	        
-    		// update W and get wCurrent
-    		//wOff=updateW(w_short, wOff, tmp, REG1);
-			updateW(w_short, wOff, tmp, REG1);               
-			  
-    		// get K
-    		getK(round, tmp, REG2);
-    	        
-    		// reg1= K+wCurrent
-    		add_carry(tmp, REG1, tmp, REG2);
-    		
-    		// reg1= K+wCurrent+h
-			off1= (short)(((short)(hOff+28))%32);
-    		add_carry(tmp, REG1, state, off1);
-
-    		// reg2= Ch(e,f,g)
-    		off1=(short)(((short)(hOff+16))%32); 
-			off2=(short)(((short)(hOff+20))%32);
-			off3=(short)(((short)(hOff+24))%32);
-			Ch(state, off1, state, off2, state, off3, tmp, REG2);
-			
-    		// reg1= K+wCurrent+h+Ch(e,f,g)
-    		add_carry(tmp, REG1, tmp, REG2);
-    		
-    		// reg2= E1(e)
-			off1=(short)(((short)(hOff+16))%32);
-            E1_opt(state, off1, tmp, REG2);
-    		
-    		// reg1= K+wCurrent+Ch(e,f,g)+E1
-    		add_carry(tmp, REG1, tmp, REG2);
-    		
-    		// d= d+reg1
-			off1= (short)(((short)(hOff+12))%32);
-    		add_carry(state, off1, tmp, REG1);
-    		
-    		// reg2= Maj(a,b,c)
-    		//Maj(state, hOff, state, (short)(((short)(hOff+4))%32), state, (short)(((short)(hOff+8))%32), tmp, REG2);
-    		off1= (short)(((short)(hOff+4))%32);
-			off2= (short)(((short)(hOff+8))%32);
-			Maj(state, hOff, state, off1, state, off2, tmp, REG2);
-			
-    		// reg1= reg1+Maj(a,b,c)
-    		add_carry(tmp, REG1, tmp, REG2);
-    		
-    		// reg2= E0(a)
-            E0_opt(state, hOff, tmp, REG2);
-    		
-    		// reg1= reg1+E0(a)
-    		add_carry(tmp, REG1, tmp, REG2);
-    		
-    		//update state(h) with reg1
-    		state[(short)(((short)(hOff+28))%32)]= tmp[8];
-    		state[(short)(((short)(hOff+29))%32)]= tmp[9];
-    		state[(short)(((short)(hOff+30))%32)]= tmp[10];
-    		state[(short)(((short)(hOff+31))%32)]= tmp[11];
-    		
-    		// update offset
-    		hOff= (short)(((short)(32+hOff-4))%32);
-                
-    	}// end for	
-    }*/
-
 
     public static void CompressionFunction(short[] state, short stateOff, byte[] msgBlock, short msgOff){
     	
@@ -725,6 +504,7 @@ public class Sha512 {
     	}// end for	
     }
 
+	
 	/*     
 	public static void reset(){
         bufferOff=0;
@@ -736,9 +516,7 @@ public class Sha512 {
             dataSize[i]=(byte)0;
         }
     }
-	*/   
-	
-	/*    
+	    
 	public static void update(byte[] inBuff, short inOffset, short inLength){
         
 		// for additions
@@ -780,9 +558,9 @@ public class Sha512 {
         bufferLeft-=inLength;
         bufferOff+=inLength;
     } 
-	*/
+	
 	 
-	/*     
+	     
 	public static short doFinal(byte[] inBuff, short inOffset, short inLength, byte[] outBuff, short outOffset){
         
 		// for additions
@@ -836,338 +614,21 @@ public class Sha512 {
         
         return (short)64;
     } 
+	
+	public static boolean add_carry_byte(byte[] x, short offsetx, byte[] y, short offsety, short size){
+        short digit_mask = 0xff;
+		short digit_len = 8;
+		short akku = 0;
+        short j = (short)(offsetx+size-1); 
+        for(short i = (short)(offsety+size-1); i >= offsety; i--, j--) {
+            akku = (short)(akku + (x[j] & digit_mask) + (y[i] & digit_mask));
+
+            x[j] = (byte)(akku & digit_mask);
+            akku = (short)((akku >>> digit_len) & digit_mask);
+        }
+        return akku != 0;
+    }
 	*/
-    	
-	// unit testing methods
-	public static void test_add_carry(byte[] x, short offsetx, byte[] y, short offsety){
-		short akku,posy,posx,addx,addy;
-		h_short[(short)0]=Util.getShort(x, offsetx);
-		h_short[(short)1]=Util.getShort(x, (short)(offsetx+2));
-		h_short[(short)2]=Util.getShort(x, (short)(offsetx+4));
-		h_short[(short)3]=Util.getShort(x, (short)(offsetx+6));
-		h_short[(short)4]=Util.getShort(y, offsety);
-		h_short[(short)5]=Util.getShort(y, (short)(offsety+2));
-		h_short[(short)6]=Util.getShort(y, (short)(offsety+4));
-		h_short[(short)7]=Util.getShort(y, (short)(offsety+6));
-		add_carry(h_short, (short)0, h_short, (short)4);
-		Util.setShort(x, (short)(offsetx), h_short[(short)0]); 
-		Util.setShort(x, (short)(offsetx+2), h_short[(short)1]); 
-		Util.setShort(x, (short)(offsetx+4), h_short[(short)2]); 
-		Util.setShort(x, (short)(offsetx+6), h_short[(short)3]); 	
-	}
-	public static void test_add_carry_fast(byte[] x, short offsetx, byte[] y, short offsety){
-		short off1, off2, off3; 
-		short regA0, regA1, regA2, regA3;
-		short regB0, regB1, regB2, regB3;
-		short tmpA0, tmpA1, tmpA2, tmpA3;
-		regA0= Util.getShort(x, offsetx);
-		regA1= Util.getShort(x, (short)(offsetx+2));
-		regA2= Util.getShort(x, (short)(offsetx+4));
-		regA3= Util.getShort(x, (short)(offsetx+6));
-		regB0= Util.getShort(y, offsety);
-		regB1= Util.getShort(y, (short)(offsety+2));
-		regB2= Util.getShort(y, (short)(offsety+4));
-		regB3= Util.getShort(y, (short)(offsety+6));		
-		add_carry_fast(regA, regB, tmpA);
-		Util.setShort(x, (short)(offsetx), regA0); 
-		Util.setShort(x, (short)(offsetx+2), regA1); 
-		Util.setShort(x, (short)(offsetx+4), regA2); 
-		Util.setShort(x, (short)(offsetx+6), regA3); 		
-	}
-	public static void test_add_carry_fast2(byte[] x, short offsetx, byte[] y, short offsety){		
-		short off1, off2, off3; 
-		short regA0, regA1, regA2, regA3;
-		short tmpA0, tmpA1, tmpA2, tmpA3;
-		h_short[(short)0]=Util.getShort(x, offsetx);
-		h_short[(short)1]=Util.getShort(x, (short)(offsetx+2));
-		h_short[(short)2]=Util.getShort(x, (short)(offsetx+4));
-		h_short[(short)3]=Util.getShort(x, (short)(offsetx+6));
-		h_short[(short)4]=Util.getShort(y, offsety);
-		h_short[(short)5]=Util.getShort(y, (short)(offsety+2));
-		h_short[(short)6]=Util.getShort(y, (short)(offsety+4));
-		h_short[(short)7]=Util.getShort(y, (short)(offsety+6));
-		add_carry_fast2(h_short, (short)0, h_short, (short)4, regA, tmpA);
-		Util.setShort(x, (short)(offsetx), regA0); 
-		Util.setShort(x, (short)(offsetx+2), regA1); 
-		Util.setShort(x, (short)(offsetx+4), regA2); 
-		Util.setShort(x, (short)(offsetx+6), regA3); 			
-	}		
-	public static void test_add_carry_fast3(byte[] x, short offsetx, byte[] y, short offsety){
-		short off1, off2, off3; 
-		short regA0, regA1, regA2, regA3;
-		short regB0, regB1, regB2, regB3;
-		short tmpA0, tmpA1, tmpA2, tmpA3;
-		h_short[(short)0]=Util.getShort(x, offsetx);
-		h_short[(short)1]=Util.getShort(x, (short)(offsetx+2));
-		h_short[(short)2]=Util.getShort(x, (short)(offsetx+4));
-		h_short[(short)3]=Util.getShort(x, (short)(offsetx+6));
-		regB0= Util.getShort(y, offsety);
-		regB1= Util.getShort(y, (short)(offsety+2));
-		regB2= Util.getShort(y, (short)(offsety+4));
-		regB3= Util.getShort(y, (short)(offsety+6));		
-		add_carry_fast3(h_short, (short)0, regB, tmpA);
-		Util.setShort(x, (short)(offsetx), h_short[(short)0]); 
-		Util.setShort(x, (short)(offsetx+2), h_short[(short)1]); 
-		Util.setShort(x, (short)(offsetx+4), h_short[(short)2]); 
-		Util.setShort(x, (short)(offsetx+6), h_short[(short)3]); 	
-	}	
 	
-	public static void test_Ch(byte[] x, short xOff, byte[] y, short yOff, byte[] z, short zOff, byte[] dst, short dstOff){
-		h_short[(short)0]=Util.getShort(x, xOff);
-		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
-		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
-		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
-		h_short[(short)4]=Util.getShort(y, yOff);
-		h_short[(short)5]=Util.getShort(y, (short)(yOff+2));
-		h_short[(short)6]=Util.getShort(y, (short)(yOff+4));
-		h_short[(short)7]=Util.getShort(y, (short)(yOff+6));
-		h_short[(short)8]=Util.getShort(z, zOff);
-		h_short[(short)9]=Util.getShort(z, (short)(zOff+2));
-		h_short[(short)10]=Util.getShort(z, (short)(zOff+4));
-		h_short[(short)11]=Util.getShort(z, (short)(zOff+6));
-		Ch(h_short, (short)0, h_short, (short)4, h_short, (short)8, h_short, (short)12);
-		Util.setShort(dst, (short)(dstOff), h_short[(short)12]); 
-		Util.setShort(dst, (short)(dstOff+2), h_short[(short)13]); 
-		Util.setShort(dst, (short)(dstOff+4), h_short[(short)14]); 
-		Util.setShort(dst, (short)(dstOff+6), h_short[(short)15]); 
-	}
-	public static void test_Ch_fast(byte[] x, short xOff, byte[] y, short yOff, byte[] z, short zOff, byte[] dst, short dstOff){
-		short regA0, regA1, regA2, regA3;
-		short tmpA0, tmpA1, tmpA2, tmpA3;
-		h_short[(short)0]=Util.getShort(x, xOff);
-		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
-		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
-		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
-		h_short[(short)4]=Util.getShort(y, yOff);
-		h_short[(short)5]=Util.getShort(y, (short)(yOff+2));
-		h_short[(short)6]=Util.getShort(y, (short)(yOff+4));
-		h_short[(short)7]=Util.getShort(y, (short)(yOff+6));
-		h_short[(short)8]=Util.getShort(z, zOff);
-		h_short[(short)9]=Util.getShort(z, (short)(zOff+2));
-		h_short[(short)10]=Util.getShort(z, (short)(zOff+4));
-		h_short[(short)11]=Util.getShort(z, (short)(zOff+6));
-		Ch_fast(h_short, (short)0, h_short, (short)4, h_short, (short)8, regA, tmpA);
-		Util.setShort(dst, (short)(dstOff), regA0); 
-		Util.setShort(dst, (short)(dstOff+2), regA1); 
-		Util.setShort(dst, (short)(dstOff+4), regA2); 
-		Util.setShort(dst, (short)(dstOff+6), regA3); 
-	}
-	public static void test_Maj(byte[] x, short xOff, byte[] y, short yOff, byte[] z, short zOff, byte[] dst, short dstOff){
-		h_short[(short)0]=Util.getShort(x, xOff);
-		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
-		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
-		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
-		h_short[(short)4]=Util.getShort(y, yOff);
-		h_short[(short)5]=Util.getShort(y, (short)(yOff+2));
-		h_short[(short)6]=Util.getShort(y, (short)(yOff+4));
-		h_short[(short)7]=Util.getShort(y, (short)(yOff+6));
-		h_short[(short)8]=Util.getShort(z, zOff);
-		h_short[(short)9]=Util.getShort(z, (short)(zOff+2));
-		h_short[(short)10]=Util.getShort(z, (short)(zOff+4));
-		h_short[(short)11]=Util.getShort(z, (short)(zOff+6));
-		Maj(h_short, (short)0, h_short, (short)4, h_short, (short)8, h_short, (short)12);
-		Util.setShort(dst, (short)(dstOff), h_short[(short)12]); 
-		Util.setShort(dst, (short)(dstOff+2), h_short[(short)13]); 
-		Util.setShort(dst, (short)(dstOff+4), h_short[(short)14]); 
-		Util.setShort(dst, (short)(dstOff+6), h_short[(short)15]); 
-	}
-	public static void test_Maj_fast(byte[] x, short xOff, byte[] y, short yOff, byte[] z, short zOff, byte[] dst, short dstOff){
-		short regA0, regA1, regA2, regA3;
-		short tmpA0, tmpA1, tmpA2, tmpA3;
-		h_short[(short)0]=Util.getShort(x, xOff);
-		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
-		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
-		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
-		h_short[(short)4]=Util.getShort(y, yOff);
-		h_short[(short)5]=Util.getShort(y, (short)(yOff+2));
-		h_short[(short)6]=Util.getShort(y, (short)(yOff+4));
-		h_short[(short)7]=Util.getShort(y, (short)(yOff+6));
-		h_short[(short)8]=Util.getShort(z, zOff);
-		h_short[(short)9]=Util.getShort(z, (short)(zOff+2));
-		h_short[(short)10]=Util.getShort(z, (short)(zOff+4));
-		h_short[(short)11]=Util.getShort(z, (short)(zOff+6));
-		Maj_fast(h_short, (short)0, h_short, (short)4, h_short, (short)8, regA, tmpA);
-		Util.setShort(dst, (short)(dstOff), regA0); 
-		Util.setShort(dst, (short)(dstOff+2), regA1); 
-		Util.setShort(dst, (short)(dstOff+4), regA2); 
-		Util.setShort(dst, (short)(dstOff+6), regA3); 
-	}	
-	public static void test_E0_opt(byte[] x, short xOff, byte[] dst, short dstOff){
-		short leftShifts; 
-		h_short[(short)0]=Util.getShort(x, xOff);
-		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
-		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
-		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
-		E0_opt(h_short, (short)0, h_short, (short)4);
-		Util.setShort(dst, (short)(dstOff), h_short[(short)4]); 
-		Util.setShort(dst, (short)(dstOff+2), h_short[(short)5]); 
-		Util.setShort(dst, (short)(dstOff+4), h_short[(short)6]); 
-		Util.setShort(dst, (short)(dstOff+6), h_short[(short)7]); 
-	}
-	public static void test_E1_opt(byte[] x, short xOff, byte[] dst, short dstOff){
-		short leftShifts; 
-		h_short[(short)0]=Util.getShort(x, xOff);
-		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
-		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
-		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
-		E1_opt(h_short, (short)0, h_short, (short)4);
-		Util.setShort(dst, (short)(dstOff), h_short[(short)4]); 
-		Util.setShort(dst, (short)(dstOff+2), h_short[(short)5]); 
-		Util.setShort(dst, (short)(dstOff+4), h_short[(short)6]); 
-		Util.setShort(dst, (short)(dstOff+6), h_short[(short)7]); 
-	}	
-	public static void test_Sig0_opt(byte[] x, short xOff, byte[] dst, short dstOff){
-		short leftShifts; 
-		h_short[(short)0]=Util.getShort(x, xOff);
-		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
-		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
-		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
-		Sig0(h_short, (short)0, h_short, (short)4);
-		Util.setShort(dst, (short)(dstOff), h_short[(short)4]); 
-		Util.setShort(dst, (short)(dstOff+2), h_short[(short)5]); 
-		Util.setShort(dst, (short)(dstOff+4), h_short[(short)6]); 
-		Util.setShort(dst, (short)(dstOff+6), h_short[(short)7]); 
-	}
-	public static void test_Sig1_opt(byte[] x, short xOff, byte[] dst, short dstOff){
-		short leftShifts; 
-		h_short[(short)0]=Util.getShort(x, xOff);
-		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
-		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
-		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
-		Sig1_opt(h_short, (short)0, h_short, (short)4);
-		Util.setShort(dst, (short)(dstOff), h_short[(short)4]); 
-		Util.setShort(dst, (short)(dstOff+2), h_short[(short)5]); 
-		Util.setShort(dst, (short)(dstOff+4), h_short[(short)6]); 
-		Util.setShort(dst, (short)(dstOff+6), h_short[(short)7]); 
-	}
-	public static void test_E0_fast(byte[] x, short xOff, byte[] dst, short dstOff){
-		short regA0, regA1, regA2, regA3;
-		short tmpA0, tmpA1, tmpA2, tmpA3;
-		h_short[(short)0]=Util.getShort(x, xOff);
-		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
-		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
-		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
-		E0_fast(h_short, (short)0, regA, tmpA);
-		Util.setShort(dst, (short)(dstOff), regA0); 
-		Util.setShort(dst, (short)(dstOff+2), regA1); 
-		Util.setShort(dst, (short)(dstOff+4), regA2); 
-		Util.setShort(dst, (short)(dstOff+6), regA3); 
-	}
-	public static void test_E1_fast(byte[] x, short xOff, byte[] dst, short dstOff){
-		short regA0, regA1, regA2, regA3;
-		short tmpA0, tmpA1, tmpA2, tmpA3;
-		h_short[(short)0]=Util.getShort(x, xOff);
-		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
-		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
-		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
-		E1_fast(h_short, (short)0, regA, tmpA);
-		Util.setShort(dst, (short)(dstOff), regA0); 
-		Util.setShort(dst, (short)(dstOff+2), regA1); 
-		Util.setShort(dst, (short)(dstOff+4), regA2); 
-		Util.setShort(dst, (short)(dstOff+6), regA3); 
-	}
-	public static void test_Sig0_fast(byte[] x, short xOff, byte[] dst, short dstOff){
-		short regA0, regA1, regA2, regA3;
-		short tmpA0, tmpA1, tmpA2, tmpA3;
-		h_short[(short)0]=Util.getShort(x, xOff);
-		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
-		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
-		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
-		Sig0_fast(h_short, (short)0, regA, tmpA);
-		Util.setShort(dst, (short)(dstOff), regA0); 
-		Util.setShort(dst, (short)(dstOff+2), regA1); 
-		Util.setShort(dst, (short)(dstOff+4), regA2); 
-		Util.setShort(dst, (short)(dstOff+6), regA3); 
-	}
-	public static void test_Sig1_fast(byte[] x, short xOff, byte[] dst, short dstOff){
-		short regA0, regA1, regA2, regA3;
-		short tmpA0, tmpA1, tmpA2, tmpA3;
-		h_short[(short)0]=Util.getShort(x, xOff);
-		h_short[(short)1]=Util.getShort(x, (short)(xOff+2));
-		h_short[(short)2]=Util.getShort(x, (short)(xOff+4));
-		h_short[(short)3]=Util.getShort(x, (short)(xOff+6));
-		Sig1_fast(h_short, (short)0, regA, tmpA);
-		Util.setShort(dst, (short)(dstOff), regA0); 
-		Util.setShort(dst, (short)(dstOff+2), regA1); 
-		Util.setShort(dst, (short)(dstOff+4), regA2); 
-		Util.setShort(dst, (short)(dstOff+6), regA3); 
-	}
-	
-	public static boolean test_updateW(byte[] msgBlock, short msgOff, short roundmax){	
-		
-		short akku,posy,posx,addx,addy; // used in add_carry
-		short off1, off2, off3; 
-		short leftShifts; 
-		
-		short wOff=0;
-		InitW(msgBlock, msgOff);
-		for (short round=0; round<roundmax; round++){	
-			updateW(w_short, wOff, tmp, REG1);  
-		}
-		
-		// copy back in buffer
-		for (short i=0; i<64; i++){
-			Util.setShort(msgBlock, (short)(2*i), w_short[i]); 
-		}
-		return true;
-	}
-	public static boolean test_updateW_fast(byte[] msgBlock, short msgOff, short roundmax){	
-		
-		short regA0, regA1, regA2, regA3;
-		short regB0, regB1, regB2, regB3;
-		short tmpA0, tmpA1, tmpA2, tmpA3;
-		short off1, off2, off3; 
-		
-		short wOff=0;
-		InitW(msgBlock, msgOff);
-		for (short round=0; round<roundmax; round++){	
-			updateW_fast(w_short, wOff, regB, regA, tmpA);
-		}
-		
-		// copy back in buffer
-		for (short i=0; i<64; i++){
-			Util.setShort(msgBlock, (short)(2*i), w_short[i]); 
-		}
-		return true;
-	}
-
-	// public static boolean test_updateW_fast(byte[] msgBlock, short msgOff, short roundmax){	
-		
-		// short akku,posy,posx,addx,addy; // used in add_carry
-		// short off1, off2, off3; 
-		// short leftShifts; 
-		
-		// // Slow version
-		// InitW(msgBlock, msgOff);
-		// short wOff=0;
-		// for (short round=0; round<roundmax; round++){	
-			// updateW(w_short, wOff, tmp, REG1);  
-		// }
-		// // copy to w_short2
-		// for (short i=0; i<64; i++){	
-			// w_short2[i]= w_short[i];
-		// }
-		
-		// // Fast version
-		// short regA0, regA1, regA2, regA3;
-		// short regB0, regB1, regB2, regB3;
-		// short tmpA0, tmpA1, tmpA2, tmpA3;
-		// InitW(msgBlock, msgOff);
-		// wOff=0;
-		// for (short round=0; round<roundmax; round++){	
-			// updateW_fast(w_short, wOff, regB, regA, tmpA);
-		// }
-		
-		// // copy back in buffer
-		// for (short i=0; i<64; i++){
-			// Util.setShort(msgBlock, (short)(2*i), w_short2[i]); 
-		// }
-		// for (short i=0; i<64; i++){
-			// Util.setShort(msgBlock, (short)(2*i+128), w_short[i]); 
-		// }
-		
-		// return true;
-	// }
-
 }
 

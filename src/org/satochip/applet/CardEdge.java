@@ -624,75 +624,75 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		case INS_BIP32_SET_EXTENDED_KEY:	
 			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED); // only for debug purpose
 			//setBIP32ExtendedKey(apdu, buffer);
-			break;
+			break; 
 		case INS_PARSE_TRANSACTION:
 			ParseTransaction(apdu, buffer);
 			break;
-		case INS_TEST_SHA1:	
-			byte p1= buffer[ISO7816.OFFSET_P1];
-			switch(p1){
-				// add_carry
-				case 0x00:
-					Sha512.test_add_carry(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-					break;
-				case 0x01:
-					Sha512.test_add_carry_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-					break;
-				case 0x02:
-					Sha512.test_add_carry_fast2(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-					break;
-				case 0x03:
-					Sha512.test_add_carry_fast3(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-					break;
-				// Ch	
-				case 0x04:					
-					Sha512.test_Ch(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
-					break;
-				case 0x05:					
-					Sha512.test_Ch_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
-					break;
-				// Maj	
-				case 0x06:					
-					Sha512.test_Maj(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
-					break;
-				case 0x07:					
-					Sha512.test_Maj_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
-					break;	
-				// E0-E1-Sig0-Sig1	
-				case 0x10:					
-					Sha512.test_E0_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-					break;
-				case 0x11:					
-					Sha512.test_E0_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-					break;	
-				case 0x12:					
-					Sha512.test_E1_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-					break;
-				case 0x13:					
-					Sha512.test_E1_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-					break;	
-				case 0x14:					
-					Sha512.test_Sig0_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-					break;
-				case 0x15:					
-					Sha512.test_Sig0_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-					break;	
-				case 0x16:					
-					Sha512.test_Sig1_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-					break;
-				case 0x17:					
-					Sha512.test_Sig1_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-					break;	
-				case 0x20:					
-					Sha512.test_updateW(buffer, ISO7816.OFFSET_CDATA, buffer[ISO7816.OFFSET_P2]);
-					break;
-				case 0x21:					
-					Sha512.test_updateW_fast(buffer, ISO7816.OFFSET_CDATA, buffer[ISO7816.OFFSET_P2]);
-					break; 
-
-			}
-			apdu.setOutgoingAndSend((short) 0, (short)(128));
-			break;
+//		case INS_TEST_SHA1:	
+//			byte p1= buffer[ISO7816.OFFSET_P1];
+//			switch(p1){
+//				// add_carry
+//				case 0x00:
+//					Sha512.test_add_carry(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//					break;
+//				case 0x01:
+//					Sha512.test_add_carry_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//					break;
+//				case 0x02:
+//					Sha512.test_add_carry_fast2(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//					break;
+//				case 0x03:
+//					Sha512.test_add_carry_fast3(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//					break;
+//				// Ch	
+//				case 0x04:					
+//					Sha512.test_Ch(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
+//					break;
+//				case 0x05:					
+//					Sha512.test_Ch_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
+//					break;
+//				// Maj	
+//				case 0x06:					
+//					Sha512.test_Maj(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
+//					break;
+//				case 0x07:					
+//					Sha512.test_Maj_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
+//					break;	
+//				// E0-E1-Sig0-Sig1	
+//				case 0x10:					
+//					Sha512.test_E0_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//					break;
+//				case 0x11:					
+//					Sha512.test_E0_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//					break;	
+//				case 0x12:					
+//					Sha512.test_E1_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//					break;
+//				case 0x13:					
+//					Sha512.test_E1_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//					break;	
+//				case 0x14:					
+//					Sha512.test_Sig0_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//					break;
+//				case 0x15:					
+//					Sha512.test_Sig0_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//					break;	
+//				case 0x16:					
+//					Sha512.test_Sig1_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//					break;
+//				case 0x17:					
+//					Sha512.test_Sig1_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//					break;	
+//				case 0x20:					
+//					Sha512.test_updateW(buffer, ISO7816.OFFSET_CDATA, buffer[ISO7816.OFFSET_P2]);
+//					break;
+//				case 0x21:					
+//					Sha512.test_updateW_fast(buffer, ISO7816.OFFSET_CDATA, buffer[ISO7816.OFFSET_P2]);
+//					break; 
+//
+//			}
+//			apdu.setOutgoingAndSend((short) 0, (short)(128));
+//			break;
 		default:
 			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
 		}
