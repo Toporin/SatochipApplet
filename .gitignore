@@ -1,0 +1,4 @@
+
+# used by ant-javacard
+lib/
+build.xml
