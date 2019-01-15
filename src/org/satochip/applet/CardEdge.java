@@ -49,7 +49,7 @@
 package org.satochip.applet;
 
 import javacard.framework.APDU;
-import javacard.framework.CardRuntimeException;
+//import javacard.framework.CardRuntimeException;
 import javacard.framework.ISO7816;
 import javacard.framework.ISOException;
 import javacard.framework.JCSystem;
@@ -64,11 +64,11 @@ import javacard.security.ECPublicKey;
 import javacard.security.Key;
 import javacard.security.KeyAgreement;
 import javacard.security.KeyBuilder;
-import javacard.security.KeyPair;
+//import javacard.security.KeyPair;
 import javacard.security.RSAPrivateCrtKey;
 import javacard.security.RSAPrivateKey;
 import javacard.security.RSAPublicKey;
-import javacard.security.RandomData;
+//import javacard.security.RandomData;
 import javacard.security.Signature;
 import javacard.security.MessageDigest;
 import javacardx.apdu.ExtendedLength; //debugXL
@@ -164,13 +164,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static byte INS_SETUP = (byte) 0x2A;
 
 	// Keys' use and management
-	private final static byte INS_GEN_KEYPAIR = (byte) 0x30;
-	private final static byte INS_GEN_KEYSYM = (byte) 0x31;
 	private final static byte INS_IMPORT_KEY = (byte) 0x32;
 	//private final static byte INS_EXPORT_KEY = (byte) 0x34;
 	private final static byte INS_GET_PUBLIC_FROM_PRIVATE= (byte)0x35;
-	private final static byte INS_COMPUTE_CRYPT = (byte) 0x36;
-	private final static byte INS_COMPUTE_SIGN = (byte) 0x37; // added
 	
 	// External authentication
 	private final static byte INS_CREATE_PIN = (byte) 0x40;
@@ -178,20 +174,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static byte INS_CHANGE_PIN = (byte) 0x44;
 	private final static byte INS_UNBLOCK_PIN = (byte) 0x46;
 	private final static byte INS_LOGOUT_ALL = (byte) 0x60;
-	//private final static byte INS_GET_CHALLENGE = (byte) 0x62;
-	//private final static byte INS_EXT_AUTH = (byte) 0x38;
-
-	// Objects' use and management
-	private final static byte INS_CREATE_OBJ = (byte) 0x5A;
-	private final static byte INS_DELETE_OBJ = (byte) 0x52;
-	private final static byte INS_READ_OBJ = (byte) 0x56;
-	private final static byte INS_WRITE_OBJ = (byte) 0x54;
-	private final static byte INS_SIZE_OBJ = (byte) 0x57;
-
+	
 	// Status information
-	private final static byte INS_LIST_OBJECTS = (byte) 0x58;
 	private final static byte INS_LIST_PINS = (byte) 0x48;
-	private final static byte INS_LIST_KEYS = (byte) 0x3A;
 	private final static byte INS_GET_STATUS = (byte) 0x3C;
 	
 	// HD wallet
@@ -222,10 +207,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static short SW_UNSUPPORTED_FEATURE = (short) 0x9C05;
 	/** Required operation was not authorized because of a lack of privileges */
 	private final static short SW_UNAUTHORIZED = (short) 0x9C06;
-	/** Required object is missing */
-	private final static short SW_OBJECT_NOT_FOUND = (short) 0x9C07;
-	/** New object ID already in use */
-	private final static short SW_OBJECT_EXISTS = (short) 0x9C08;
 	/** Algorithm specified is not correct */
 	private final static short SW_INCORRECT_ALG = (short) 0x9C09;
 
@@ -233,8 +214,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static short SW_INCORRECT_P1 = (short) 0x9C10;
 	/** Incorrect P2 parameter */
 	private final static short SW_INCORRECT_P2 = (short) 0x9C11;
-	/** No more data available */
-	private final static short SW_SEQUENCE_END = (short) 0x9C12;
 	/** Invalid input parameter to command */
 	private final static short SW_INVALID_PARAMETER = (short) 0x9C0F;
 
@@ -242,16 +221,12 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static short SW_SIGNATURE_INVALID = (short) 0x9C0B;
 	/** Operation has been blocked for security reason */
 	private final static short SW_IDENTITY_BLOCKED = (short) 0x9C0C;
-	/** Unspecified error */
-	private final static short SW_UNSPECIFIED_ERROR = (short) 0x9C0D;
 	/** For debugging purposes */
 	private final static short SW_INTERNAL_ERROR = (short) 0x9CFF;
 	/** For debugging purposes 2*/
 	private final static short SW_DEBUG_FLAG = (short) 0x9FFF;
 	/** Very low probability error */
 	private final static short SW_BIP32_DERIVATION_ERROR = (short) 0x9C0E;
-	/** Support only hardened key currently */
-	private final static short SW_BIP32_HARDENED_KEY_ERROR = (short) 0x9C16;
 	/** Incorrect initialization of method */
 	private final static short SW_INCORRECT_INITIALIZATION = (short) 0x9C13;
 	/** Bip32 seed is not initialized*/
@@ -266,25 +241,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static byte OP_INIT = (byte) 0x01;
 	private final static byte OP_PROCESS = (byte) 0x02;
 	private final static byte OP_FINALIZE = (byte) 0x03;
-
-	// Cipher Modes admitted in ComputeCrypt()
-	private final static byte DL_APDU = (byte) 0x01;
-	private final static byte DL_OBJECT = (byte) 0x02;
-	private final static byte LIST_OPT_RESET = (byte) 0x00;
-	private final static byte LIST_OPT_NEXT = (byte) 0x01;
-
-	private final static byte OPT_DEFAULT = (byte) 0x00; // Use JC defaults
-	private final static byte OPT_RSA_PUB_EXP = (byte) 0x01; // RSA: provide public exponent
-    private final static byte OPT_EC_SECP256k1 = (byte) 0x03; // EC: provide P, a, b, G, R, K public key parameters 
-        
-	// Offsets in buffer[] for key generation
-	private final static short OFFSET_GENKEY_ALG = (short) (ISO7816.OFFSET_CDATA);
-	private final static short OFFSET_GENKEY_SIZE = (short) (ISO7816.OFFSET_CDATA + 1);
-	private final static short OFFSET_GENKEY_PRV_ACL = (short) (ISO7816.OFFSET_CDATA + 3);
-	private final static short OFFSET_GENKEY_PUB_ACL = (short) (OFFSET_GENKEY_PRV_ACL + KEY_ACL_SIZE);
-	private final static short OFFSET_GENKEY_OPTIONS = (short) (OFFSET_GENKEY_PUB_ACL + KEY_ACL_SIZE);
-	private final static short OFFSET_GENKEY_RSA_PUB_EXP_LENGTH = (short) (OFFSET_GENKEY_OPTIONS + 1);
-	private final static short OFFSET_GENKEY_RSA_PUB_EXP_VALUE = (short) (OFFSET_GENKEY_RSA_PUB_EXP_LENGTH + 2);
 
 	// JC API 2.2.2 does not define these constants:
 	private final static byte ALG_ECDSA_SHA_256= (byte) 33;
@@ -305,21 +261,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private byte[] keyACLs;
 	// Key Tries Left
 	private byte[] keyTries;
-	// Key iterator for ListKeys: it's an offset in the keys[] array.
-	private byte key_it;
-	// True if a GetChallenge() has been issued
-	//private boolean getChallengeDone;
-
-	/*
-	 * KeyPair, Cipher and Signature objects * These are allocated on demand *
-	 * TODO: Here we could have just 1 Object[] and * make proper casts when
-	 * needed
-	 */
-	private Cipher[] ciphers;
-	private Signature[] signatures;
-	// Says if we are using a signature or a cipher object
-	private byte[] ciph_dirs;
-	private KeyPair[] keyPairs;
 	
 	// PIN and PUK objects, allocated on demand
 	private OwnerPIN[] pins, ublk_pins;
@@ -336,12 +277,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 
 	/* For the setup function - should only be called once */
 	private boolean setupDone = false;
-	private byte create_object_ACL;
 	private byte create_key_ACL;
 	private byte create_pin_ACL;
 	
 	// shared cryptographic objects
-	private RandomData randomData;
 	private KeyAgreement keyAgreement;
 	private Signature sigECDSA;
 	private Cipher aes128;
@@ -445,12 +384,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 
 	public static void install(byte[] bArray, short bOffset, byte bLength) {
 		CardEdge wal = new CardEdge(bArray, bOffset, bLength);
-//		// debug this part not useful?
-//		/* Register the Applet (copied code) */
-//		if (bArray[bOffset] == 0)
-//			wal.register();
-//		else
-//			wal.register(bArray, (short) (bOffset + 1), (byte) (bArray[bOffset]));
 	}
 
 	public boolean select() {
@@ -689,7 +622,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		base += (short) 2;
 		bytesLeft-=4;
 		
-		create_object_ACL = buffer[base++];
 		create_key_ACL = buffer[base++];
 		create_pin_ACL = buffer[base++];
 		bytesLeft-=3;
@@ -704,12 +636,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		keyTries = new byte[MAX_NUM_KEYS];
 		for (byte i = (byte) 0; i < (byte) MAX_NUM_KEYS; i++)
 			keyTries[i] = MAX_KEY_TRIES;
-		keyPairs = new KeyPair[MAX_NUM_KEYS];
-		ciphers = new Cipher[MAX_NUM_KEYS];
-		signatures = new Signature[MAX_NUM_KEYS];
-		ciph_dirs = new byte[MAX_NUM_KEYS];
-		for (byte i = (byte) 0; i < (byte) MAX_NUM_KEYS; i++)
-			ciph_dirs[i] = (byte) 0xFF;
 
 		logged_ids = 0x00; // No identities logged in
 		//getChallengeDone = false; // No GetChallenge() issued so far
@@ -736,7 +662,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		}
 
 		// shared cryptographic objects
-		randomData = null; // Will be created on demand when needed
 		keyAgreement = KeyAgreement.getInstance(ALG_EC_SVDP_DH_PLAIN, false); 
 		sigECDSA= Signature.getInstance(ALG_ECDSA_SHA_256, false); 
 		aes128= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_ECB_NOPAD, false);
@@ -793,18 +718,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 
 	/********** UTILITY FUNCTIONS **********/
 
-	/*
-	 * SendData() wraps the setOutgoing(), setLength(), .. stuff * that could be
-	 * necessary to be fully JavaCard compliant.
-	 */
-	private void sendData(APDU apdu, byte[] data, short offset, short size) {
-		if (size > EXT_APDU_BUFFER_SIZE)
-			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-		apdu.setOutgoing();
-		apdu.setOutgoingLength(size);
-		apdu.sendBytesLong(data, offset, size);
-	}
-
 	/* Retrieves the full contents from the apdu object in case of 
 	 * an extended APDU. */
 	private void getData(APDU apdu, byte[] src, short bytesRead, byte[] dst) {
@@ -817,37 +730,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			Util.arrayCopyNonAtomic(src, (short) 0, dst, apduOffset, recvLen);
 			apduOffset += recvLen;
 		} while (recvLen > 0);
-	}
-
-	/*
-	 * Retrieves the Cipher object to be used w/ the specified key * and
-	 * algorithm id (Cipher.ALG_XX). * If exists, check it has the proper
-	 * algorithm and throws * SW_OP_NOT_ALLOWED if not * If not, creates it
-	 */
-	private Cipher getCipher(byte key_nb, byte alg_id) {
-		if (ciphers[key_nb] == null) {
-			ciphers[key_nb] = Cipher.getInstance(alg_id, false);
-		} else if (ciphers[key_nb].getAlgorithm() != alg_id)
-			ISOException.throwIt(SW_OPERATION_NOT_ALLOWED);
-		return ciphers[key_nb];
-	}
-
-	/*
-	 * Retrieves the Signature object to be used w/ the specified key * and
-	 * algorithm id (Signature.ALG_XX). * If exists, check it has the proper
-	 * algorithm and throws * SW_OPERATION_NOT_ALLOWED if not * If does not
-	 * exist, creates it
-	 */
-	private Signature getSignature(byte key_nb, byte alg_id) {
-		if (signatures[key_nb] == null) {
-			try {
-				signatures[key_nb] = Signature.getInstance(alg_id, false);
-			} catch (Exception e) {
-				ISOException.throwIt(((CardRuntimeException) e).getReason());
-			}
-		} else if (signatures[key_nb].getAlgorithm() != alg_id)
-			ISOException.throwIt(SW_OPERATION_NOT_ALLOWED);
-		return signatures[key_nb];
 	}
 
 	/**
@@ -911,13 +793,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 */
 	private void LogoutIdentity(byte id_nb) {
 		logged_ids &= (short) ~(0x0001 << id_nb);
-	}
-
-	/** Deletes and zeros the IO objects and throws the passed in exception */
-	private void ThrowDeleteObjects(short exception) {
-		om.destroyObject(IN_OBJECT_CLA, IN_OBJECT_ID, true);
-		om.destroyObject(OUT_OBJECT_CLA, OUT_OBJECT_ID, true);
-		ISOException.throwIt(exception);
 	}
 
 	/** Checks if PIN policies are satisfied for a PIN code */
