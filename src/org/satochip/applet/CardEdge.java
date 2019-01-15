@@ -123,9 +123,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	// 0.2-0.1: support for hmac-sha1 authorization + improved sha256 + bip32 full suport  
 	// 0.3-0.1: change parseTransaction response for coherence: add separate short flags for second factor authentication  
 	// 0.3-0.2: fast Sha512 computation  
-    // 0.4-0.1: getBIP32ExtendedKey also returns chaincode    
+    // 0.4-0.1: getBIP32ExtendedKey also returns chaincode
+	// 0.5-0.1: Support for Segwit transaction
 	private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
-	private final static byte PROTOCOL_MINOR_VERSION = (byte) 4;
+	private final static byte PROTOCOL_MINOR_VERSION = (byte) 5;
 	private final static byte APPLET_MAJOR_VERSION = (byte) 0;
 	private final static byte APPLET_MINOR_VERSION = (byte) 1;
 	
@@ -432,6 +433,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private static final byte OFFSET_TRANSACTION_HMACKEY=OFFSET_TRANSACTION_LIMIT+8;
 	private static final byte OFFSET_TRANSACTION_SIZE=OFFSET_TRANSACTION_HMACKEY+20;
 	private static final short HMAC_CHALRESP_2FA=(short)0x8000;
+	
+	// tx parsing
+	private static final byte PARSE_STD=0x00;
+	private static final byte PARSE_SEGWIT=0x01;
 	
 	// additional options
 	private short option_flags;
@@ -2920,6 +2925,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			ISOException.throwIt(SW_UNAUTHORIZED);
 		
 		// if seed is already initialized, check that logged identities are allowed to rewwrite seed (and master key)
+		// TODO: only reset seed if p1 is set to specific flag to avoir accidental erasure, otherwise sent error message
 		if (bip32_seeded && !authorizeKeyOp(bip32_masterACL, ACL_WRITE))
 			ISOException.throwIt(SW_UNAUTHORIZED);
 		
@@ -3439,7 +3445,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * 
      * ins: 0x71
 	 * p1: Init or Process 
-	 * p2: 0x00
+	 * p2: PARSE_STD ou PARSE_SEGWIT
 	 * data: [raw_tx]
 	 * 
 	 * return: [hash(32b) | needs_confirm(1b) | sig_size(2b) | sig ]
@@ -3460,7 +3466,12 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
         }
         
         // parse the transaction
-        byte result = Transaction.parseTransaction(buffer, dataOffset, dataRemaining);
+        byte result = Transaction.RESULT_ERROR;
+        if (p2== PARSE_STD){
+        	 result= Transaction.parseTransaction(buffer, dataOffset, dataRemaining);
+        }else if (p2== PARSE_SEGWIT){
+        	result = Transaction.parseSegwitTransaction(buffer, dataOffset, dataRemaining);
+        }
         if (result == Transaction.RESULT_ERROR) {
         	Transaction.resetTransaction();
             ISOException.throwIt(ISO7816.SW_WRONG_DATA);
@@ -3469,13 +3480,13 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
             
         	short offset = 0;
         	// Transaction context
-        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_I_CURRENT_I, buffer, offset, Transaction.SIZEOF_U32);
+        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_CURRENT_I, buffer, offset, Transaction.SIZEOF_U32);
         	offset += 4;
-        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_I_CURRENT_O, buffer, offset, Transaction.SIZEOF_U32);
+        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_CURRENT_O, buffer, offset, Transaction.SIZEOF_U32);
         	offset += 4;
-        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_I_SCRIPT_COORD, buffer, offset, Transaction.SIZEOF_U32);
+        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_SCRIPT_COORD, buffer, offset, Transaction.SIZEOF_U32);
         	offset += 4;
-        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_A_TRANSACTION_AMOUNT, buffer, offset, Transaction.SIZEOF_AMOUNT);
+        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_AMOUNT, buffer, offset, Transaction.SIZEOF_AMOUNT);
             offset += Transaction.SIZEOF_AMOUNT;
             
             // not so relevant context info mainly for debugging (not sensitive)
@@ -3505,7 +3516,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
             
         	// check whether 2fa is required (hmac-sha1 of tx hash)
             short need2fa=(short)0x0000;
-            Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_A_TRANSACTION_AMOUNT, transactionData, OFFSET_TRANSACTION_AMOUNT, (short)8);
+            Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_AMOUNT, transactionData, OFFSET_TRANSACTION_AMOUNT, (short)8);
             Biginteger.add_carry(transactionData, OFFSET_TRANSACTION_AMOUNT, transactionData, OFFSET_TRANSACTION_TOTAL, (short)8);
             if ((option_flags & HMAC_CHALRESP_2FA)==HMAC_CHALRESP_2FA){
 	            if (Biginteger.lessThan(transactionData, OFFSET_TRANSACTION_LIMIT, transactionData, OFFSET_TRANSACTION_AMOUNT, (short)8)){
@@ -3536,13 +3547,13 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
         	
         	// Transaction context 
             //todo: put this context in other method
-        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_I_CURRENT_I, buffer, offset, Transaction.SIZEOF_U32);
+        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_CURRENT_I, buffer, offset, Transaction.SIZEOF_U32);
         	offset += 4;
-        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_I_CURRENT_O, buffer, offset, Transaction.SIZEOF_U32);
+        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_CURRENT_O, buffer, offset, Transaction.SIZEOF_U32);
         	offset += 4;
-        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_I_SCRIPT_COORD, buffer, offset, Transaction.SIZEOF_U32);
+        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_SCRIPT_COORD, buffer, offset, Transaction.SIZEOF_U32);
         	offset += 4;
-        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_A_TRANSACTION_AMOUNT, buffer, offset, Transaction.SIZEOF_AMOUNT);
+        	Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_AMOUNT, buffer, offset, Transaction.SIZEOF_AMOUNT);
             offset += Transaction.SIZEOF_AMOUNT;
             
             // not so relevant context info mainly for debugging (not sensitive)
