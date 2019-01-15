@@ -593,14 +593,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		case INS_GET_STATUS:
 			GetStatus(apdu, buffer);
 			break;
-		case INS_COMPUTE_SHA512:
-			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED); // only for debug purpose
-			//computeSha512(apdu, buffer);
-			break;
-		case INS_COMPUTE_HMAC:
-			//ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED); // only for debug purpose
-			computeHmac(apdu, buffer);
-			break;
 		case INS_BIP32_IMPORT_SEED:
 			importBIP32Seed(apdu, buffer);
 			break;
@@ -619,78 +611,26 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		case INS_SIGN_TRANSACTION:
 			SignTransaction(apdu, buffer);
 			break;
+		case INS_PARSE_TRANSACTION:
+			ParseTransaction(apdu, buffer);
+			break;
+		// only for debugging purpose
 		case INS_BIP32_SET_EXTENDED_KEY:	
 			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED); // only for debug purpose
 			//setBIP32ExtendedKey(apdu, buffer);
 			break; 
-		case INS_PARSE_TRANSACTION:
-			ParseTransaction(apdu, buffer);
+		case INS_COMPUTE_SHA512:
+			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED); // only for debug purpose
+			//computeSha512(apdu, buffer);
 			break;
-//		case INS_TEST_SHA1:	
-//			byte p1= buffer[ISO7816.OFFSET_P1];
-//			switch(p1){
-//				// add_carry
-//				case 0x00:
-//					Sha512.test_add_carry(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-//					break;
-//				case 0x01:
-//					Sha512.test_add_carry_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-//					break;
-//				case 0x02:
-//					Sha512.test_add_carry_fast2(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-//					break;
-//				case 0x03:
-//					Sha512.test_add_carry_fast3(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-//					break;
-//				// Ch	
-//				case 0x04:					
-//					Sha512.test_Ch(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
-//					break;
-//				case 0x05:					
-//					Sha512.test_Ch_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
-//					break;
-//				// Maj	
-//				case 0x06:					
-//					Sha512.test_Maj(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
-//					break;
-//				case 0x07:					
-//					Sha512.test_Maj_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
-//					break;	
-//				// E0-E1-Sig0-Sig1	
-//				case 0x10:					
-//					Sha512.test_E0_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-//					break;
-//				case 0x11:					
-//					Sha512.test_E0_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-//					break;	
-//				case 0x12:					
-//					Sha512.test_E1_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-//					break;
-//				case 0x13:					
-//					Sha512.test_E1_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-//					break;	
-//				case 0x14:					
-//					Sha512.test_Sig0_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-//					break;
-//				case 0x15:					
-//					Sha512.test_Sig0_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-//					break;	
-//				case 0x16:					
-//					Sha512.test_Sig1_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-//					break;
-//				case 0x17:					
-//					Sha512.test_Sig1_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
-//					break;	
-//				case 0x20:					
-//					Sha512.test_updateW(buffer, ISO7816.OFFSET_CDATA, buffer[ISO7816.OFFSET_P2]);
-//					break;
-//				case 0x21:					
-//					Sha512.test_updateW_fast(buffer, ISO7816.OFFSET_CDATA, buffer[ISO7816.OFFSET_P2]);
-//					break; 
-//
-//			}
-//			apdu.setOutgoingAndSend((short) 0, (short)(128));
-//			break;
+		case INS_COMPUTE_HMAC:
+			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED); // only for debug purpose
+			//computeHmac(apdu, buffer);
+			break;
+		case INS_TEST_SHA1:	
+			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED); // only for debug purpose
+			//testSha512(apdu, buffer)
+			break; 
 		default:
 			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
 		}
@@ -2422,45 +2362,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		apdu.setOutgoingAndSend((short) 0, pos);
 	}
 	
-//	private void computeSha512(APDU apdu, byte[] buffer) {
-//		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
-//			ISOException.throwIt(SW_INCORRECT_P1);
-//		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
-//			ISOException.throwIt(SW_INCORRECT_P2);
-//		//short avail = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-//		short avail2 = apdu.setIncomingAndReceive();
-//		
-//		sha512.reset();
-//		//sha512.doFinal(data, (short) 0, avail2, buffer, (short)0);
-//		sha512.doFinal(buffer, (short) ISO7816.OFFSET_CDATA, avail2, buffer, (short)0);
-//		
-//		apdu.setOutgoingAndSend((short) 0, Sha2.SHA512_DIGEST_LENGTH);
-//	}
-
-	private void computeHmac(APDU apdu, byte[] buffer) {
-		if (buffer[ISO7816.OFFSET_P1] != (byte)20 && buffer[ISO7816.OFFSET_P1] != (byte)64)
-			ISOException.throwIt(SW_INCORRECT_P1);
-		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
-			ISOException.throwIt(SW_INCORRECT_P2);
-		short avail = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-		if (apdu.setIncomingAndReceive() != avail)
-			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-		
-		short pos= ISO7816.OFFSET_CDATA;//apdu.getOffsetCdata(); //(short) ISO7816.OFFSET_CDATA;
-		short key_size=Util.getShort(buffer, pos);
-		pos+=2;
-		pos+=key_size;
-		short msg_size=Util.getShort(buffer, pos);
-		pos+=2;
-		short hashSize=0;
-		if (buffer[ISO7816.OFFSET_P1]==(byte)20)
-			hashSize= HmacSha160.computeHmacSha160(buffer, (short)(ISO7816.OFFSET_CDATA+2), key_size, buffer, pos, msg_size, buffer, (short)0);
-		else if (buffer[ISO7816.OFFSET_P1]==(byte)64)
-			hashSize= HmacSha512.computeHmacSha512(buffer, (short)(ISO7816.OFFSET_CDATA+2), key_size, buffer, pos, msg_size, buffer, (short)0);
-		apdu.setOutgoingAndSend((short) 0, hashSize);
-		return;
-	}
-	
 	/**
 	 * This function imports a Bip32 seed to the applet and derives the master key and chain code.
 	 * It also derives a second ECC that uniquely authenticates the HDwallet: the authentikey.
@@ -2979,33 +2880,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     	
     }    
     
-//    // mainly for testing...
-//    private void setBIP32ExtendedKey(APDU apdu, byte[] buffer){
-//    	
-//    	// set default private point
-//        byte[] key_data={
-//                (byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,
-//                (byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x01 
-//        }; 
-//        bip32_extendedkey.setS(key_data, (short)0, BIP32_KEY_SIZE); 
-//        
-//        // compute the corresponding partial public key...
-//        keyAgreement.init(bip32_extendedkey);
-//        short coordx_size = keyAgreement.generateSecret(SECP256K1_G, (short) 0, (short) SECP256K1_G.length, buffer, (short)2); // compute x coordinate of public key as k*G
-//        Util.setShort(buffer, (short)0, coordx_size);
-//        
-//        // sign fixed message
-//        sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
-//        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
-//        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
-//        
-//        // return x-coordinate of public key+signature
-//        // the client can recover full public-key from the signature or
-//        // by guessing the compression value () and verifying the signature... 
-//        apdu.setOutgoingAndSend((short) 0, (short)(coordx_size+sign_size+4));
-//        
-//    }
-    
     /**
      * This function parses a raw transaction and returns the corresponding double SHA-256
 	 * If the Bip32 seed is initialized, the hash is signed with the authentikey.
@@ -3230,6 +3104,136 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
         apdu.setOutgoingAndSend((short) 0, sign_size);
     	
     }
+    
+    // For debug purpose only
+    
+//  private void setBIP32ExtendedKey(APDU apdu, byte[] buffer){
+//  	
+//  	// set default private point
+//      byte[] key_data={
+//              (byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,
+//              (byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x00,(byte)0x01 
+//      }; 
+//      bip32_extendedkey.setS(key_data, (short)0, BIP32_KEY_SIZE); 
+//      
+//      // compute the corresponding partial public key...
+//      keyAgreement.init(bip32_extendedkey);
+//      short coordx_size = keyAgreement.generateSecret(SECP256K1_G, (short) 0, (short) SECP256K1_G.length, buffer, (short)2); // compute x coordinate of public key as k*G
+//      Util.setShort(buffer, (short)0, coordx_size);
+//      
+//      // sign fixed message
+//      sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
+//      short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
+//      Util.setShort(buffer, (short)(coordx_size+2), sign_size);
+//      
+//      // return x-coordinate of public key+signature
+//      // the client can recover full public-key from the signature or
+//      // by guessing the compression value () and verifying the signature... 
+//      apdu.setOutgoingAndSend((short) 0, (short)(coordx_size+sign_size+4));
+//      
+//  }    
+    
+//	private void computeHmac(APDU apdu, byte[] buffer) {
+//		if (buffer[ISO7816.OFFSET_P1] != (byte)20 && buffer[ISO7816.OFFSET_P1] != (byte)64)
+//			ISOException.throwIt(SW_INCORRECT_P1);
+//		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
+//			ISOException.throwIt(SW_INCORRECT_P2);
+//		short avail = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+//		if (apdu.setIncomingAndReceive() != avail)
+//			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+//		
+//		short pos= ISO7816.OFFSET_CDATA;//apdu.getOffsetCdata(); //(short) ISO7816.OFFSET_CDATA;
+//		short key_size=Util.getShort(buffer, pos);
+//		pos+=2;
+//		pos+=key_size;
+//		short msg_size=Util.getShort(buffer, pos);
+//		pos+=2;
+//		short hashSize=0;
+//		if (buffer[ISO7816.OFFSET_P1]==(byte)20)
+//			hashSize= HmacSha160.computeHmacSha160(buffer, (short)(ISO7816.OFFSET_CDATA+2), key_size, buffer, pos, msg_size, buffer, (short)0);
+//		else if (buffer[ISO7816.OFFSET_P1]==(byte)64)
+//			hashSize= HmacSha512.computeHmacSha512(buffer, (short)(ISO7816.OFFSET_CDATA+2), key_size, buffer, pos, msg_size, buffer, (short)0);
+//		apdu.setOutgoingAndSend((short) 0, hashSize);
+//		return;
+//	}
+	
+//	private void computeSha512(APDU apdu, byte[] buffer) {
+//		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
+//			ISOException.throwIt(SW_INCORRECT_P1);
+//		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
+//			ISOException.throwIt(SW_INCORRECT_P2);
+//		short avail2 = apdu.setIncomingAndReceive();
+//	
+//		sha512.reset();
+//		//sha512.doFinal(data, (short) 0, avail2, buffer, (short)0);
+//		sha512.doFinal(buffer, (short) ISO7816.OFFSET_CDATA, avail2, buffer, (short)0);
+//	
+//		apdu.setOutgoingAndSend((short) 0, Sha2.SHA512_DIGEST_LENGTH);
+// 	}
+
+//    private void testSha512(APDU apdu, byte[] buffer){
+//		byte p1= buffer[ISO7816.OFFSET_P1];
+//		switch(p1){
+//			// add_carry
+//			case 0x00:
+//				Sha512.test_add_carry(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//				break;
+//			case 0x01:
+//				Sha512.test_add_carry_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//				break;
+//			case 0x02:
+//				Sha512.test_add_carry_fast2(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//				break;
+//			case 0x03:
+//				Sha512.test_add_carry_fast3(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//				break;
+//			// Ch	
+//			case 0x04:					
+//				Sha512.test_Ch(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
+//				break;
+//			case 0x05:					
+//				Sha512.test_Ch_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
+//				break;
+//			// Maj	
+//			case 0x06:					
+//				Sha512.test_Maj(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
+//				break;
+//			case 0x07:					
+//				Sha512.test_Maj_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8), buffer, (short)(ISO7816.OFFSET_CDATA+16), buffer, (short)(ISO7816.OFFSET_CDATA+24));
+//				break;	
+//			// E0-E1-Sig0-Sig1	
+//			case 0x10:					
+//				Sha512.test_E0_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//				break;
+//			case 0x11:					
+//				Sha512.test_E0_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//				break;	
+//			case 0x12:					
+//				Sha512.test_E1_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//				break;
+//			case 0x13:					
+//				Sha512.test_E1_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//				break;	
+//			case 0x14:					
+//				Sha512.test_Sig0_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//				break;
+//			case 0x15:					
+//				Sha512.test_Sig0_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//				break;	
+//			case 0x16:					
+//				Sha512.test_Sig1_opt(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//				break;
+//			case 0x17:					
+//				Sha512.test_Sig1_fast(buffer, (short)ISO7816.OFFSET_CDATA, buffer, (short)(ISO7816.OFFSET_CDATA+8));
+//				break;	
+//			case 0x20:					
+//				Sha512.test_updateW(buffer, ISO7816.OFFSET_CDATA, buffer[ISO7816.OFFSET_P2]);
+//				break;
+//			case 0x21:					
+//				Sha512.test_updateW_fast(buffer, ISO7816.OFFSET_CDATA, buffer[ISO7816.OFFSET_P2]);
+//		}
+//		apdu.setOutgoingAndSend((short) 0, (short)(128));
+//    }
     
 } // end of class JAVA_APPLET
 
