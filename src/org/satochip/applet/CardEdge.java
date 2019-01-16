@@ -57,7 +57,7 @@ import javacard.framework.OwnerPIN;
 import javacard.framework.SystemException;
 import javacard.framework.Util;
 import javacard.security.AESKey;
-import javacard.security.DESKey;
+//import javacard.security.DESKey;
 import javacard.security.ECPrivateKey;
 import javacard.security.ECPublicKey;
 //import javacard.security.HMACKey;
@@ -65,13 +65,13 @@ import javacard.security.Key;
 import javacard.security.KeyAgreement;
 import javacard.security.KeyBuilder;
 //import javacard.security.KeyPair;
-import javacard.security.RSAPrivateCrtKey;
-import javacard.security.RSAPrivateKey;
-import javacard.security.RSAPublicKey;
+//import javacard.security.RSAPrivateCrtKey;
+//import javacard.security.RSAPrivateKey;
+//import javacard.security.RSAPublicKey;
 //import javacard.security.RandomData;
 import javacard.security.Signature;
 import javacard.security.MessageDigest;
-import javacardx.apdu.ExtendedLength; //debugXL
+import javacardx.apdu.ExtendedLength; //debugXL //TODO: remove
 import javacardx.crypto.Cipher;
 
 /**
@@ -100,34 +100,20 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	// Maximum number of keys handled by the Cardlet
 	private final static byte MAX_NUM_KEYS = (byte) 16;
 	// Maximum number of PIN codes
-	private final static byte MAX_NUM_PINS = (byte) 8;
-	// Maximum number of keys allowed for ExtAuth
-	//private final static byte MAX_NUM_AUTH_KEYS = (byte) 6;
+	private final static byte MAX_NUM_PINS = (byte) 8; // TODO: set to 2?
 
-	// Maximum size for the extended APDU buffer for a 2048 bit key:
-	// CLA [1 byte] + INS [1 byte] + P1 [1 byte] + P2 [1 byte] +
-	// LC [3 bytes] + cipher_mode[1 byte] + cipher_direction [1 byte] +
-	// data_location [1 byte] + data_size [2 bytes] + data [256 bytes]
-	// = 268 bytes
+	// Maximum size for the extended APDU buffer 
 	private final static short EXT_APDU_BUFFER_SIZE = (short) 268;
 	private final static short TMP_BUFFER_SIZE = (short) 256;
 
 	// Minimum PIN size
 	private final static byte PIN_MIN_SIZE = (byte) 4;
 	// Maximum PIN size
-	private final static byte PIN_MAX_SIZE = (byte) 16;
+	private final static byte PIN_MAX_SIZE = (byte) 16;// TODO: increase size?
 	// PIN[0] initial value...
 	private final static byte[] PIN_INIT_VALUE={(byte)'M',(byte)'u',(byte)'s',(byte)'c',(byte)'l',(byte)'e',(byte)'0',(byte)'0'};
-	
-	// Maximum external authentication tries per key
-	private final static byte MAX_KEY_TRIES = (byte) 5;
 
-	private final static byte KEY_ACL_SIZE = (byte) 6;
-	private final static byte ACL_READ = (byte) 0;
-	private final static byte ACL_WRITE = (byte) 2;
-	private final static byte ACL_USE = (byte) 4;
-	
-	private static byte[] acl; // Temporary ACL
+	private final static byte KEY_ACL_SIZE = (byte) 6;// TODO: deprecate
 
 	// code of CLA byte in the command APDU header
 	private final static byte CardEdge_CLA = (byte) 0xB0;
@@ -145,7 +131,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static byte INS_GET_PUBLIC_FROM_PRIVATE= (byte)0x35;
 	
 	// External authentication
-	private final static byte INS_CREATE_PIN = (byte) 0x40;
+	private final static byte INS_CREATE_PIN = (byte) 0x40; //TODO: remove?
 	private final static byte INS_VERIFY_PIN = (byte) 0x42;
 	private final static byte INS_CHANGE_PIN = (byte) 0x44;
 	private final static byte INS_UNBLOCK_PIN = (byte) 0x46;
@@ -156,19 +142,18 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static byte INS_GET_STATUS = (byte) 0x3C;
 	
 	// HD wallet
-	private final static byte INS_COMPUTE_SHA512 = (byte) 0x6A;
-	//private final static byte INS_COMPUTE_HMACSHA512= (byte) 0x6B;
-	private final static byte INS_COMPUTE_HMAC= (byte) 0x6B;
 	private final static byte INS_BIP32_IMPORT_SEED= (byte) 0x6C;
 	private final static byte INS_BIP32_GET_AUTHENTIKEY= (byte) 0x73;
 	private final static byte INS_BIP32_GET_EXTENDED_KEY= (byte) 0x6D;
-	private final static byte INS_BIP32_SET_EXTENDED_KEY= (byte) 0x70;
 	private final static byte INS_SIGN_MESSAGE= (byte) 0x6E;
 	private final static byte INS_SIGN_SHORT_MESSAGE= (byte) 0x72;
 	private final static byte INS_SIGN_TRANSACTION= (byte) 0x6F;
 	private final static byte INS_PARSE_TRANSACTION = (byte) 0x71;
 	// debug
 	private final static byte INS_TEST_SHA1 = (byte) 0x80;
+	private final static byte INS_COMPUTE_SHA512 = (byte) 0x6A;
+	private final static byte INS_COMPUTE_HMAC= (byte) 0x6B;
+	private final static byte INS_BIP32_SET_EXTENDED_KEY= (byte) 0x70;
 	
 
 	/** There have been memory problems on the card */
@@ -179,6 +164,8 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static short SW_OPERATION_NOT_ALLOWED = (short) 0x9C03;
 	/** Required setup is not not done */
 	private final static short SW_SETUP_NOT_DONE = (short) 0x9C04;
+	/** Required setup is already done */
+	private final static short SW_SETUP_ALREADY_DONE = (short) 0x9C07;
 	/** Required feature is not (yet) supported */
 	private final static short SW_UNSUPPORTED_FEATURE = (short) 0x9C05;
 	/** Required operation was not authorized because of a lack of privileges */
@@ -229,10 +216,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	
 	// Key objects (allocated on demand)
 	private Key[] keys;
-	// Key ACLs
-	private byte[] keyACLs;
-	// Key Tries Left
-	private byte[] keyTries;
 	
 	// PIN and PUK objects, allocated on demand
 	private OwnerPIN[] pins, ublk_pins;
@@ -249,8 +232,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 
 	/* For the setup function - should only be called once */
 	private boolean setupDone = false;
-	private byte create_key_ACL;
-	private byte create_pin_ACL;
 	
 	// shared cryptographic objects
 	private KeyAgreement keyAgreement;
@@ -295,8 +276,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	
 	//   bip32 keys
 	private boolean bip32_seeded= false;
-	private byte[] bip32_masterACL; // define right access for Write,Read, and Use
-	private byte[] bip32_extendedACL; // define right access for Write,Read, and Use
+	private byte[] bip32_masterACL; // define right access for Write,Read, and Use => TODO: deprecate!
 	private byte bip32_master_compbyte; // compression byte for master key
 	private AESKey bip32_masterkey; 
 	private AESKey bip32_masterchaincode; 
@@ -398,9 +378,8 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		byte ins = buffer[ISO7816.OFFSET_INS];
 		if (!setupDone && (ins != (byte) INS_SETUP))
 			ISOException.throwIt(SW_SETUP_NOT_DONE);
-
 		if (setupDone && (ins == (byte) INS_SETUP))
-			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
+			ISOException.throwIt(SW_SETUP_ALREADY_DONE);
 
 		switch (ins) {
 		case INS_SETUP:
@@ -486,7 +465,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * data: [default_pin_length(1b) | default_pin | 
      *        pin_tries0(1b) | ublk_tries0(1b) | pin0_length(1b) | pin0 | ublk0_length(1b) | ublk0 | 
      *        pin_tries1(1b) | ublk_tries1(1b) | pin1_length(1b) | pin1 | ublk1_length(1b) | ublk1 | 
-     *        secmemsize(2b) | memsize(2b) | ACL(3b) |
+     *        secmemsize(2b) | RFU(2b) | RFU(3b) |
      *        option_flags(2b) | 
      *        (option): hmacsha1_key(20b) | amount_limit(8b)
      *        ]
@@ -579,24 +558,20 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		
 		short secmem_size= Util.getShort(buffer, base);
 		base += (short) 2;
-		short mem_size = Util.getShort(buffer, base); //deprecated => RFU...
+		short RFU = Util.getShort(buffer, base); //mem_size deprecated => RFU...
 		base += (short) 2;
 		bytesLeft-=4;
 		
-		create_key_ACL = buffer[base++];
-		create_pin_ACL = buffer[base++];
+		RFU = buffer[base++]; //create_object_ACL deprecated => RFU
+		RFU = buffer[base++]; //create_key_ACL deprecated => RFU
+		RFU = buffer[base++]; //create_pin_ACL deprecated => RFU
 		bytesLeft-=3;
 		
 		bip32_mem = new MemoryManager((short) secmem_size);
 		bip32_om = new ObjectManager(bip32_mem);
 		
 		keys = new Key[MAX_NUM_KEYS];
-		keyACLs = new byte[(short) (MAX_NUM_KEYS * KEY_ACL_SIZE)];
-		keyTries = new byte[MAX_NUM_KEYS];
-		for (byte i = (byte) 0; i < (byte) MAX_NUM_KEYS; i++)
-			keyTries[i] = MAX_KEY_TRIES;
-
-		logged_ids = 0x00; // No identities logged in
+		logged_ids = 0x0000; // No identities logged in
 		
 		// Initialize the extended APDU buffer
 		try {
@@ -631,7 +606,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		bip32_masterchaincode= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
 		bip32_encryptkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
 		bip32_masterACL= new byte[KEY_ACL_SIZE];
-		bip32_extendedACL= new byte[KEY_ACL_SIZE];
 		// object containing the current extended key
 		bip32_extendedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
 		Secp256k1.setCommonCurveParameters(bip32_extendedkey);
@@ -684,14 +658,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		
 		if (keys[key_nb] == null) {
 			// We have to create the Key
-
-			/* Check that Identity n.0 is logged */
-			if ((create_key_ACL == (byte) 0xFF)
-					|| (((logged_ids & create_key_ACL) == (short) 0x0000) && (create_key_ACL != (byte) 0x00)))
-				ISOException.throwIt(SW_UNAUTHORIZED);
-			
-			keys[key_nb] = KeyBuilder.buildKey(key_type, key_size, false);
-			
+			keys[key_nb] = KeyBuilder.buildKey(key_type, key_size, false);			
 		} else {
 			// Key already exists: check size & type
 			/*
@@ -702,29 +669,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 				ISOException.throwIt(SW_OPERATION_NOT_ALLOWED);
 		}
 		return keys[key_nb];
-	}
-
-	/** Check from key_nb key ACL if an operation can be done */
-	boolean authorizeKeyOp(byte key_nb, byte op) {
-		short acl_offset = (short) (key_nb * KEY_ACL_SIZE+ op);
-		short required_ids = Util.getShort(keyACLs, acl_offset);
-		return ((required_ids != (short) 0xFFFF) && ((short) (required_ids & logged_ids) == required_ids));
-	}
-	
-	/** Check from ACL if the corresponding key can be overwritten */
-	boolean authorizeKeyOp(byte[] ACL, byte op) {
-		short required_ids = Util.getShort(ACL, (short)op);
-		return ((required_ids != (short) 0xFFFF) && ((short) (required_ids & logged_ids) == required_ids));
-	}
-			
-	/** Returns an ACL that requires current logged in identities. */
-	byte[] getCurrentACL() {
-		if (acl == null)
-			acl = new byte[KEY_ACL_SIZE]; //to do: avoid allocation outside setup?
-		byte i;
-		for (i = (byte) 0; i < KEY_ACL_SIZE; i += (byte) 2)
-			Util.setShort(acl, i, logged_ids);
-		return acl;
 	}
 
 	/**
@@ -755,24 +699,23 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * ins: 0x32
 	 * p1: private key number (0x00-0x0F)
 	 * p2: 0x00
-	 * data: [key_encoding(1) | key_type(1) | key_size(2) | key_ACL(6) | key_blob] 
+	 * data: [key_encoding(1) | key_type(1) | key_size(2) | RFU(6) | key_blob] 
 	 * return: none
 	 */
 	private void ImportKey(APDU apdu, byte[] buffer) {
+		// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
+		
 		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
 			ISOException.throwIt(SW_INCORRECT_P2);
-		
-		//extended length
-		short bytesLeft = apdu.setIncomingAndReceive();
-		if (bytesLeft != apdu.setIncomingAndReceive())
-			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-		
 		byte key_nb = buffer[ISO7816.OFFSET_P1];
 		if ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS))
 			ISOException.throwIt(SW_INCORRECT_P1);
-		/* If we're going to overwrite a key contents, check ACL */
-		if ((keys[key_nb] != null) && keys[key_nb].isInitialized() && !authorizeKeyOp(key_nb,ACL_WRITE))
-			ISOException.throwIt(SW_UNAUTHORIZED);
+		
+		short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+		if (bytesLeft != apdu.setIncomingAndReceive())
+			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 		
 		/*** Start reading key blob header***/
 		// blob header= [ key_encoding(1) | key_type(1) | key_size(2) | key_ACL(6)]
@@ -791,8 +734,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		short key_size = Util.getShort(buffer, dataOffset);
 		dataOffset += (short) 2; // Skip Key Size
 		bytesLeft -= (short) 2;
-		Util.arrayCopy(buffer, dataOffset, keyACLs, (short) (key_nb * KEY_ACL_SIZE), KEY_ACL_SIZE);
-		dataOffset += (short) 6; // Skip ACL
+		dataOffset += (short) 6; // Skip ACL (deprecated)
 		bytesLeft -= (short) 6;
 		/*** Start reading key blob ***/
 		short blob_size;
@@ -836,6 +778,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * return(SECP256K1): [coordx_size(2b) | pubkey_coordx | sig_size(2b) | sig]
 	 */
 	private void getPublicKeyFromPrivate(APDU apdu, byte[] buffer) {
+		// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
 		
 		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
 			ISOException.throwIt(SW_INCORRECT_P2);
@@ -849,10 +794,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		Key key = keys[key_nb];
 		if ((key == null) || !key.isInitialized())
 			ISOException.throwIt(SW_INCORRECT_P1);
-		
-		// Enforce Access Control
-		if (!authorizeKeyOp(key_nb, ACL_READ))
-			ISOException.throwIt(SW_UNAUTHORIZED);
 		
 		// check type
 		byte key_type = key.getType();
@@ -900,12 +841,13 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * return: none
 	 */
 	private void CreatePIN(APDU apdu, byte[] buffer) {
+		// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
+		
 		byte pin_nb = buffer[ISO7816.OFFSET_P1];
 		byte num_tries = buffer[ISO7816.OFFSET_P2];
-		/* Check that Identity n.0 is logged */
-		if ((create_pin_ACL == (byte) 0xFF)
-				|| (((logged_ids & create_pin_ACL) == (short) 0x0000) && (create_pin_ACL != (byte) 0x00)))
-			ISOException.throwIt(SW_UNAUTHORIZED);
+		
 		if ((pin_nb < 0) || (pin_nb >= MAX_NUM_PINS) || (pins[pin_nb] != null))
 			ISOException.throwIt(SW_INCORRECT_P1);
 		/* Allow pin lengths > 127 (useful at all ?) */
@@ -1085,6 +1027,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 *  return: [RFU(1b) | PIN_mask(1b)]
 	 */
 	private void ListPINs(APDU apdu, byte[] buffer) {
+		// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
+		
 		// Checking P1 & P2
 		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
 			ISOException.throwIt(SW_INCORRECT_P1);
@@ -1118,6 +1064,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 *  return: [versions(4b) | secure_memory(4b) | nb_PIN(1b) | nb_keys(1b) | logged_id(2b)]
 	 */
 	private void GetStatus(APDU apdu, byte[] buffer) {
+		// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
+		
 		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
 			ISOException.throwIt(SW_INCORRECT_P1);
 		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
@@ -1131,6 +1081,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		pos += (short) 2;
 		Util.setShort(buffer, pos, bip32_mem.freemem()); // secure mem 
 		pos += (short) 2;
+		// TODO: refactor this part/remove useless info...
 		byte cnt = (byte) 0;
 		for (short i = 0; i < pins.length; i++)
 			if (pins[i] != null)
@@ -1162,6 +1113,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
 	 */
 	private void importBIP32Seed(APDU apdu, byte[] buffer){
+		// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
 		
 		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
 			ISOException.throwIt(SW_INCORRECT_P1);
@@ -1171,21 +1125,12 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		if (bytesLeft != apdu.setIncomingAndReceive())
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);	
 		
-		/* Check that logged identities are allowed to create seed*/
-		if ((create_key_ACL == (byte) 0xFF)
-				|| (((logged_ids & create_key_ACL) == (short) 0x0000) && (create_key_ACL != (byte) 0x00)))
-			ISOException.throwIt(SW_UNAUTHORIZED);
+		// TODO: only reset seed if p1 is set to specific flag to avoid accidental erasure, otherwise sent error message
 		
-		// if seed is already initialized, check that logged identities are allowed to rewwrite seed (and master key)
-		// TODO: only reset seed if p1 is set to specific flag to avoir accidental erasure, otherwise sent error message
-		if (bip32_seeded && !authorizeKeyOp(bip32_masterACL, ACL_WRITE))
-			ISOException.throwIt(SW_UNAUTHORIZED);
-		
-		// buffer data = [6-byte ACL | 1-byte seed size (in byte) | seed data]
+		// buffer data = [6-byte RFU | 1-byte seed size (in byte) | seed data]
 		// get keyACL 
 		short offset= (short)ISO7816.OFFSET_CDATA;
-		Util.arrayCopyNonAtomic(buffer, offset, bip32_masterACL, (short)0, (short)KEY_ACL_SIZE);
-		offset+= KEY_ACL_SIZE;
+		offset+= (byte)0x06; // ignore 6-first byte (RFU)
 		
 		// get seed bytesize (max 64 bytes)
 		byte bip32_seedsize = buffer[offset];
@@ -1231,7 +1176,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
         // by guessing the compression value () and verifying the signature... 
         // buffer= [coordx_size(2) | coordx | sigsize(2) | sig | nb_deleted(2)]
         apdu.setOutgoingAndSend((short) 0, (short)(2+coordx_size+2+sign_size+2));
-		
 	}
 	
 	/**
@@ -1246,6 +1190,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
 	 */
 	private void getBIP32AuthentiKey(APDU apdu, byte[] buffer){
+		// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
 		
 		// check whether the seed is initialized
 		if (!bip32_seeded)
@@ -1265,7 +1212,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
         // by guessing the compression value () and verifying the signature... 
         // buffer= [coordx_size(2) | coordx | sigsize(2) | sig]
         apdu.setOutgoingAndSend((short) 0, (short)(coordx_size+sign_size+4));
-		
 	}	
 	
 	/**
@@ -1283,11 +1229,13 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * 
 	 * */
 	private void getBIP32ExtendedKey(APDU apdu, byte[] buffer){
-		
-		// check master key ACL for computation use (derivation)
-		// to do: define a more flexible approach based on parent object ACL?
-		if (!authorizeKeyOp(bip32_masterACL, ACL_USE))
+		// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
 			ISOException.throwIt(SW_UNAUTHORIZED);
+		
+		// check whether the seed is seed is initialized
+		if (!bip32_seeded)
+			ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
 		
 		// input 
 		short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
@@ -1300,15 +1248,12 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		if (bytesLeft < 4*bip32_depth)
 			ISOException.throwIt(SW_INVALID_PARAMETER);
 		
-		// DONE: encrypt by default! this field is currently not used (RFU)...
+		// if P2==0xFF, erase the cache of precomputed key object in memory
+		// DONE: encrypt by default! 
 		// TO DO: flag whether to store (save) key as object (currently by default)?
 		byte RFU = buffer[ISO7816.OFFSET_P2]; 
-		if (RFU==(byte)0xFF && authorizeKeyOp(bip32_masterACL, ACL_WRITE))
+		if (RFU==(byte)0xFF)
 			clearAllBip32ExtendedKey(recvBuffer, (short)0);
-		
-		// check whether the seed is seed is initialized
-		if (!bip32_seeded)
-			ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
 		
 		// master key data (usefull as parent's data for key derivation)
 		// The method uses a temporary buffer recvBuffer to store the parent and extended key object data:
@@ -1457,7 +1402,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		// at this point, recvBuffer contains a copy of the last extended key 
 		// instantiate elliptic curve with last extended key + copy ACL
 		bip32_extendedkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
-		Util.arrayCopyNonAtomic(bip32_masterACL, (short)0, bip32_extendedACL, (short)0, KEY_ACL_SIZE); 
 		
         // save chaincode to buffer
         Util.arrayCopyNonAtomic(recvBuffer, (short)BIP32_OFFSET_PARENT_CHAINCODE, buffer, (short)0, BIP32_KEY_SIZE); 
@@ -1504,7 +1448,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			bip32_om.destroyObject(obj_cla, obj_id, true);
 			nb_deleted++;
 		}
-		
 		return nb_deleted;
 	}
     
@@ -1522,6 +1465,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 *
      */
     private void signMessage(APDU apdu, byte[] buffer){
+		// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
 		
 		byte key_nb = buffer[ISO7816.OFFSET_P1];
 		if ( (key_nb!=(byte)0xFF) && ((key_nb < 0)||(key_nb >= MAX_NUM_KEYS)) )
@@ -1534,12 +1480,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		if (bytesLeft != apdu.setIncomingAndReceive())
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);	
 		
-		// chek ACL
-		if (key_nb==(byte)0xFF && !authorizeKeyOp(bip32_extendedACL, ACL_USE))
-			ISOException.throwIt(SW_UNAUTHORIZED);
-    	if (key_nb!=(byte)0xFF && !authorizeKeyOp(key_nb, ACL_USE))
-			ISOException.throwIt(SW_UNAUTHORIZED);
-    	
     	// check whether the seed is initialized
 		if (key_nb==(byte)0xFF && !bip32_seeded)
 			ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
@@ -1613,6 +1553,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 *
      */
     private void signShortMessage(APDU apdu, byte[] buffer){
+		// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
 		
 		byte key_nb = buffer[ISO7816.OFFSET_P1];
 		if ( (key_nb!=(byte)0xFF) && ((key_nb < 0)||(key_nb >= MAX_NUM_KEYS)) ) // debug!!
@@ -1623,13 +1566,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		if (bytesLeft != apdu.setIncomingAndReceive())
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);	
 		
-		// chek ACL
-		if (key_nb==(byte)0xFF && !authorizeKeyOp(bip32_extendedACL, ACL_USE))
-			ISOException.throwIt(SW_UNAUTHORIZED);
-    	if (key_nb!=(byte)0xFF && !authorizeKeyOp(key_nb, ACL_USE))
-			ISOException.throwIt(SW_UNAUTHORIZED);
-    	
-    	// check whether the seed is initialized
+		// check whether the seed is initialized
 		if (key_nb==(byte)0xFF && !bip32_seeded)
 			ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
 				
@@ -1661,7 +1598,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     	}
     	short sign_size= sigECDSA.sign(recvBuffer, (short)0, (short)32, buffer, (short)0);
         apdu.setOutgoingAndSend((short) 0, sign_size);
-    	
     }    
     
     /**
@@ -1679,7 +1615,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * 		needs_confirm is 0x01 if a hmac-sha1 of the hash must be provided for tx signing 
      */
     private void ParseTransaction(APDU apdu, byte[] buffer){
-    	
+    	// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
+		
     	byte p1 = buffer[ISO7816.OFFSET_P1];
         byte p2 = buffer[ISO7816.OFFSET_P2];
         short dataOffset = ISO7816.OFFSET_CDATA;
@@ -1826,7 +1765,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 *
      */
     private void SignTransaction(APDU apdu, byte[] buffer){
-    	
+		// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
+		
     	byte key_nb = buffer[ISO7816.OFFSET_P1];
 		if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
 			ISOException.throwIt(SW_INCORRECT_P1);
@@ -1836,11 +1778,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 		if (bytesLeft<MessageDigest.LENGTH_SHA_256)
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-    	
-    	if (key_nb==(byte)0xFF && !authorizeKeyOp(bip32_extendedACL, ACL_USE))
-			ISOException.throwIt(SW_UNAUTHORIZED);
-    	if (key_nb!=(byte)0xFF && !authorizeKeyOp(key_nb, ACL_USE))
-			ISOException.throwIt(SW_UNAUTHORIZED);
     	
     	// check whether the seed is initialized
 		if (key_nb==(byte)0xFF && !bip32_seeded)
