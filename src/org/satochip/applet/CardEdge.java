@@ -76,18 +76,6 @@ import javacardx.crypto.Cipher;
 
 /**
  * Implements MUSCLE's Card Edge Specification.
- * <p>
- * 
- * TODO:
- * <ul>
- * <li>Allows maximum number of keys and PINs and total mem to be specified at
- * the instantiation moment.
- * <p>
- * <li>How do transactions fit in the methods ?
- * <li>Where should we issue begin/end transaction ?
- * <li>Should we ever abort transaction ? Where ?
- * <li>Every time there is an "if (avail < )" check, call ThrowDeleteObjects().
- * </ul>
  */
 public class CardEdge extends javacard.framework.Applet implements ExtendedLength { 
 
@@ -133,12 +121,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	
 	// Maximum external authentication tries per key
 	private final static byte MAX_KEY_TRIES = (byte) 5;
-
-	// Import/Export Object ID
-	private final static short IN_OBJECT_CLA = (short) 0xFFFF;
-	private final static short IN_OBJECT_ID = (short) 0xFFFE;
-	private final static short OUT_OBJECT_CLA = (short) 0xFFFF;
-	private final static short OUT_OBJECT_ID = (short) 0xFFFF;
 
 	private final static byte KEY_ACL_SIZE = (byte) 6;
 	private final static byte ACL_READ = (byte) 0;
@@ -250,10 +232,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	/****************************************
 	 * Instance variables declaration *
 	 ****************************************/
-
-	// Memory & Object Manager
-	private MemoryManager mem;
-	private ObjectManager om;
 	
 	// Key objects (allocated on demand)
 	private Key[] keys;
@@ -390,22 +368,11 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		/*
 		 * Application has been selected: Do session cleanup operation
 		 */
-		
-		// Destroy the IO objects (if they exist)
-		if (setupDone) {
-			om.destroyObject(IN_OBJECT_CLA, IN_OBJECT_ID, true);
-			om.destroyObject(OUT_OBJECT_CLA, OUT_OBJECT_ID, true);
-		}
 		LogOutAll();
 		return true;
 	}
 
 	public void deselect() {
-		// Destroy the IO objects (if they exist)
-		if (setupDone) {
-			om.destroyObject(IN_OBJECT_CLA, IN_OBJECT_ID, true);
-			om.destroyObject(OUT_OBJECT_CLA, OUT_OBJECT_ID, true);
-		}
 		LogOutAll();
 	}
 
@@ -618,7 +585,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		
 		short secmem_size= Util.getShort(buffer, base);
 		base += (short) 2;
-		short mem_size = Util.getShort(buffer, base);
+		short mem_size = Util.getShort(buffer, base); //deprecated...
 		base += (short) 2;
 		bytesLeft-=4;
 		
@@ -626,8 +593,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		create_pin_ACL = buffer[base++];
 		bytesLeft-=3;
 		
-		mem = new MemoryManager((short) mem_size);
-		om = new ObjectManager(mem);
 		bip32_mem = new MemoryManager((short) secmem_size);
 		bip32_om = new ObjectManager(bip32_mem);
 		
@@ -1328,7 +1293,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 *  p1: 0x00 
 	 *  p2: 0x00 
 	 *  data: none
-	 *  return: [versions(4b) | secure_memory(4b) | memory(4b) | nb_PIN(1b) | nb_keys(1b) | logged_id(2b)]
+	 *  return: [versions(4b) | secure_memory(4b) | nb_PIN(1b) | nb_keys(1b) | logged_id(2b)]
 	 */
 	private void GetStatus(APDU apdu, byte[] buffer) {
 		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
@@ -1342,12 +1307,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		buffer[pos++] = (byte) APPLET_MINOR_VERSION; // Minor Applet version n.
 		Util.setShort(buffer, pos, (short) bip32_mem.getBuffer().length); // Total secure mem 
 		pos += (short) 2;
-		Util.setShort(buffer, pos, (short) mem.getBuffer().length); // Total mem
-		// L.S.
-		pos += (short) 2;
 		Util.setShort(buffer, pos, bip32_mem.freemem()); // secure mem 
-		pos += (short) 2;
-		Util.setShort(buffer, pos, mem.freemem()); // Free mem
 		pos += (short) 2;
 		byte cnt = (byte) 0;
 		for (short i = 0; i < pins.length; i++)
