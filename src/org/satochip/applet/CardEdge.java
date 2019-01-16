@@ -127,12 +127,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static byte ACL_WRITE = (byte) 2;
 	private final static byte ACL_USE = (byte) 4;
 	
-	// Standard public ACL
-	private static byte[] STD_PUBLIC_ACL;/*
-										 * = { 0x0000, // Read always allowed
-										 * 0x0000, // Write always allowed
-										 * 0x0000 // Delete always allowed };
-										 */
 	private static byte[] acl; // Temporary ACL
 
 	// code of CLA byte in the command APDU header
@@ -585,7 +579,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		
 		short secmem_size= Util.getShort(buffer, base);
 		base += (short) 2;
-		short mem_size = Util.getShort(buffer, base); //deprecated...
+		short mem_size = Util.getShort(buffer, base); //deprecated => RFU...
 		base += (short) 2;
 		bytesLeft-=4;
 		
@@ -603,11 +597,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			keyTries[i] = MAX_KEY_TRIES;
 
 		logged_ids = 0x00; // No identities logged in
-		//getChallengeDone = false; // No GetChallenge() issued so far
-		
-		STD_PUBLIC_ACL = new byte[KEY_ACL_SIZE];
-		for (byte i = (byte) 0; i < (byte) KEY_ACL_SIZE; i += (short) 2)
-			Util.setShort(STD_PUBLIC_ACL, i, (short) 0x0000);
 		
 		// Initialize the extended APDU buffer
 		try {
@@ -682,20 +671,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	}
 
 	/********** UTILITY FUNCTIONS **********/
-
-	/* Retrieves the full contents from the apdu object in case of 
-	 * an extended APDU. */
-	private void getData(APDU apdu, byte[] src, short bytesRead, byte[] dst) {
-		short recvLen = 0;
-		short apduOffset = bytesRead;
-
-		Util.arrayCopyNonAtomic(src, (short) 0, dst, (short) 0, apduOffset);
-		do {
-			recvLen = apdu.receiveBytes((short) 0);
-			Util.arrayCopyNonAtomic(src, (short) 0, dst, apduOffset, recvLen);
-			apduOffset += recvLen;
-		} while (recvLen > 0);
-	}
 
 	/**
 	 * Retrieves the Key object to be used w/ the specified key number, key type
@@ -783,26 +758,14 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * data: [key_encoding(1) | key_type(1) | key_size(2) | key_ACL(6) | key_blob] 
 	 * return: none
 	 */
-	private void ImportKey(APDU apdu, byte[] apduBuffer) {
-		if (apduBuffer[ISO7816.OFFSET_P2] != (byte) 0x00)
+	private void ImportKey(APDU apdu, byte[] buffer) {
+		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
 			ISOException.throwIt(SW_INCORRECT_P2);
-		
-		/* Buffer pointer */
-		byte[] buffer = apduBuffer;
 		
 		//extended length
 		short bytesLeft = apdu.setIncomingAndReceive();
-		short LC = apdu.getIncomingLength();
-		short dataOffset = apdu.getOffsetCdata();
-		
-		if ((short) (LC + dataOffset) > EXT_APDU_BUFFER_SIZE)
-			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);		
-		/* Is this an extended APDU? */
-		if (bytesLeft != LC) {
-			getData(apdu, apduBuffer, (short) (dataOffset + bytesLeft), recvBuffer);
-			buffer = recvBuffer;
-			bytesLeft = LC;
-		}
+		if (bytesLeft != apdu.setIncomingAndReceive())
+			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 		
 		byte key_nb = buffer[ISO7816.OFFSET_P1];
 		if ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS))
@@ -817,6 +780,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		if (bytesLeft < 4)
 			ISOException.throwIt(SW_INVALID_PARAMETER);
 		// Check Blob Encoding - TODO: Encrypted key blob ?
+		short dataOffset = apdu.getOffsetCdata();
 		if (buffer[dataOffset] != BLOB_ENC_PLAIN)
 			ISOException.throwIt(SW_UNSUPPORTED_FEATURE);
 		dataOffset++; // Skip Blob Encoding
@@ -833,31 +797,8 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		/*** Start reading key blob ***/
 		short blob_size;
 		switch (key_type) {
-            case KeyBuilder.TYPE_EC_FP_PUBLIC: // BITCOIN
-				// key_blob=[blob_size(2) | pubkey_blob(1+32+32)]
-            	if (key_size != 256)
-					ISOException.throwIt(key_size);
-				ECPublicKey ec_pub_key = (ECPublicKey) getKey(key_nb, key_type, key_size);
-				if (bytesLeft < 2)
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				blob_size = Util.getShort(buffer, dataOffset);
-				if (blob_size != 65) //only uncompressed point 
-					ISOException.throwIt(blob_size);
-				dataOffset += (short) 2; 
-				bytesLeft -= (short) 2;
-				if (bytesLeft < (short) (blob_size))
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				// others curves parameters are take by default as SECP256k1
-				// Satochip default is secp256k1 (over Fp)
-				Secp256k1.setCommonCurveParameters(ec_pub_key);
-				// set public point
-				ec_pub_key.setW(buffer, dataOffset, (short)(blob_size));
-				// https://javacard.kenai.com/javadocs/classic/javacard/security/ECPrivateKey.html
-				// The plain text data format is big-endian and right-aligned (the least significant bit is the least significant bit of last byte)
-				dataOffset += blob_size; 
-				bytesLeft -= blob_size;
-				break;
-			case KeyBuilder.TYPE_EC_FP_PRIVATE: // BITCOIN
+			// only support elliptic curve private key
+            case KeyBuilder.TYPE_EC_FP_PRIVATE: 
 				// key_blob=[blob_size(2) | privkey_blob(32)]
             	if (key_size != 256)
 					ISOException.throwIt(key_size);
@@ -879,125 +820,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	            dataOffset += blob_size; 
 	            bytesLeft -= blob_size;
 	            break;
-			case KeyBuilder.TYPE_RSA_PUBLIC:
-				RSAPublicKey rsa_pub_key = (RSAPublicKey) getKey(key_nb, key_type, key_size);
-				if (bytesLeft < 2)
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				blob_size = Util.getShort(buffer, dataOffset);
-				dataOffset += (short) 2; // Skip Mod Size
-				bytesLeft -= (short) 2;
-				if (bytesLeft < (short) (blob_size + 2))
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				rsa_pub_key.setModulus(buffer, dataOffset, blob_size);
-				dataOffset += blob_size; // Skip Mod Value
-				bytesLeft -= blob_size;
-				// bytesLeft already checked in previous if ()
-				blob_size = Util.getShort(buffer, dataOffset);
-				dataOffset += (short) 2; // Skip Exp Size
-				bytesLeft -= (short) 2;
-				if (bytesLeft < blob_size)
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				rsa_pub_key.setExponent(buffer, dataOffset, blob_size);
-				dataOffset += blob_size; // Skip Exp Value
-				bytesLeft -= blob_size;
-				break;
-			case KeyBuilder.TYPE_RSA_PRIVATE:
-				RSAPrivateKey rsa_prv_key = (RSAPrivateKey) getKey(key_nb, key_type, key_size);
-				if (bytesLeft < 2)
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				blob_size = Util.getShort(buffer, dataOffset);
-				dataOffset += (short) 2; // Skip Mod Size
-				bytesLeft -= (short) 2;
-				if (bytesLeft < (short) (blob_size + 2))
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				rsa_prv_key.setModulus(buffer, dataOffset, blob_size);
-				dataOffset += blob_size; // Skip Mod Value
-				bytesLeft -= blob_size;
-				// bytesLeft already checked in previous if ()
-				blob_size = Util.getShort(buffer, dataOffset);
-				dataOffset += (short) 2; // Skip Exp Size
-				bytesLeft -= (short) 2;
-				if (bytesLeft < blob_size)
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				rsa_prv_key.setExponent(buffer, dataOffset, blob_size);
-				dataOffset += blob_size; // Skip Exp Value
-				bytesLeft -= blob_size;
-				break;
-			case KeyBuilder.TYPE_RSA_CRT_PRIVATE:
-				RSAPrivateCrtKey rsa_prv_key_crt = (RSAPrivateCrtKey) getKey(key_nb, key_type, key_size);
-				if (bytesLeft < 2)
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				blob_size = Util.getShort(buffer, dataOffset);
-				dataOffset += (short) 2; // Skip P Size
-				bytesLeft -= (short) 2;
-				if (bytesLeft < (short) (blob_size + 2))
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				rsa_prv_key_crt.setP(buffer, dataOffset, blob_size);
-				dataOffset += blob_size; // Skip P Value
-				bytesLeft -= blob_size;
-				// bytesLeft ok...
-				blob_size = Util.getShort(buffer, dataOffset);
-				dataOffset += (short) 2; // Skip Q Size
-				bytesLeft -= (short) 2;
-				if (bytesLeft < (short) (blob_size + 2))
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				rsa_prv_key_crt.setQ(buffer, dataOffset, blob_size);
-				dataOffset += blob_size; // Skip Q Value
-				bytesLeft -= blob_size;
-				// bytesLeft ok...
-				blob_size = Util.getShort(buffer, dataOffset);
-				dataOffset += (short) 2; // Skip PQ Size
-				bytesLeft -= (short) 2;
-				if (bytesLeft < (short) (blob_size + 2))
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				rsa_prv_key_crt.setPQ(buffer, dataOffset, blob_size);
-				dataOffset += blob_size; // Skip PQ Value
-				bytesLeft -= blob_size;
-				// bytesLeft ok...
-				blob_size = Util.getShort(buffer, dataOffset);
-				dataOffset += (short) 2; // Skip DP1 Size
-				bytesLeft -= (short) 2;
-				if (bytesLeft < (short) (blob_size + 2))
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				rsa_prv_key_crt.setDP1(buffer, dataOffset, blob_size);
-				dataOffset += blob_size; // Skip DP1 Value
-				bytesLeft -= blob_size;
-				// bytesLeft ok...
-				blob_size = Util.getShort(buffer, dataOffset);
-				dataOffset += (short) 2; // Skip DQ1 Size
-				bytesLeft -= (short) 2;
-				if (bytesLeft < blob_size)
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				rsa_prv_key_crt.setDQ1(buffer, dataOffset, blob_size);
-				dataOffset += blob_size; // Skip DQ1 Value
-				bytesLeft -= blob_size;
-				break;
-			case KeyBuilder.TYPE_DES:
-				DESKey des_key = (DESKey) getKey(key_nb, key_type, key_size);
-				if (bytesLeft < 2)
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				blob_size = Util.getShort(buffer, dataOffset);
-				dataOffset += (short) 2; // Skip Key Size
-				bytesLeft -= (short) 2;
-				if (bytesLeft < blob_size)
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				des_key.setKey(buffer, dataOffset);
-				dataOffset += blob_size; // Skip Key Value
-				bytesLeft -= blob_size;
-				break;
-			case KeyBuilder.TYPE_AES:
-				AESKey aes_key = (AESKey) getKey(key_nb, key_type, key_size);
-				if (bytesLeft < 2)
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				blob_size = Util.getShort(buffer, dataOffset);
-				dataOffset += (short) 2; // Skip Key Size
-				bytesLeft -= (short) 2;
-				if (bytesLeft < blob_size)
-					ISOException.throwIt(SW_INVALID_PARAMETER);
-				aes_key.setKey(buffer, dataOffset);
-				dataOffset += blob_size; // Skip Key Value
-				bytesLeft -= blob_size;
-				break;
 			default:
 				ISOException.throwIt(SW_INCORRECT_ALG);
 		}// end switch
