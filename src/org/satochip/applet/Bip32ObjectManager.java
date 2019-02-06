@@ -28,7 +28,7 @@ public class Bip32ObjectManager {
 	
 	// All the available memory as a byte array
 	private byte ptr[] = null;
-	private byte empty[] = null;
+	public byte empty[] = null;
 	public short nb_elem_free;
 	public short nb_elem_used;
 	private short size_elem; 
