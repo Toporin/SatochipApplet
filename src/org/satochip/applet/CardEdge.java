@@ -1,6 +1,6 @@
 /*
  * SatoChip Bitcoin Hardware Wallet based on javacard
- * (c) 2015 by Toporin - 16DMCk4WUaHofchAhpMaQS4UPm4urcy2dN
+ * (c) 2015-2019 by Toporin - 16DMCk4WUaHofchAhpMaQS4UPm4urcy2dN
  * Sources available on https://github.com/Toporin					 
  * Changes include: -Bip32 support
  * 					-simple Bitcoin transaction signatures 
@@ -1065,20 +1065,19 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	
 	/**
 	 * This function retrieves general information about the Applet running on the smart
-	 * card, and useful information about the status of current session, such as object
-	 * memory information, currently used number of keys and PIN codes, currently
-	 * logged in identities, etc…
+	 * card, and useful information about the status of current session such as:
+	 * 		- applet version (4b)
 	 *  
 	 *  ins: 0x3C
 	 *  p1: 0x00 
 	 *  p2: 0x00 
 	 *  data: none
-	 *  return: [versions(4b) | secure_memory(4b) | nb_PIN(1b) | nb_keys(1b) | logged_id(2b)]
+	 *  return: [versions(4b)]
 	 */
 	private void GetStatus(APDU apdu, byte[] buffer) {
 		// check that PIN[0] has been entered previously
-		if (!pins[0].isValidated())
-			ISOException.throwIt(SW_UNAUTHORIZED);
+		//if (!pins[0].isValidated())
+		//	ISOException.throwIt(SW_UNAUTHORIZED);
 		
 		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
 			ISOException.throwIt(SW_INCORRECT_P1);
@@ -1089,23 +1088,15 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		buffer[pos++] = (byte) PROTOCOL_MINOR_VERSION; // Minor Card Edge Protocol version n.
 		buffer[pos++] = (byte) APPLET_MAJOR_VERSION; // Major Applet version n.
 		buffer[pos++] = (byte) APPLET_MINOR_VERSION; // Minor Applet version n.
-		Util.setShort(buffer, pos, bip32_om.nb_elem_free); // Total secure mem 
-		pos += (short) 2;
-		Util.setShort(buffer, pos, bip32_om.nb_elem_used); // secure mem 
-		pos += (short) 2;
-		// TODO: refactor this part/remove useless info...
-		byte cnt = (byte) 0;
-		for (short i = 0; i < pins.length; i++)
-			if (pins[i] != null)
-				cnt++;
-		buffer[pos++] = cnt; // Number of used PINs
-		cnt = (byte) 0;
-		for (short i = 0; i < keys.length; i++)
-			if (keys[i] != null)
-				cnt++;
-		buffer[pos++] = cnt; // Number of used Keys
-		Util.setShort(buffer, pos, logged_ids); // Logged ids
-		pos += (short) 2;
+//		byte cnt_free = (byte) 0;
+//		byte cnt_used = (byte) 0;
+//		for (short i = 0; i < keys.length; i++)
+//			if (keys[i] != null)
+//				cnt_used++;
+//			else
+//				cnt_free++;
+//		buffer[pos++] = cnt_free; // Number of Keys available 
+//		buffer[pos++] = cnt_used; // Number of Keys used 
 		apdu.setOutgoingAndSend((short) 0, pos);
 	}
 	
@@ -1278,6 +1269,13 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		// copy coordy to secure memory
         authentikey_pubkey[0]=0x04;
         Util.arrayCopyNonAtomic(recvBuffer, (short)(1+BIP32_KEY_SIZE), authentikey_pubkey, (short)(1+BIP32_KEY_SIZE), BIP32_KEY_SIZE);
+	
+        short pos=0;
+		Util.setShort(buffer, pos, bip32_om.nb_elem_free); // number of slot available 
+		pos += (short) 2;
+		Util.setShort(buffer, pos, bip32_om.nb_elem_used); // number of slot used 
+		pos += (short) 2;
+		apdu.setOutgoingAndSend((short) 0, pos);
 	}// end of setBIP32AuthentikeyPubkey
 	
 	/**
@@ -1570,6 +1568,13 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 				ISOException.throwIt(SW_OBJECT_NOT_FOUND);
 			bip32_om.setByte(base, (short)(BIP32_OBJECT_SIZE-1), compbyte);
 		}
+		
+        short pos=0;
+		Util.setShort(buffer, pos, bip32_om.nb_elem_free); // number of slot available 
+		pos += (short) 2;
+		Util.setShort(buffer, pos, bip32_om.nb_elem_used); // number of slot used 
+		pos += (short) 2;
+		apdu.setOutgoingAndSend((short) 0, pos);
 	}// end of setBIP32ExtendedPubkey
 	
     /**
