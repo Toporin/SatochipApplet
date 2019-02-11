@@ -290,7 +290,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private ECPrivateKey bip32_authentikey; // key used to authenticate data
 	private ECPublicKey bip32_pubkey;
 	private byte[] authentikey_pubkey;// store authentikey coordx pubkey TODO: create ECPublicKey instead?
-	private short authentikey_coordx_size; // ...and size
+	//private short authentikey_coordx_size; // ...and size
 	
 	/*********************************************
 	 *        Other data instances               *
@@ -1110,9 +1110,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * The authentikey full public key can be recovered from the signature.
 	 *  
 	 *  ins: 0x6C
-	 *  p1: 0x00 
+	 *  p1: seed_size(1b) 
 	 *  p2: 0x00 
-	 *  data: [seed_ACL(6b) | seed_size(1b) | seed_data]
+	 *  data: [seed_data]
 	 *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
 	 */
 	private void importBIP32Seed(APDU apdu, byte[] buffer){
@@ -1120,30 +1120,24 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		if (!pins[0].isValidated())
 			ISOException.throwIt(SW_UNAUTHORIZED);
 		
-		if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
-			ISOException.throwIt(SW_INCORRECT_P1);
 		if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
 			ISOException.throwIt(SW_INCORRECT_P2);
 		short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
 		if (bytesLeft != apdu.setIncomingAndReceive())
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);	
 		
-		// TODO: only reset seed if p1 is set to specific flag to avoid accidental erasure, otherwise sent error message
-		
-		// buffer data = [6-byte RFU | 1-byte seed size (in byte) | seed data]
-		short offset= (short)ISO7816.OFFSET_CDATA;
-		offset+= (byte)0x06; // ignore 6-first ACL-byte (RFU)
-		
 		// get seed bytesize (max 64 bytes)
-		byte bip32_seedsize = buffer[offset];
-		offset++;
+		byte bip32_seedsize = buffer[ISO7816.OFFSET_P1]; 
 		if (bip32_seedsize <0 || bip32_seedsize>64)
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 		
+		// buffer data = [seed data]
+		short offset= (short)ISO7816.OFFSET_CDATA;
+		
 		// if seed was already defined, we must clear all related objects!!
-		short nb_deleted=0;
+		// TODO: only reset seed if p2 is set to specific flag to avoid accidental erasure, otherwise sent error message
 		if (bip32_seeded){
-			nb_deleted= bip32_om.reset();}
+			bip32_om.reset();}
 		
 		// derive master key!
 		HmacSha512.computeHmacSha512(BITCOIN_SEED, (short)0, (short)BITCOIN_SEED.length, buffer, offset, (short)bip32_seedsize, recvBuffer, (short)0);
@@ -1165,20 +1159,20 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		
 		// compute the partial authentikey public key...
         keyAgreement.init(bip32_authentikey);
-        authentikey_coordx_size = keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, authentikey_pubkey, (short)1); // compute x coordinate of public key as k*G
-        Util.setShort(buffer, (short)0, authentikey_coordx_size);
-        Util.arrayCopyNonAtomic(authentikey_pubkey, (short)1, buffer, (short)2, authentikey_coordx_size);
+        authentikey_pubkey[0]=0x00; // 0x00 means coordy is not set (yet), otherwise 0x04
+        short coordx_size = keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, authentikey_pubkey, (short)1); // compute x coordinate of public key as k*G
+        Util.setShort(buffer, (short)0, coordx_size);
+        Util.arrayCopyNonAtomic(authentikey_pubkey, (short)1, buffer, (short)2, coordx_size);
         // self signed public key
         sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
-        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(authentikey_coordx_size+2), buffer, (short)(authentikey_coordx_size+4));
-        Util.setShort(buffer, (short)(2+authentikey_coordx_size), sign_size);
-        Util.setShort(buffer, (short)(2+authentikey_coordx_size+2+sign_size), nb_deleted); 
+        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
+        Util.setShort(buffer, (short)(2+coordx_size), sign_size);
         
         // return x-coordinate of public key+signature
         // the client can recover full public-key from the signature or
         // by guessing the compression value () and verifying the signature... 
-        // buffer= [coordx_size(2) | coordx | sigsize(2) | sig | nb_deleted(2)]
-        apdu.setOutgoingAndSend((short) 0, (short)(2+authentikey_coordx_size+2+sign_size+2));
+        // buffer= [coordx_size(2) | coordx | sigsize(2) | sig]
+        apdu.setOutgoingAndSend((short) 0, (short)(2+coordx_size+2+sign_size));
 	}
 	
 	/**
