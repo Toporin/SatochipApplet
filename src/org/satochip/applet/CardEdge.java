@@ -56,18 +56,12 @@ import javacard.framework.OwnerPIN;
 import javacard.framework.SystemException;
 import javacard.framework.Util;
 import javacard.security.AESKey;
-//import javacard.security.DESKey;
 import javacard.security.ECPrivateKey;
 import javacard.security.ECPublicKey;
 //import javacard.security.HMACKey;
 import javacard.security.Key;
 import javacard.security.KeyAgreement;
 import javacard.security.KeyBuilder;
-//import javacard.security.KeyPair;
-//import javacard.security.RSAPrivateCrtKey;
-//import javacard.security.RSAPrivateKey;
-//import javacard.security.RSAPublicKey;
-//import javacard.security.RandomData;
 import javacard.security.Signature;
 import javacard.security.MessageDigest;
 import javacardx.apdu.ExtendedLength; //debugXL //TODO: remove
@@ -113,8 +107,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static byte PIN_MAX_SIZE = (byte) 16;// TODO: increase size?
 	// PIN[0] initial value...
 	private final static byte[] PIN_INIT_VALUE={(byte)'M',(byte)'u',(byte)'s',(byte)'c',(byte)'l',(byte)'e',(byte)'0',(byte)'0'};
-
-	//private final static byte KEY_ACL_SIZE = (byte) 6;// TODO: deprecate
 
 	// code of CLA byte in the command APDU header
 	private final static byte CardEdge_CLA = (byte) 0xB0;
@@ -269,7 +261,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private static final short BIP32_OFFSET_PARENT_CHAINCODE=0;
 	private static final short BIP32_OFFSET_PARENT_SEPARATOR=BIP32_KEY_SIZE;
 	private static final short BIP32_OFFSET_PARENT_KEY=BIP32_KEY_SIZE+1;
-	private static final short BIP32_OFFSET_INDEX= (short)(2*BIP32_KEY_SIZE+1); // offset in recvBuffer TODO: rename index to hash
+	private static final short BIP32_OFFSET_INDEX= (short)(2*BIP32_KEY_SIZE+1);
 	private static final short BIP32_OFFSET_COLLISIONHASH= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE-BIP32_ANTICOLLISION_LENGTH);
 	private static final short BIP32_OFFSET_CHILD_KEY= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE); 
 	private static final short BIP32_OFFSET_CHILD_CHAINCODE= (short)(BIP32_OFFSET_CHILD_KEY+BIP32_KEY_SIZE);
@@ -290,7 +282,6 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private ECPrivateKey bip32_authentikey; // key used to authenticate data
 	private ECPublicKey bip32_pubkey;
 	private byte[] authentikey_pubkey;// store authentikey coordx pubkey TODO: create ECPublicKey instead?
-	//private short authentikey_coordx_size; // ...and size
 	
 	/*********************************************
 	 *        Other data instances               *
@@ -1135,7 +1126,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		short offset= (short)ISO7816.OFFSET_CDATA;
 		
 		// if seed was already defined, we must clear all related objects!!
-		// TODO: only reset seed if p2 is set to specific flag to avoid accidental erasure, otherwise sent error message
+		// TODO: require 2FA to reset the seed...
 		if (bip32_seeded){
 			bip32_om.reset();}
 		
