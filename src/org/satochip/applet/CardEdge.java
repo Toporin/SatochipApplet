@@ -601,7 +601,8 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		// HD wallet
 		Sha512.init();
 		HmacSha512.init(tmpBuffer);
-		EccComputation.init(tmpBuffer);
+		//EccComputation.init(tmpBuffer); //debug
+		
 		// bip32 material
 		bip32_seeded= false;
 		bip32_master_compbyte=0x04;

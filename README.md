@@ -1,5 +1,5 @@
 # SatoChipApplet
-Open source javacard applet implementing a Bitcoin hardware wallet with full BIP32 support
+Open source javacard applet implementing a Bitcoin hardware wallet with full BIP32 support.
 
 # Demonstration 
 
@@ -7,15 +7,16 @@ Open source javacard applet implementing a Bitcoin hardware wallet with full BIP
 
 # Introduction
 
-SatoChip stands for Secure Anonymous Trustless and Open Chip. It is a javacard applet that can be used as a secure hardware wallet running for example on a [Yubikey Neo](https://store.yubico.com/store/catalog/product_info.php?ref=368&products_id=72&affiliate_banner_id=1). The SatoChip has full BIP32 supports but due to technical limitations on current javacards, *hardened keys* (i.e. child keys using indices 2^31 through 2^32-1) are derived much faster than normal keys.
+SatoChip stands for Secure Anonymous Trustless and Open Chip. It is a javacard applet that can be used as a secure hardware wallet running for example on a [Yubikey Neo](https://store.yubico.com/store/catalog/product_info.php?ref=368&products_id=72&affiliate_banner_id=1). The SatoChip has full BIP32 supports.
 
-Using SatoChip, an initial BIP32 seed is imported in the javacard and private keys are derived as requested by an external application. *Private keys are never exported outside of the secure chip*. Private key derivation is actually rather slow due to the fact that BIP32 derivation requires HMAC-SHA512, which is not natively available on current javacards. Hence the applet uses a [software implementation]. To improve performances, the result of key derivation is cached in secure memory for future requests so that derivation is only computed once.
+Using SatoChip, an initial BIP32 seed is imported in the javacard and private keys are derived as requested by an external application. *Private keys are never exported outside of the secure chip*. To improve performances, the result of key derivation is cached in secure memory for future requests so that a specific derivation path is only computed once.
 
-The SatoChip also supports the import of regular (non-BIP32 keys) such as vanity keys. Here again, private keys cannot be exported outside of the secure chip. Up to 16 regular keys can be imported on the chip. In any case, the private keys can be used to sign transactions and Bitcoin messages, if sufficient credentials are provided.
+The Satochip also supports the import of regular (non-BIP32 keys) such as vanity keys. Here again, private keys cannot be exported outside of the secure chip. Up to 16 regular keys can be imported on the chip. In any case, the private keys can be used to sign transactions and Bitcoin messages, if sufficient credentials are provided.
 
-Access to private keys (creation, derivation and signature) is enforced through the use of PIN code. This access control is based on the [MUSCLE framework](http://pcsclite.alioth.debian.org/musclecard.com/index.html) on which the applet is built. As part of this framework, it is also possible to securely store and retrieve data objects in secure memory, or use the chip to perform encryption and decryption, although some functionalities have been disabled.
+Access to private keys (creation, derivation and signature) is enforced through the use of PIN code. 
 
-Please note that this implementation is currently under development: *Use it at your own risk!*. I cannot be held responsible for any loss incurred by the use of this application. 
+The Satochip wallet is currently in Beta, use with caution! In this phase, it is strongly recommended to use the software on the Bitcoin testnet only.
+This software is provided 'as-is', without any express or implied warranty. In no event will the authors be held liable for any damages arising from the use of this software.
 
 Advantages:
 - Code is free and open source (no NDA required!)
@@ -34,7 +35,6 @@ Also, if used with a Yubikey:
 
 Disadvantages:
 - This is still experimental code, use with caution!
-- Key derivation is a bit slow(derive a new hardened key takes about 10 seconds)
 - Building the applet is a bit tricky
 - The software implementation of HMAC-SHA512 could have an potential impact on the physical security against side-channel attacks (for attackers with physical access to the chip).
 
@@ -57,48 +57,37 @@ Available for purchase [here](http://www.javacardsdk.com/Index.aspx?p0=AAT1P0000
 More info [here](http://www.swissbit.com/index.php?option=com_content&view=article&id=293&Itemid=601)
 (Note however that Swissbit does not sell its product directly to end users but only to business partners)
 
-## Not tested but should work
-
 ### J3D081 JCOP v2.4.2 R2
-Available [here](http://www.motechno.com/javacard3.0.html)
+Available [here](http://www.javacardsdk.com/product/j3d081/)
 
+# Buidl
 
-# Build
+You can build the javacard CAP files or use the last [version built](https://github.com/Toporin/SatoChipApplet/blob/master/SatoChip-2.2.2.cap).
 
-You can build the javacard CAP files or use the last [version built](https://github.com/Toporin/SatoChipApplet/blob/master/src/org/satochip/applet/javacard/applet.cap).
-
-To generate the CAP file from the sources, you can use Eclipse with the JCDE plugin and the Java Card Development Kit:
-
-- Download the [Java Card Development Kit 2.2.2](http://www.oracle.com/technetwork/java/javasebusiness/downloads/java-archive-downloads-javame-419430.html#java_card_kit-2.2.2-oth-JPR) 
-- Download Eclipse from https://eclipse.org/downloads/
-- Download the JCDE plugin from http://eclipse-jcde.sourceforge.net/
-
-A short introduction to the use of the JCDE plugin for javacard development is provided [here](http://eclipse-jcde.sourceforge.net/user-guide.htm)
-Here is an [alternative description](https://github.com/Yubico/ykneo-openpgp/blob/master/doc/Building.txt) from Yubico. 
-
-In principle, you could also use Netbeans and the more appropriate JCDK 3.0.3 to build the CAP file. However, I had a hard time setting this up and use it with the Yubikey, so I ended up using Eclipse with some workaround instead. 
+To generate the CAP file from the sources, you can use the Eclipse IDE with the [ant-javacard](https://github.com/martinpaljak/ant-javacard) Ant task (see the instruction on the ant-javacard github repository).
 
 # Install
 
-Once you have a CAP file, you have to download it on the chip card. You can use GPJ to do this:
+Once you have a CAP file, you have to download it on the chip card. You can use [GlobalPlatformPro](https://github.com/martinpaljak/GlobalPlatformPro) to do this:
 
-- Download GPJ from http://sourceforge.net/projects/gpj/
+- Download the latest release from https://github.com/martinpaljak/GlobalPlatformPro/releases
 - (Put the CAP file in the same folder as the GPJ jar file for convenience)
-- To list the applets loaded on a smartcard: `java -jar gpj.jar -list`
-- To load the SatoChip applet: `java -jar gpj.jar -load applet.cap -install`
-- To delete the SatoChip applet (AID 0x53:0x61:0x74:0x6f:0x43:0x68:0x69:0x70): `java -jar gpj.jar -deletedeps -delete 5361746f43686970`
+- To list the applets loaded on a smartcard: `gp.exe -l`
+- To load the SatoChip applet: `gp.exe -install .\SatoChip-2.2.2.cap`
+- To delete the SatoChip applet: `gp.exe -uninstall .\SatoChip-2.2.2.cap`
 
-Here is a [link](http://forum.yubico.com/viewtopic.php?ref=368&f=26&t=1159) describing the procedure specifically for the Yubikey Neo (using GPshell instead of GPJ).
+A more detailed tutorial is available on the GlobalPlatformPro [repository](https://github.com/martinpaljak/GlobalPlatformPro).
 
 # Use
 
-To use the applet, you have to connect your client application to the smartcard and send command APDU. These commands will be processed by the smartcard who will then send a response APDU. [SatoChipClient](https://github.com/Toporin/SatoChipClient) is a small java library that allows to easily interface the SatoChip applet to your application through a simple set of API.
-An example of application is the [BitcoinWallet](https://github.com/Toporin/BitcoinWallet) java application, that uses SatoChipClient through another Bitcoin library called [BitcoinCore](https://github.com/Toporin/BitcoinCore).  
+To use the applet, you have to connect your client application to the smartcard and send command APDU. These commands will be processed by the smartcard who will then send a response APDU. The [Electrum-Satochip](https://github.com/Toporin/electrum) is a version of [electrum](https://github.com/spesmilo/electrum) that was slightly modified to integrate the Satochip hardware wallet.
+
+### Deprecated (use older releases for this)
+[SatoChipClient](https://github.com/Toporin/SatoChipClient) is a small java library that allows to easily interface the SatoChip applet to your application through a simple set of API. An example of application is the [BitcoinWallet](https://github.com/Toporin/BitcoinWallet) java application, that uses SatoChipClient through another Bitcoin library called [BitcoinCore](https://github.com/Toporin/BitcoinCore).  
 
 # Credits
 
-- The CardEdge javacard applet is based on the [MUSCLE framework](http://pcsclite.alioth.debian.org/musclecard.com/info.html).
-- The [HMAC-SHA512](http://www.fi.muni.cz/~xsvenda/jcalgs.html#sha2) implementation is from [Petr Svenda](http://www.fi.muni.cz/~xsvenda/).
+- The CardEdge javacard applet is derived from the [MUSCLE framework](http://pcsclite.alioth.debian.org/musclecard.com/info.html).
 - The Bitcoin transaction parser is derived from [Btchip](https://github.com/LedgerHQ/btchipJC).
 - The BitcoinWallet application is based on ScripterRon [BitcoinWallet](https://github.com/ScripterRon/BitcoinWallet) client and [BitcoinCore](https://github.com/ScripterRon/BitcoinCore) library.
 
