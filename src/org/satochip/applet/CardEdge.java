@@ -86,11 +86,12 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     // 0.4-0.1: getBIP32ExtendedKey also returns chaincode
 	// 0.5-0.1: Support for Segwit transaction
 	// 0.5-0.2: bip32 cached memory optimization: fixed array instead of list 
-	// 0.6-0.1: bip32 optimization: speed up computation during derivation of non-hardened child 	
+	// 0.6-0.1: bip32 optimization: speed up computation during derivation of non-hardened child 
+	// 0.6-0.2: get_status returns number of pin/puk tries remaining
 	private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
 	private final static byte PROTOCOL_MINOR_VERSION = (byte) 6;
 	private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-	private final static byte APPLET_MINOR_VERSION = (byte) 1;
+	private final static byte APPLET_MINOR_VERSION = (byte) 2;
 	
 	// Maximum number of keys handled by the Cardlet
 	private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -1064,7 +1065,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 *  p1: 0x00 
 	 *  p2: 0x00 
 	 *  data: none
-	 *  return: [versions(4b)]
+	 *  return: [versions(4b) | PIN0-PUK0-PIN1-PUK1 tries (4b) ]
 	 */
 	private void GetStatus(APDU apdu, byte[] buffer) {
 		// check that PIN[0] has been entered previously
@@ -1080,15 +1081,11 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		buffer[pos++] = (byte) PROTOCOL_MINOR_VERSION; // Minor Card Edge Protocol version n.
 		buffer[pos++] = (byte) APPLET_MAJOR_VERSION; // Major Applet version n.
 		buffer[pos++] = (byte) APPLET_MINOR_VERSION; // Minor Applet version n.
-//		byte cnt_free = (byte) 0;
-//		byte cnt_used = (byte) 0;
-//		for (short i = 0; i < keys.length; i++)
-//			if (keys[i] != null)
-//				cnt_used++;
-//			else
-//				cnt_free++;
-//		buffer[pos++] = cnt_free; // Number of Keys available 
-//		buffer[pos++] = cnt_used; // Number of Keys used 
+		// PIN/PUK remaining tries available
+		buffer[pos++] = pins[0].getTriesRemaining();
+		buffer[pos++] = ublk_pins[0].getTriesRemaining();
+		buffer[pos++] = pins[1].getTriesRemaining();
+		buffer[pos++] = ublk_pins[1].getTriesRemaining();		 
 		apdu.setOutgoingAndSend((short) 0, pos);
 	}
 	
