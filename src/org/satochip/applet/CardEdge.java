@@ -88,10 +88,11 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	// 0.5-0.2: bip32 cached memory optimization: fixed array instead of list 
 	// 0.6-0.1: bip32 optimization: speed up computation during derivation of non-hardened child 
 	// 0.6-0.2: get_status returns number of pin/puk tries remaining
+    // 0.6-0.3: Patch in function SignTransaction(): add optionnal 2FA flag in data
 	private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
 	private final static byte PROTOCOL_MINOR_VERSION = (byte) 6;
 	private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-	private final static byte APPLET_MINOR_VERSION = (byte) 2;
+	private final static byte APPLET_MINOR_VERSION = (byte) 3;
 	
 	// Maximum number of keys handled by the Cardlet
 	private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -1868,7 +1869,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
      * ins: 0x6F
 	 * p1: key number or 0xFF for the last derived Bip32 extended key  
 	 * p2: 0x00
-	 * data: [hash(32b) | option:hmac(20b)]
+	 * data: [hash(32b) | option: 2FA-flag(2b)|hmac(20b)]
 	 * 
 	 * return: [sig ]
 	 *
@@ -1904,10 +1905,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 				if (bytesLeft<MessageDigest.LENGTH_SHA_256+MessageDigest.LENGTH_SHA+(short)2)
 					ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 				// check flag for 2fa_hmac_chalresp
-				short hmac_flags= Util.getShort(buffer, (short)(ISO7816.OFFSET_CDATA+32+2));
+				short hmac_flags= Util.getShort(buffer, (short)(ISO7816.OFFSET_CDATA+32));
 				if (hmac_flags!=HMAC_CHALRESP_2FA)
 					ISOException.throwIt(SW_INCORRECT_ALG);
-				// hmac of 64-bytes msg: (doublesha256(raw_tx) | 32bytes padding)
+				// hmac of 64-bytes msg: (doublesha256(raw_tx) | 32bytes zero-padding)
 				Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0x00);
 				HmacSha160.computeHmacSha160(transactionData, OFFSET_TRANSACTION_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
 				if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20)!=0)
