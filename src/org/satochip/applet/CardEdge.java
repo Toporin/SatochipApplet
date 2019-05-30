@@ -64,6 +64,7 @@ import javacard.security.KeyAgreement;
 import javacard.security.KeyBuilder;
 import javacard.security.Signature;
 import javacard.security.MessageDigest;
+import javacard.security.RandomData;
 import javacardx.apdu.ExtendedLength; //debugXL //TODO: remove
 import javacardx.crypto.Cipher;
 
@@ -80,19 +81,20 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * APPLET VERSION:   changes with no impact on compatibility of the client
 	 */
 	// 0.1-0.1: initial version
-	// 0.2-0.1: support for hmac-sha1 authorization + improved sha256 + bip32 full suport  
+	// 0.2-0.1: support for hmac-sha1 authorisation + improved sha256 + bip32 full support  
 	// 0.3-0.1: change parseTransaction response for coherence: add separate short flags for second factor authentication  
 	// 0.3-0.2: fast Sha512 computation  
     // 0.4-0.1: getBIP32ExtendedKey also returns chaincode
 	// 0.5-0.1: Support for Segwit transaction
-	// 0.5-0.2: bip32 cached memory optimization: fixed array instead of list 
-	// 0.6-0.1: bip32 optimization: speed up computation during derivation of non-hardened child 
+	// 0.5-0.2: bip32 cached memory optimisation: fixed array instead of list 
+	// 0.6-0.1: bip32 optimisation: speed up computation during derivation of non-hardened child 
 	// 0.6-0.2: get_status returns number of pin/puk tries remaining
-    // 0.6-0.3: Patch in function SignTransaction(): add optionnal 2FA flag in data
+    // 0.6-0.3: Patch in function SignTransaction(): add optional 2FA flag in data
+    // 0.7-0.1: add CryptTransaction2FA() to encrypt/decrypt tx messages sent to 2FA device for privacy
 	private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
-	private final static byte PROTOCOL_MINOR_VERSION = (byte) 6;
+	private final static byte PROTOCOL_MINOR_VERSION = (byte) 7;
 	private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-	private final static byte APPLET_MINOR_VERSION = (byte) 3;
+	private final static byte APPLET_MINOR_VERSION = (byte) 1;
 	
 	// Maximum number of keys handled by the Cardlet
 	private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -146,6 +148,8 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static byte INS_SIGN_SHORT_MESSAGE= (byte) 0x72;
 	private final static byte INS_SIGN_TRANSACTION= (byte) 0x6F;
 	private final static byte INS_PARSE_TRANSACTION = (byte) 0x71;
+    private final static byte INS_CRYPT_TRANSACTION_2FA = (byte) 0x76;
+    
 	// debug
 	private final static byte INS_TEST_SHA1 = (byte) 0x80;
 	private final static byte INS_COMPUTE_SHA512 = (byte) 0x6A;
@@ -235,10 +239,11 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private boolean setupDone = false;
 	
 	// shared cryptographic objects
+	private RandomData randomData;
 	private KeyAgreement keyAgreement;
 	private Signature sigECDSA;
 	private Cipher aes128;
-	
+    
 	/*********************************************
 	 *  BIP32 Hierarchical Deterministic Wallet  *
 	 *********************************************/
@@ -250,7 +255,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	// seed derivation
 	private static final byte[] BITCOIN_SEED = {'B','i','t','c','o','i','n',' ','s','e','e','d'};
 	private static final byte[] BITCOIN_SEED2 = {'B','i','t','c','o','i','n',' ','s','e','e','d','2'};
-	private static final byte MAX_BIP32_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
+    private static final byte MAX_BIP32_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
 	
 	// BIP32_object= [ hash(address) (4b) | extended_key (32b) | chain_code (32b) | compression_byte(1b)]
 	// recvBuffer=[ parent_chain_code (32b) | 0x00 | parent_key (32b) | hash(address) (32b) | current_extended_key(32b) | current_chain_code(32b) ]
@@ -301,13 +306,19 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private static final byte OFFSET_TRANSACTION_TOTAL=OFFSET_TRANSACTION_AMOUNT+8;
 	private static final byte OFFSET_TRANSACTION_LIMIT=OFFSET_TRANSACTION_TOTAL+8;
 	private static final byte OFFSET_TRANSACTION_HMACKEY=OFFSET_TRANSACTION_LIMIT+8;
-	private static final byte OFFSET_TRANSACTION_SIZE=OFFSET_TRANSACTION_HMACKEY+20;
-	private static final short HMAC_CHALRESP_2FA=(short)0x8000;
+	private static final byte OFFSET_TRANSACTION_ID_2FA=OFFSET_TRANSACTION_HMACKEY+20;
+	private static final byte OFFSET_TRANSACTION_SIZE=OFFSET_TRANSACTION_ID_2FA+20;
+    private static final short HMAC_CHALRESP_2FA=(short)0x8000;
 	
 	// tx parsing
 	private static final byte PARSE_STD=0x00;
 	private static final byte PARSE_SEGWIT=0x01;
 	
+    // 2FA msg encryption
+    private static final byte[] CST_2FA = {'i','d','_','2','F','A','k','e','y','_','2','F','A'};
+	private Cipher aes128_cbc;
+    private AESKey key_2FA;
+    
 	// additional options
 	private short option_flags;
 	
@@ -439,6 +450,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		case INS_PARSE_TRANSACTION:
 			ParseTransaction(apdu, buffer);
 			break;
+        case INS_CRYPT_TRANSACTION_2FA:
+            CryptTransaction2FA(apdu, buffer);
+            break;
 		// only for debugging purpose
 		case INS_BIP32_SET_EXTENDED_KEY:	
 			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED); // only for debug purpose
@@ -644,6 +658,14 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 				Util.arrayCopyNonAtomic(buffer, base, transactionData, OFFSET_TRANSACTION_LIMIT, (short)8); 
 				base+=(short)8;
 				bytesLeft-=(short)8;
+                // set 2FA variables
+				randomData = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
+                aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
+                key_2FA= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
+                // hmac derivation for id_2FA & key_2FA
+				HmacSha160.computeHmacSha160(transactionData, OFFSET_TRANSACTION_HMACKEY, (short)20, CST_2FA, (short)0, (short)6, transactionData, OFFSET_TRANSACTION_ID_2FA);
+                HmacSha160.computeHmacSha160(transactionData, OFFSET_TRANSACTION_HMACKEY, (short)20, CST_2FA, (short)6, (short)7, recvBuffer, (short)0);
+                key_2FA.setKey(recvBuffer,(short)0); // AES-128: 16-bytes key!!
 			}
 		}
 		
@@ -1066,7 +1088,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 *  p1: 0x00 
 	 *  p2: 0x00 
 	 *  data: none
-	 *  return: [versions(4b) | PIN0-PUK0-PIN1-PUK1 tries (4b) ]
+	 *  return: [versions(4b) | PIN0-PUK0-PIN1-PUK1 tries (4b) | need2FA (1b)]
 	 */
 	private void GetStatus(APDU apdu, byte[] buffer) {
 		// check that PIN[0] has been entered previously
@@ -1086,7 +1108,12 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		buffer[pos++] = pins[0].getTriesRemaining();
 		buffer[pos++] = ublk_pins[0].getTriesRemaining();
 		buffer[pos++] = pins[1].getTriesRemaining();
-		buffer[pos++] = ublk_pins[1].getTriesRemaining();		 
+		buffer[pos++] = ublk_pins[1].getTriesRemaining();
+		// 2FA support: 
+		byte need2FA=0x00;
+		if ((option_flags & HMAC_CHALRESP_2FA)==HMAC_CHALRESP_2FA){
+			need2FA=0x01;}
+		buffer[pos++] = need2FA;
 		apdu.setOutgoingAndSend((short) 0, pos);
 	}
 	
@@ -1102,7 +1129,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 *  ins: 0x6C
 	 *  p1: seed_size(1b) 
 	 *  p2: 0x00 
-	 *  data: [seed_data]
+	 *  data: [seed_data (seed_size) | optional-hmac(20b)]
 	 *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
 	 */
 	private void importBIP32Seed(APDU apdu, byte[] buffer){
@@ -1121,13 +1148,28 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		if (bip32_seedsize <0 || bip32_seedsize>64)
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 		
-		// buffer data = [seed data]
 		short offset= (short)ISO7816.OFFSET_CDATA;
 		
-		// if seed was already defined, we must clear all related objects!!
-		// TODO: require 2FA to reset the seed...
+		// if seed was already defined, 2FA is required
 		if (bip32_seeded){
-			bip32_om.reset();}
+			// check 2FA
+			if ((option_flags & HMAC_CHALRESP_2FA)==HMAC_CHALRESP_2FA){
+				
+				if (bytesLeft < (short)(bip32_seedsize+20))
+					ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+				
+				// hmac of 64-bytes msg: (sha256(seed) | 32bytes zero-padding)
+				sha256.reset(); 
+				sha256.doFinal(buffer, offset, (short)(bip32_seedsize), recvBuffer, (short)0);
+				Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0x00);
+				HmacSha160.computeHmacSha160(transactionData, OFFSET_TRANSACTION_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
+				if (Util.arrayCompare(buffer, (short)(offset+bip32_seedsize), recvBuffer, (short)64, (short)20)!=0)
+					ISOException.throwIt(SW_SIGNATURE_INVALID);
+				
+			}
+			// clear all related objects!!
+			bip32_om.reset();
+		}
 		
 		// derive master key!
 		HmacSha512.computeHmacSha512(BITCOIN_SEED, (short)0, (short)BITCOIN_SEED.length, buffer, offset, (short)bip32_seedsize, recvBuffer, (short)0);
@@ -1935,6 +1977,77 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
         apdu.setOutgoingAndSend((short) 0, sign_size);
     	
     }
+    
+    
+    /**
+     * This function encrypts/decrypt a given message with a 16bytes secret key derived from the 2FA key.
+     * It also returns an id derived from the 2FA key.
+     * This is used to privately exchange tx data between the hw wallet and the 2FA device.
+	 * 
+     * Algorithms: 
+     *      id_2FA is hmac-sha1(secret_2FA, "id_2FA"), 
+     *      key_2FA is hmac-sha1(secret_2FA, "key_2FA"), 
+     *      message encrypted using AES
+     *
+     * ins: 0x76
+	 * p1: 0x00 for encryption, 0x01 for decryption  
+	 * p2: Init-Update-Finalize
+	 * data(init): IF_ENCRYPT: none ELSE: [IV(16b)]
+     * data(update/finalize): [chunk_size(2b) | chunk_data]
+	 * 
+	 * return(init): IF_ENCRYPT:[IV(16b) | id_2FA(20b)] ELSE: none
+     * return(update/finalize): [chunk_size(2b) | chunk_data]
+	 * 
+	 *
+     */
+    private void CryptTransaction2FA(APDU apdu, byte[] buffer){
+        // check that PIN[0] has been entered previously
+    	if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
+        
+        byte ciph_dir = buffer[ISO7816.OFFSET_P1];
+        byte ciph_op = buffer[ISO7816.OFFSET_P2];
+        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+        short dataOffset = ISO7816.OFFSET_CDATA;
+        
+        short IVlength=(short)16;
+        switch(ciph_op){
+            case OP_INIT:
+                if (ciph_dir!=Cipher.MODE_ENCRYPT &&  ciph_dir!=Cipher.MODE_DECRYPT )
+                    ISOException.throwIt(SW_INVALID_PARAMETER);
+                
+                if (ciph_dir==Cipher.MODE_ENCRYPT){
+                    randomData.generateData(buffer,(short)0, IVlength);
+                    aes128_cbc.init(key_2FA, Cipher.MODE_ENCRYPT, buffer, (short)0, IVlength);
+                    Util.arrayCopyNonAtomic(transactionData, OFFSET_TRANSACTION_ID_2FA, buffer, (short)IVlength, (short)20);
+                    apdu.setOutgoingAndSend((short) 0, (short)(IVlength + 20));
+                }
+                if (ciph_dir==Cipher.MODE_DECRYPT){
+                    aes128_cbc.init(key_2FA, Cipher.MODE_DECRYPT, buffer, dataOffset, IVlength);
+                }
+                break;
+            case OP_PROCESS:
+            case OP_FINALIZE:
+                if (bytesLeft < 2)
+                    ISOException.throwIt(SW_INVALID_PARAMETER);
+                short size = Util.getShort(buffer, dataOffset);
+                if (bytesLeft < (short) (2 + size))
+                    ISOException.throwIt(SW_INVALID_PARAMETER);
+                
+                short sizeout=0;
+                if (ciph_op == OP_PROCESS)
+                    sizeout=aes128_cbc.update(buffer, (short) (dataOffset + 2), size, buffer, (short) 2);
+                else // ciph_op == OP_FINALIZE
+                    sizeout=aes128_cbc.doFinal(buffer, (short) (dataOffset + 2), size, buffer, (short) 2);
+                // Also copies the Short size information
+                Util.setShort(buffer,(short)0,  sizeout);
+                apdu.setOutgoingAndSend((short) 0, (short) (sizeout + 2));
+                break;
+            default:
+                ISOException.throwIt(SW_INCORRECT_P2);    
+        }   
+    }
+    
     
     // For debug purpose only
     
