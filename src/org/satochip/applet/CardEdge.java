@@ -91,10 +91,11 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	// 0.6-0.2: get_status returns number of pin/puk tries remaining
     // 0.6-0.3: Patch in function SignTransaction(): add optional 2FA flag in data
     // 0.7-0.1: add CryptTransaction2FA() to encrypt/decrypt tx messages sent to 2FA device for privacy
+	// 0.7-0.2: 2FA patch to mitigate replay attack when importing a new seed
 	private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
 	private final static byte PROTOCOL_MINOR_VERSION = (byte) 7;
 	private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-	private final static byte APPLET_MINOR_VERSION = (byte) 1;
+	private final static byte APPLET_MINOR_VERSION = (byte) 2;
 	
 	// Maximum number of keys handled by the Cardlet
 	private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -255,7 +256,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	// seed derivation
 	private static final byte[] BITCOIN_SEED = {'B','i','t','c','o','i','n',' ','s','e','e','d'};
 	private static final byte[] BITCOIN_SEED2 = {'B','i','t','c','o','i','n',' ','s','e','e','d','2'};
-    private static final byte MAX_BIP32_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
+	private static final byte MAX_BIP32_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
 	
 	// BIP32_object= [ hash(address) (4b) | extended_key (32b) | chain_code (32b) | compression_byte(1b)]
 	// recvBuffer=[ parent_chain_code (32b) | 0x00 | parent_key (32b) | hash(address) (32b) | current_extended_key(32b) | current_chain_code(32b) ]
@@ -315,8 +316,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private static final byte PARSE_SEGWIT=0x01;
 	
     // 2FA msg encryption
-    private static final byte[] CST_2FA = {'i','d','_','2','F','A','k','e','y','_','2','F','A'};
-	private Cipher aes128_cbc;
+    private static final byte[] CST_2FA = {'i','d','_','2','F','A',     
+    									   'k','e','y','_','2','F','A',
+    									   'S','e','e','d','_','h','a','s','h',':'};
+    private Cipher aes128_cbc;
     private AESKey key_2FA;
     
 	// additional options
@@ -1158,9 +1161,13 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 				if (bytesLeft < (short)(bip32_seedsize+20))
 					ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 				
-				// hmac of 64-bytes msg: (sha256(seed) | 32bytes zero-padding)
+				// hmac of 64-bytes msg: (sha256(header|sha256(header|seed)) | 32bytes zero-padding)
 				sha256.reset(); 
+				sha256.update(CST_2FA, (short)13, (short)10);
 				sha256.doFinal(buffer, offset, (short)(bip32_seedsize), recvBuffer, (short)0);
+				sha256.reset(); 
+				sha256.update(CST_2FA, (short)13, (short)10);
+				sha256.doFinal(recvBuffer, (short)0, (short)(32), recvBuffer, (short)0);
 				Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0x00);
 				HmacSha160.computeHmacSha160(transactionData, OFFSET_TRANSACTION_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
 				if (Util.arrayCompare(buffer, (short)(offset+bip32_seedsize), recvBuffer, (short)64, (short)20)!=0)
