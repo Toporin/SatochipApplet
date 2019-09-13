@@ -92,7 +92,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     // 0.6-0.3: Patch in function SignTransaction(): add optional 2FA flag in data
     // 0.7-0.1: add CryptTransaction2FA() to encrypt/decrypt tx messages sent to 2FA device for privacy
 	// 0.7-0.2: 2FA patch to mitigate replay attack when importing a new seed
-	// 0.8-0.1: add APDU to reset the seed, with 2FA support
+	// 0.8-0.1: add APDU to reset the seed, with 2FA support. 2FA can be disabled, only when seed is reset.
 	private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
 	private final static byte PROTOCOL_MINOR_VERSION = (byte) 8;
 	private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -153,6 +153,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static byte INS_PARSE_TRANSACTION = (byte) 0x71;
     private final static byte INS_CRYPT_TRANSACTION_2FA = (byte) 0x76;
     private final static byte INS_GET_COUNTER_2FA = (byte) 0x78;
+    private final static byte INS_SET_2FA_KEY = (byte) 0x79;    
     
 	// debug
 	private final static byte INS_TEST_SHA1 = (byte) 0x80;
@@ -205,7 +206,13 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private final static short SW_BIP32_UNINITIALIZED_AUTHENTIKEY_PUBKEY= (short) 0x9C16;
 	/** Incorrect transaction hash */
 	private final static short SW_INCORRECT_TXHASH = (short) 0x9C15;
-	/** For debugging purposes 2*/
+	
+	/** 2FA already initialized*/
+	private final static short SW_2FA_INITIALIZED_KEY = (short) 0x9C18;
+	/** 2FA uninitialized*/
+	private final static short SW_2FA_UNINITIALIZED_KEY = (short) 0x9C19;
+	
+	/** For debugging purposes 2 */
 	private final static short SW_DEBUG_FLAG = (short) 0x9FFF;
 	
 	// KeyBlob Encoding in Key Blobs
@@ -226,7 +233,8 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 ****************************************/
 	
 	// Key objects (allocated on demand)
-	private Key[] keys;
+	private Key[] eckeys;
+	boolean eckeys_used=false;
 	
 	// PIN and PUK objects, allocated on demand
 	private OwnerPIN[] pins, ublk_pins;
@@ -309,18 +317,14 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	private static final byte OFFSET_TRANSACTION_AMOUNT=OFFSET_TRANSACTION_HASH+32;
 	private static final byte OFFSET_TRANSACTION_TOTAL=OFFSET_TRANSACTION_AMOUNT+8;
 	private static final byte OFFSET_TRANSACTION_SIZE=OFFSET_TRANSACTION_TOTAL+8;
-	//private static final byte OFFSET_TRANSACTION_LIMIT=OFFSET_TRANSACTION_TOTAL+8;
-	//private static final byte OFFSET_TRANSACTION_HMACKEY=OFFSET_TRANSACTION_LIMIT+8;
-	//private static final byte OFFSET_TRANSACTION_ID_2FA=OFFSET_TRANSACTION_HMACKEY+20;
-	//private static final byte OFFSET_TRANSACTION_COUNTER_2FA=OFFSET_TRANSACTION_ID_2FA+20;
-	//private static final byte OFFSET_TRANSACTION_SIZE=OFFSET_TRANSACTION_COUNTER_2FA+4;
-	//private static final short HMAC_CHALRESP_2FA=(short)0x8000;
 	
 	// tx parsing
 	private static final byte PARSE_STD=0x00;
 	private static final byte PARSE_SEGWIT=0x01;
 	
 	//2FA data
+	private boolean needs_2FA= false;
+	private boolean done_once_2FA= false;
 	private byte[] data2FA;
 	private static final byte OFFSET_2FA_HMACKEY=0;
 	private static final byte OFFSET_2FA_ID=OFFSET_2FA_HMACKEY+20;
@@ -472,6 +476,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		case INS_PARSE_TRANSACTION:
 			ParseTransaction(apdu, buffer);
 			break;
+		case INS_SET_2FA_KEY:
+			set2FAKey(apdu, buffer);
+			break;
         case INS_CRYPT_TRANSACTION_2FA:
             CryptTransaction2FA(apdu, buffer);
             break;
@@ -611,7 +618,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		
 		bip32_om= new Bip32ObjectManager(secmem_size,BIP32_OBJECT_SIZE, BIP32_ANTICOLLISION_LENGTH);
 		
-		keys = new Key[MAX_NUM_KEYS];
+		eckeys = new Key[MAX_NUM_KEYS];
 		logged_ids = 0x0000; // No identities logged in
 		
 		// Initialize the extended APDU buffer
@@ -691,6 +698,8 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
                 key_2FA.setKey(recvBuffer,(short)0); // AES-128: 16-bytes key!!
                 // 2FA counter for seed_reset()
                 Util.arrayFillNonAtomic(data2FA, OFFSET_2FA_COUNTER, (short)4,(byte)0);
+                needs_2FA= true;
+                done_once_2FA= true;// some initialization steps should be done only once in the applet lifetime 
 			}
 		}
 		
@@ -709,19 +718,19 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 */
 	private Key getKey(byte key_nb, byte key_type, short key_size) {
 		
-		if (keys[key_nb] == null) {
+		if (eckeys[key_nb] == null) {
 			// We have to create the Key
-			keys[key_nb] = KeyBuilder.buildKey(key_type, key_size, false);			
+			eckeys[key_nb] = KeyBuilder.buildKey(key_type, key_size, false);
 		} else {
 			// Key already exists: check size & type
 			/*
 			 * TODO: As an option, we could just discard and recreate if not of
 			 * the correct type, but creates trash objects
 			 */
-			if ((keys[key_nb].getSize() != key_size) || (keys[key_nb].getType() != key_type))
+			if ((eckeys[key_nb].getSize() != key_size) || (eckeys[key_nb].getType() != key_type))
 				ISOException.throwIt(SW_OPERATION_NOT_ALLOWED);
 		}
-		return keys[key_nb];
+		return eckeys[key_nb];
 	}
 
 	/**
@@ -781,43 +790,38 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			ISOException.throwIt(SW_UNSUPPORTED_FEATURE);
 		dataOffset++; // Skip Blob Encoding
 		bytesLeft--;
-		byte key_type = buffer[dataOffset];
+		// we only support elliptic curve private key
+        byte key_type = buffer[dataOffset];
+		if (key_type!= KeyBuilder.TYPE_EC_FP_PRIVATE)
+			ISOException.throwIt(SW_INCORRECT_ALG);
 		dataOffset++; // Skip Key Type
 		bytesLeft--;
 		short key_size = Util.getShort(buffer, dataOffset);
+		if (key_size != 256)
+			ISOException.throwIt(key_size);
 		dataOffset += (short) 2; // Skip Key Size
 		bytesLeft -= (short) 2;
 		dataOffset += (short) 6; // Skip ACL (deprecated)
 		bytesLeft -= (short) 6;
-		/*** Start reading key blob ***/
-		short blob_size;
-		switch (key_type) {
-			// only support elliptic curve private key
-            case KeyBuilder.TYPE_EC_FP_PRIVATE: 
-				// key_blob=[blob_size(2) | privkey_blob(32)]
-            	if (key_size != 256)
-					ISOException.throwIt(key_size);
-				ECPrivateKey ec_prv_key = (ECPrivateKey) getKey(key_nb, key_type, key_size);
-	            if (bytesLeft < 2)
-	                    ISOException.throwIt(SW_INVALID_PARAMETER);
-	            blob_size = Util.getShort(buffer, dataOffset);
-	            if (blob_size != 32) // only bitcoin
-	            	ISOException.throwIt(blob_size);
-	            dataOffset += (short) 2; 
-	            bytesLeft -= (short) 2;
-	            if (bytesLeft < (short) (blob_size))
-	                ISOException.throwIt(SW_INVALID_PARAMETER);
-	            // curves parameters are take by default as SECP256k1
-	            // Satochip default is secp256k1 (over Fp)
-	            Secp256k1.setCommonCurveParameters(ec_prv_key);
-	            // set from secret value
-	            ec_prv_key.setS(buffer, dataOffset, blob_size);
-	            dataOffset += blob_size; 
-	            bytesLeft -= blob_size;
-	            break;
-			default:
-				ISOException.throwIt(SW_INCORRECT_ALG);
-		}// end switch
+		// key_blob=[blob_size(2) | privkey_blob(32)]
+		ECPrivateKey ec_prv_key = (ECPrivateKey) getKey(key_nb, key_type, key_size);
+        if (bytesLeft < 2)
+                ISOException.throwIt(SW_INVALID_PARAMETER);
+        short blob_size = Util.getShort(buffer, dataOffset);
+        if (blob_size != 32) // only bitcoin
+        	ISOException.throwIt(blob_size);
+        dataOffset += (short) 2; 
+        bytesLeft -= (short) 2;
+        if (bytesLeft < (short) (blob_size))
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        // curves parameters are take by default as SECP256k1
+        // Satochip default is secp256k1 (over Fp)
+        Secp256k1.setCommonCurveParameters(ec_prv_key);
+        // set from secret value
+        ec_prv_key.setS(buffer, dataOffset, blob_size);
+        eckeys_used= true;
+        dataOffset += blob_size; 
+        bytesLeft -= blob_size;
 	}
 	
 	/** 
@@ -844,41 +848,32 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		if ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS))
 			ISOException.throwIt(SW_INCORRECT_P1);
 		
-		Key key = keys[key_nb];
+		Key key = eckeys[key_nb];
+		// check type and size
 		if ((key == null) || !key.isInitialized())
 			ISOException.throwIt(SW_INCORRECT_P1);
-		
-		// check type
-		byte key_type = key.getType();
-		switch(key_type){
-		
-			case KeyBuilder.TYPE_EC_FP_PRIVATE:
-				if (key.getSize()!= LENGTH_EC_FP_256)
-					ISOException.throwIt(SW_INCORRECT_ALG);
+		if (key.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
+			ISOException.throwIt(SW_INCORRECT_ALG);		
+		if (key.getSize()!= LENGTH_EC_FP_256)
+			ISOException.throwIt(SW_INCORRECT_ALG);
+		// check the curve param
+		if(!Secp256k1.checkCurveParameters((ECPrivateKey)key, recvBuffer, (short)0))
+			ISOException.throwIt(SW_INCORRECT_ALG);
 				
-				// check the curve param
-				if(!Secp256k1.checkCurveParameters((ECPrivateKey)key, recvBuffer, (short)0))
-					ISOException.throwIt(SW_INCORRECT_ALG);
-				
-				// compute the corresponding partial public key...
-		        keyAgreement.init((ECPrivateKey)key);
-		        short coordx_size = keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)2); // compute x coordinate of public key as k*G
-		        Util.setShort(buffer, (short)0, coordx_size);
-		        
-		        // sign fixed message
-		        sigECDSA.init(key, Signature.MODE_SIGN);
-		        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
-		        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
-		        
-		        // return x-coordinate of public key+signature
-		        // the client can recover full public-key from the signature or
-		        // by guessing the compression value () and verifying the signature... 
-		        apdu.setOutgoingAndSend((short) 0, (short)(2+coordx_size+2+sign_size));
-		        break;
-		        
-		    default:
-		    	ISOException.throwIt(SW_INCORRECT_ALG);
-		}// end switch
+		// compute the corresponding partial public key...
+        keyAgreement.init((ECPrivateKey)key);
+        short coordx_size = keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)2); // compute x coordinate of public key as k*G
+        Util.setShort(buffer, (short)0, coordx_size);
+        
+        // sign fixed message
+        sigECDSA.init(key, Signature.MODE_SIGN);
+        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
+        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
+        
+        // return x-coordinate of public key+signature
+        // the client can recover full public-key from the signature or
+        // by guessing the compression value () and verifying the signature... 
+        apdu.setOutgoingAndSend((short) 0, (short)(2+coordx_size+2+sign_size));
 	}		
 
 	/** 
@@ -1134,11 +1129,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		buffer[pos++] = ublk_pins[0].getTriesRemaining();
 		buffer[pos++] = pins[1].getTriesRemaining();
 		buffer[pos++] = ublk_pins[1].getTriesRemaining();
-		// 2FA support: 
-		byte need2FA=0x00;
-		if ((option_flags & HMAC_CHALRESP_2FA)==HMAC_CHALRESP_2FA){
-			need2FA=0x01;}
-		buffer[pos++] = need2FA;
+		if (needs_2FA)
+			buffer[pos++] = (byte)0x01;
+		else
+			buffer[pos++] = (byte)0x00;
 		apdu.setOutgoingAndSend((short) 0, pos);
 	}
 	
@@ -1221,7 +1215,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 *  
 	 *  ins: 0x77
 	 *  p1: PIN_size 
-	 *  p2: 0x00
+	 *  p2: 0x00 or 0x01 if 2FA should be reset.
 	 *  data: [PIN | optional-hmac(20b)]
 	 *  return: (none)
 	 */
@@ -1246,7 +1240,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		}
 		
 		// check 2FA if required
-		if ((option_flags & HMAC_CHALRESP_2FA)==HMAC_CHALRESP_2FA){
+		if (needs_2FA){
 			short offset= Util.makeShort((byte)0, ISO7816.OFFSET_CDATA);
 			offset+=pin_size;
 			bytesLeft-= pin_size;
@@ -1263,36 +1257,22 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			
 			//increment counter
 			Biginteger.add1_carry(data2FA, OFFSET_2FA_COUNTER, (short)4);
-		}
-		
+		}		
 		// reset memory cache and reset bip32 flag!
 		bip32_om.reset();
 		bip32_seeded= false;
+		
+		// disable 2FA if requested
+		byte p2= buffer[ISO7816.OFFSET_P2];
+		if (p2 == 0x01){
+			if (!eckeys_used) // check that no eckey is used
+				needs_2FA= false; 
+			else
+				ISOException.throwIt(SW_OPERATION_NOT_ALLOWED);
+		}
+
 		LogOutAll();
-	}
-	
-	/**
-	 * This function returns the counter_2FA byte array that is stored by the Satochip.
-	 * This counter is increased each time the card verify a 2FA response for a challenge 
-	 * based on this counter.
-	 *  
-	 *  ins: 0x78
-	 *  p1: 0x00
-	 *  p2: 0x00
-	 *  data: (none)
-	 *  return: [counter_2FA (4b)]
-	 */
-	private void getCounter2FA(APDU apdu, byte[] buffer){
-		// check that PIN[0] has been entered previously
-		if (!pins[0].isValidated())
-			ISOException.throwIt(SW_UNAUTHORIZED);
-		
-		// check that 2FA is enabled
-		if ((option_flags & HMAC_CHALRESP_2FA)!=HMAC_CHALRESP_2FA)
-			ISOException.throwIt(SW_OPERATION_NOT_ALLOWED);
-		
-		Util.arrayCopyNonAtomic(data2FA, OFFSET_2FA_COUNTER, buffer, (short)0, (short)4);
-		apdu.setOutgoingAndSend((short) 0, (short)4);
+		return;
 	}
 	
 	/**
@@ -1769,15 +1749,19 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		    	if (key_nb==(byte)0xFF)
 		    		sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
 		    	else{
-		    		Key key= keys[key_nb];
-		    		if (key.getType()!=KeyBuilder.TYPE_EC_FP_PRIVATE)
+		    		Key key= eckeys[key_nb];
+		    		// check type and size
+		    		if ((key == null) || !key.isInitialized())
+		    			ISOException.throwIt(SW_INCORRECT_P1);
+		    		if (key.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
+		    			ISOException.throwIt(SW_INCORRECT_ALG);		
+		    		if (key.getSize()!= LENGTH_EC_FP_256)
 		    			ISOException.throwIt(SW_INCORRECT_ALG);
 		    		sigECDSA.init(key, Signature.MODE_SIGN);
 		    	}
 		        short sign_size= sigECDSA.sign(buffer, (short)0, (short)32, buffer, (short)0);
 		        apdu.setOutgoingAndSend((short) 0, sign_size);
-		    	
-		        break;
+		    	break;
 		}        		
 	}
     
@@ -1831,8 +1815,13 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     	if (key_nb==(byte)0xFF)
     		sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
     	else{
-    		Key key= keys[key_nb];
-    		if (key.getType()!=KeyBuilder.TYPE_EC_FP_PRIVATE)
+    		Key key= eckeys[key_nb];
+    		// check type and size
+    		if ((key == null) || !key.isInitialized())
+    			ISOException.throwIt(SW_INCORRECT_P1);
+    		if (key.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
+    			ISOException.throwIt(SW_INCORRECT_ALG);		
+    		if (key.getSize()!= LENGTH_EC_FP_256)
     			ISOException.throwIt(SW_INCORRECT_ALG);
     		sigECDSA.init(key, Signature.MODE_SIGN);
     	}
@@ -1922,7 +1911,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
             short need2fa=(short)0x0000;
             Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_AMOUNT, transactionData, OFFSET_TRANSACTION_AMOUNT, (short)8);
             Biginteger.add_carry(transactionData, OFFSET_TRANSACTION_AMOUNT, transactionData, OFFSET_TRANSACTION_TOTAL, (short)8);
-            if ((option_flags & HMAC_CHALRESP_2FA)==HMAC_CHALRESP_2FA){
+            if (needs_2FA){
 	            if (Biginteger.lessThan(data2FA, OFFSET_2FA_LIMIT, transactionData, OFFSET_TRANSACTION_AMOUNT, (short)8)){
 	            	need2fa^= HMAC_CHALRESP_2FA; // set msb 
 	            }
@@ -2030,7 +2019,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			ISOException.throwIt(SW_INCORRECT_TXHASH);
 		
 		// check challenge-response answer if necessary
-		if( (option_flags & HMAC_CHALRESP_2FA)==HMAC_CHALRESP_2FA){
+		if(needs_2FA){
 			if(	Biginteger.lessThan(data2FA, OFFSET_2FA_LIMIT, transactionData, OFFSET_TRANSACTION_AMOUNT, (short)8)){
 				if (bytesLeft<MessageDigest.LENGTH_SHA_256+MessageDigest.LENGTH_SHA+(short)2)
 					ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
@@ -2056,8 +2045,13 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     	if (key_nb==(byte)0xFF)
     		sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
     	else{
-    		Key key= keys[key_nb];
-    		if (key.getType()!=KeyBuilder.TYPE_EC_FP_PRIVATE)
+    		Key key= eckeys[key_nb];
+    		// check type and size
+    		if ((key == null) || !key.isInitialized())
+    			ISOException.throwIt(SW_INCORRECT_P1);
+    		if (key.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
+    			ISOException.throwIt(SW_INCORRECT_ALG);		
+    		if (key.getSize()!= LENGTH_EC_FP_256)
     			ISOException.throwIt(SW_INCORRECT_ALG);
     		sigECDSA.init(key, Signature.MODE_SIGN);
     	}
@@ -2066,6 +2060,69 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     	
     }
     
+    /**
+	 * This function allows to set the 2FA key and enable 2FA.
+	 * Once activated, 2FA can only be deactivated when the seed is reset.
+	 *  
+	 *  ins: 0x79
+	 *  p1: 0x00
+	 *  p2: 0x00
+	 *  data: [hmacsha1_key(20b) | amount_limit(8b)]
+	 *  return: (none)
+	 */
+	private void set2FAKey(APDU apdu, byte[] buffer){
+		// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
+		
+		if (needs_2FA)
+			ISOException.throwIt(SW_2FA_INITIALIZED_KEY);
+		
+		if (!done_once_2FA){
+			data2FA= new byte[OFFSET_2FA_SIZE];
+			randomData = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
+	        aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
+	        key_2FA= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
+	        done_once_2FA= true;
+		}
+		
+		short offset= ISO7816.OFFSET_CDATA;
+		Util.arrayCopyNonAtomic(buffer, offset, data2FA, OFFSET_2FA_HMACKEY, (short)20); 
+		offset+=(short)20;
+		Util.arrayCopyNonAtomic(buffer, offset, data2FA, OFFSET_2FA_LIMIT, (short)8); 
+		offset+=(short)8;
+		// hmac derivation for id_2FA & key_2FA
+		HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, CST_2FA, (short)0, (short)6, data2FA, OFFSET_2FA_ID);
+        HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, CST_2FA, (short)6, (short)7, recvBuffer, (short)0);
+        key_2FA.setKey(recvBuffer,(short)0); // AES-128: 16-bytes key!!
+        // 2FA counter for seed_reset()
+        Util.arrayFillNonAtomic(data2FA, OFFSET_2FA_COUNTER, (short)4,(byte)0);
+        needs_2FA= true;		
+	}
+    
+	/**
+	 * This function returns the counter_2FA byte array that is stored by the Satochip.
+	 * This counter is increased each time the card verify a 2FA response for a challenge 
+	 * based on this counter.
+	 *  
+	 *  ins: 0x78
+	 *  p1: 0x00
+	 *  p2: 0x00
+	 *  data: (none)
+	 *  return: [counter_2FA (4b)]
+	 */
+	private void getCounter2FA(APDU apdu, byte[] buffer){
+		// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
+		
+		// check that 2FA is enabled
+		if (!needs_2FA)
+			ISOException.throwIt(SW_2FA_UNINITIALIZED_KEY);
+		
+		Util.arrayCopyNonAtomic(data2FA, OFFSET_2FA_COUNTER, buffer, (short)0, (short)4);
+		apdu.setOutgoingAndSend((short) 0, (short)4);
+	}
     
     /**
      * This function encrypts/decrypt a given message with a 16bytes secret key derived from the 2FA key.
@@ -2093,6 +2150,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     	if (!pins[0].isValidated())
 			ISOException.throwIt(SW_UNAUTHORIZED);
         
+    	// check that 2FA is enabled
+		if (!needs_2FA)
+			ISOException.throwIt(SW_2FA_UNINITIALIZED_KEY);
+    	
         byte ciph_dir = buffer[ISO7816.OFFSET_P1];
         byte ciph_op = buffer[ISO7816.OFFSET_P2];
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
