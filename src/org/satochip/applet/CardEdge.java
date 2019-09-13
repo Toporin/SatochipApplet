@@ -234,6 +234,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	
 	// Key objects (allocated on demand)
 	private Key[] eckeys;
+	private ECPrivateKey tmpkey;
 	boolean eckeys_used=false;
 	
 	// PIN and PUK objects, allocated on demand
@@ -753,15 +754,16 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 ****************************************/	
 	
 	/** 
-	 * This function allows the import of a key into the card.
+	 * This function allows the import of a private ECkey into the card.
 	 * The exact key blob contents depend on the key’s algorithm, type and actual
 	 * import parameters. The key's number, algorithm type, and parameters are
 	 * specified by arguments P1, P2 and DATA.
+	 * If 2FA is enabled, a hmac code must be provided.
 	 * 
 	 * ins: 0x32
 	 * p1: private key number (0x00-0x0F)
 	 * p2: 0x00
-	 * data: [key_encoding(1) | key_type(1) | key_size(2) | RFU(6) | key_blob] 
+	 * data: [key_encoding(1) | key_type(1) | key_size(2) | RFU(6) | key_blob | (option)HMAC-2FA(20b)] 
 	 * return: none
 	 */
 	private void ImportKey(APDU apdu, byte[] buffer) {
@@ -797,7 +799,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		dataOffset++; // Skip Key Type
 		bytesLeft--;
 		short key_size = Util.getShort(buffer, dataOffset);
-		if (key_size != 256)
+		if (key_size != LENGTH_EC_FP_256)
 			ISOException.throwIt(key_size);
 		dataOffset += (short) 2; // Skip Key Size
 		bytesLeft -= (short) 2;
@@ -814,14 +816,34 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
         bytesLeft -= (short) 2;
         if (bytesLeft < (short) (blob_size))
             ISOException.throwIt(SW_INVALID_PARAMETER);
+        
+        
         // curves parameters are take by default as SECP256k1
         // Satochip default is secp256k1 (over Fp)
         Secp256k1.setCommonCurveParameters(ec_prv_key);
+        
+        // check 2FA if required
+		if(needs_2FA){
+			if (bytesLeft<(short)(blob_size+20))
+				ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+			// we may have to create the tmpkey
+			if (tmpkey == null)
+				tmpkey = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+			// set from secret value
+			tmpkey.setS(buffer, dataOffset, blob_size);
+			// compute the corresponding partial public key...
+			keyAgreement.init(tmpkey);
+	        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); // compute x coordinate of public key as k*G
+	        // hmac of 64-bytes msg: (sha256(btcheader+msg) | 32bytes zero-padding)
+			Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0x00);
+			HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
+			if (Util.arrayCompare(buffer, (short)(dataOffset+blob_size), recvBuffer, (short)64, (short)20)!=0)
+				ISOException.throwIt(SW_SIGNATURE_INVALID);
+		}
+        
         // set from secret value
         ec_prv_key.setS(buffer, dataOffset, blob_size);
         eckeys_used= true;
-        dataOffset += blob_size; 
-        bytesLeft -= blob_size;
 	}
 	
 	/** 
@@ -1677,9 +1699,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
      * ins: 0x6E
 	 * p1: key number or 0xFF for the last derived Bip32 extended key 
 	 * p2: Init-Update-Finalize
-	 * data(init): none
-	 * data(update/finalize): [chunk_size(2b) | chunk_data]
-	 * 
+	 * data(init): [ full_msg_size(4b) ]
+	 * data(update): [chunk_size(2b) | chunk_data]
+	 * data(finalize): [chunk_size(2b) | chunk_data | (option)HMAC-2FA(20b)]
+	 *  
 	 * returns(init/update): none
 	 * return(finalize): [sig]
 	 *
@@ -1742,8 +1765,22 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 				offset= (short)ISO7816.OFFSET_CDATA;
 				chunk_size=Util.getShort(buffer, offset);
 				offset+=2;
-				sha256.doFinal(buffer, (short) offset, chunk_size, buffer, (short) 0);
+				bytesLeft-=2;
+				sha256.doFinal(buffer, (short)offset, chunk_size, recvBuffer, (short) 0);
 				sign_flag= false;// reset flag
+				offset+=chunk_size;
+				bytesLeft-=chunk_size;
+				
+				// check 2FA if required
+				if(needs_2FA){
+					if (bytesLeft<(short)20)
+						ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+					// hmac of 64-bytes msg: (sha256(btcheader+msg) | 32bytes zero-padding)
+					Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0x00);
+					HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
+					if (Util.arrayCompare(buffer, offset, recvBuffer, (short)64, (short)20)!=0)
+						ISOException.throwIt(SW_SIGNATURE_INVALID);
+				}
 				
 				// set key & sign
 		    	if (key_nb==(byte)0xFF)
@@ -1759,7 +1796,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		    			ISOException.throwIt(SW_INCORRECT_ALG);
 		    		sigECDSA.init(key, Signature.MODE_SIGN);
 		    	}
-		        short sign_size= sigECDSA.sign(buffer, (short)0, (short)32, buffer, (short)0);
+		        short sign_size= sigECDSA.sign(recvBuffer, (short)0, (short)32, buffer, (short)0);
 		        apdu.setOutgoingAndSend((short) 0, sign_size);
 		    	break;
 		}        		
@@ -1771,7 +1808,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
      * ins: 0x72
 	 * p1: key number or 0xFF for the last derived Bip32 extended key 
 	 * p2: 0x00
-	 * data: [msg_size(2b) | msg_data]
+	 * data: [msg_size(2b) | msg_data | (option)HMAC(20b)]
 	 * 
 	 * return: [sig]
 	 *
@@ -1803,14 +1840,27 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		short msgSize= Util.getShort(buffer, offset);
 		recvOffset+= Biginteger.encodeShortToVarInt(msgSize, recvBuffer, recvOffset);
 		offset+=2;
+		bytesLeft-=2;
 		Util.arrayCopyNonAtomic(buffer, offset, recvBuffer, recvOffset, msgSize);
 		offset+= msgSize;
 		recvOffset+= msgSize;
+		bytesLeft-= msgSize;
 		
 		// hash SHA-256
 		sha256.reset();
 		sha256.doFinal(recvBuffer, (short) 0, recvOffset, recvBuffer, (short) 0);
-		        
+		
+		// check 2FA if required
+		if(needs_2FA){
+			if (bytesLeft<(short)20)
+				ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+			// hmac of 64-bytes msg: (sha256(btcheader+msg) | 32bytes zero-padding)
+			Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0x00);
+			HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
+			if (Util.arrayCompare(buffer, offset, recvBuffer, (short)64, (short)20)!=0)
+				ISOException.throwIt(SW_SIGNATURE_INVALID);
+		}
+		
         // set key & sign
     	if (key_nb==(byte)0xFF)
     		sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
