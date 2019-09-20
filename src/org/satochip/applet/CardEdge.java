@@ -1235,7 +1235,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 *  ins: 0x6C
 	 *  p1: seed_size(1b) 
 	 *  p2: 0x00 
-	 *  data: [seed_data (seed_size) | optional-hmac(20b)]
+	 *  data: [seed_data (seed_size)]
 	 *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
 	 */
 	private void importBIP32Seed(APDU apdu, byte[] buffer){
@@ -1351,8 +1351,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		bip32_seeded= false;
 		bip32_masterkey.clearKey(); 
 		bip32_masterchaincode.clearKey();
-		bip32_authentikey.clearKey();
 		bip32_encryptkey.clearKey();
+		bip32_authentikey.clearKey();
+		Secp256k1.setCommonCurveParameters(bip32_authentikey);// keep public params!
+		
 		Util.arrayFillNonAtomic(authentikey_pubkey, (short)0, (short)(2*BIP32_KEY_SIZE+1), (byte)0x00);
 		LogOutAll();
 		return;
