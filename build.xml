@@ -12,18 +12,21 @@
 	
 	<target name="build">
 		
+		<!-- 
 		<javacard>
 		  <cap jckit="C:\Dev\java_card_kit-2_2_2\java_card_kit-2_2_2" aid="5361746F43686970" version="0.1" output="SatoChip-2.2.2.cap" sources="src\org\satochip\applet">
 			<applet class="org.satochip.applet.CardEdge" aid="5361746F4368697000"/>
 		  </cap>
 		</javacard>
+		-->
 		
-		<!-- -->
+		<!-- 
 		<javacard>
 		  <cap jckit="C:\Dev\jc303_kit" aid="5361746F43686970" version="0.1" output="SatoChip-3.0.3.cap" sources="src\org\satochip\applet">
 			<applet class="org.satochip.applet.CardEdge" aid="5361746F4368697000"/>
 		  </cap>
 		</javacard>
+		-->
 		
 		<javacard>
 		  <cap jckit="C:\Dev\jc304_kit" aid="5361746F43686970" version="0.1" output="SatoChip-3.0.4.cap" sources="src\org\satochip\applet">

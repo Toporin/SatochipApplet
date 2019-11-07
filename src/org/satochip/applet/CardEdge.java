@@ -93,6 +93,8 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     // 0.7-0.1: add CryptTransaction2FA() to encrypt/decrypt tx messages sent to 2FA device for privacy
 	// 0.7-0.2: 2FA patch to mitigate replay attack when importing a new seed
 	// 0.8-0.1: add APDUs to reset the seed/eckey/2FA. 2FA required to sign tx/msg and reset seed/eckey/2FA. 2FA can only be disabled when all privkeys are cleared.
+	// 0.9-0.1: Message signing for altcoin. 
+	// 0.10-0.1: ad method SignTransactionHash()
 	private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
 	private final static byte PROTOCOL_MINOR_VERSION = (byte) 8;
 	private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -154,6 +156,8 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     private final static byte INS_CRYPT_TRANSACTION_2FA = (byte) 0x76;
     private final static byte INS_SET_2FA_KEY = (byte) 0x79;    
     private final static byte INS_RESET_2FA_KEY = (byte) 0x78;
+    
+	private final static byte INS_SIGN_TRANSACTION_HASH= (byte) 0x7A;
     
 	// debug
 	private final static byte INS_TEST_SHA1 = (byte) 0x80;
@@ -484,6 +488,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			break;
 		case INS_SIGN_TRANSACTION:
 			SignTransaction(apdu, buffer);
+			break;
+		case INS_SIGN_TRANSACTION_HASH:
+			SignTransactionHash(apdu, buffer);
 			break;
 		case INS_PARSE_TRANSACTION:
 			ParseTransaction(apdu, buffer);
@@ -2189,6 +2196,62 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
         apdu.setOutgoingAndSend((short) 0, sign_size);
     	
     }
+    
+    
+    /**
+     * This function signs a given transaction hash with a std or the last extended key
+     * If 2FA is enabled, a HMAC must be provided as an additional security layer. 
+	 * 
+     * ins: 0x7A
+	 * p1: key number or 0xFF for the last derived Bip32 extended key  
+	 * p2: 0x00
+	 * data: [hash(32b) | option: 2FA-flag(2b)|hmac(20b)]
+	 * 
+	 * return: [sig ]
+	 * 
+     */
+    private void SignTransactionHash(APDU apdu, byte[] buffer){
+    	
+    	// check that PIN[0] has been entered previously
+		if (!pins[0].isValidated())
+			ISOException.throwIt(SW_UNAUTHORIZED);
+		
+    	byte key_nb = buffer[ISO7816.OFFSET_P1];
+		if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
+			ISOException.throwIt(SW_INCORRECT_P1);
+		
+    	short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+		if (bytesLeft != apdu.setIncomingAndReceive())
+			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+		if (bytesLeft<MessageDigest.LENGTH_SHA_256)
+			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+    	
+    	// check whether the seed is initialized
+		if (key_nb==(byte)0xFF && !bip32_seeded)
+			ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
+    	
+		// check challenge-response answer if necessary
+		// TODO!
+		//if(needs_2FA){}
+		
+		// hash+sign singlehash
+    	if (key_nb==(byte)0xFF)
+    		sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
+    	else{
+    		Key key= eckeys[key_nb];
+    		// check type and size
+    		if ((key == null) || !key.isInitialized())
+    			ISOException.throwIt(SW_INCORRECT_P1);
+    		if (key.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
+    			ISOException.throwIt(SW_INCORRECT_ALG);		
+    		if (key.getSize()!= LENGTH_EC_FP_256)
+    			ISOException.throwIt(SW_INCORRECT_ALG);
+    		sigECDSA.init(key, Signature.MODE_SIGN);
+    	}
+        short sign_size= sigECDSA.signPreComputedHash(buffer, ISO7816.OFFSET_CDATA, MessageDigest.LENGTH_SHA_256, buffer, (short)0);
+        apdu.setOutgoingAndSend((short) 0, sign_size);    	
+    }
+    
     
     /**
 	 * This function allows to set the 2FA key and enable 2FA.
