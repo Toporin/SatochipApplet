@@ -93,8 +93,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     // 0.7-0.1: add CryptTransaction2FA() to encrypt/decrypt tx messages sent to 2FA device for privacy
 	// 0.7-0.2: 2FA patch to mitigate replay attack when importing a new seed
 	// 0.8-0.1: add APDUs to reset the seed/eckey/2FA. 2FA required to sign tx/msg and reset seed/eckey/2FA. 2FA can only be disabled when all privkeys are cleared.
+	// 0.9-0.1: Message signing for altcoin. 
 	private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
-	private final static byte PROTOCOL_MINOR_VERSION = (byte) 8;
+	private final static byte PROTOCOL_MINOR_VERSION = (byte) 9;
 	private final static byte APPLET_MAJOR_VERSION = (byte) 0;
 	private final static byte APPLET_MINOR_VERSION = (byte) 1;
 	
@@ -1761,7 +1762,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
      * ins: 0x6E
 	 * p1: key number or 0xFF for the last derived Bip32 extended key 
 	 * p2: Init-Update-Finalize
-	 * data(init): [ full_msg_size(4b) ]
+	 * data(init): [ full_msg_size(4b) | (option)altcoinSize(1b)-altcoin]
 	 * data(update): [chunk_size(2b) | chunk_data]
 	 * data(finalize): [chunk_size(2b) | chunk_data | (option)HMAC-2FA(20b)]
 	 *  
@@ -1793,9 +1794,27 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		switch(p2){
 			// initialization
 			case OP_INIT: 
-				// copy message header to tmp buffer
-				Util.arrayCopyNonAtomic(BITCOIN_SIGNED_MESSAGE_HEADER, (short)0, recvBuffer, (short)0, (short)BITCOIN_SIGNED_MESSAGE_HEADER.length);
-				recvOffset= (short)BITCOIN_SIGNED_MESSAGE_HEADER.length;
+				recvOffset=0;
+				if (bytesLeft<(short)4){
+					ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);}
+				else if (bytesLeft==(short)4){
+					// copy Btc message header to tmp buffer
+					Util.arrayCopyNonAtomic(BITCOIN_SIGNED_MESSAGE_HEADER, (short)0, recvBuffer, (short)0, (short)BITCOIN_SIGNED_MESSAGE_HEADER.length);
+					recvOffset= (short)BITCOIN_SIGNED_MESSAGE_HEADER.length;
+				}
+				else {
+					//Altcoin msg header from buffer
+					offset= (short)ISO7816.OFFSET_CDATA;
+					offset+=4;
+					byte altcoinSize= buffer[offset];
+					offset++;
+					if (bytesLeft!=(5+altcoinSize))
+						ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+					recvBuffer[0]= (byte) (altcoinSize+17);
+					Util.arrayCopyNonAtomic(buffer, offset, recvBuffer, (short)1, (short)altcoinSize);
+					Util.arrayCopyNonAtomic(BITCOIN_SIGNED_MESSAGE_HEADER, (short)8, recvBuffer, (short)(1+altcoinSize), (short)17); //' Signed Message:\n'
+					recvOffset= (short) (18+altcoinSize);
+				}
 				
 				// buffer data = [4-byte msg_size]
 				offset= (short)ISO7816.OFFSET_CDATA;
