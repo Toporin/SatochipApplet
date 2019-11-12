@@ -93,8 +93,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
     // 0.7-0.1: add CryptTransaction2FA() to encrypt/decrypt tx messages sent to 2FA device for privacy
 	// 0.7-0.2: 2FA patch to mitigate replay attack when importing a new seed
 	// 0.8-0.1: add APDUs to reset the seed/eckey/2FA. 2FA required to sign tx/msg and reset seed/eckey/2FA. 2FA can only be disabled when all privkeys are cleared.
+	// 0.9-0.1: Message signing for altcoin. 
 	private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
-	private final static byte PROTOCOL_MINOR_VERSION = (byte) 8;
+	private final static byte PROTOCOL_MINOR_VERSION = (byte) 9;
 	private final static byte APPLET_MAJOR_VERSION = (byte) 0;
 	private final static byte APPLET_MINOR_VERSION = (byte) 1;
 	
