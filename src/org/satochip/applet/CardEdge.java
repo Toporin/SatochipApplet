@@ -768,7 +768,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	
 	/** 
 	 * This function allows the import of a private ECkey into the card.
-	 * The exact key blob contents depend on the key’s algorithm, type and actual
+	 * The exact key blob contents depend on the keyÂ’s algorithm, type and actual
 	 * import parameters. The key's number, algorithm type, and parameters are
 	 * specified by arguments P1, P2 and DATA.
 	 * If 2FA is enabled, a hmac code must be provided.
@@ -914,7 +914,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	
 	/** 
 	 * This function returns the public key associated with a particular private key stored 
-	 * in the applet. The exact key blob contents depend on the key’s algorithm and type. 
+	 * in the applet. The exact key blob contents depend on the keyÂ’s algorithm and type. 
 	 * 
 	 * ins: 0x35
 	 * p1: private key number (0x00-0x0F)
@@ -1492,7 +1492,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		byte bip32_depth = buffer[ISO7816.OFFSET_P1];
 		if ((bip32_depth < 0) || (bip32_depth > MAX_BIP32_DEPTH) )
         	ISOException.throwIt(SW_INCORRECT_P1);
-		if (bytesLeft < 4*bip32_depth)
+		if (bytesLeft < (short)(4*bip32_depth))
 			ISOException.throwIt(SW_INVALID_PARAMETER);
 		
 		// P2 option flags
@@ -1808,7 +1808,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 					offset+=4;
 					byte altcoinSize= buffer[offset];
 					offset++;
-					if (bytesLeft!=(5+altcoinSize))
+					if (bytesLeft!=(short)(5+altcoinSize))
 						ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 					recvBuffer[0]= (byte) (altcoinSize+17);
 					Util.arrayCopyNonAtomic(buffer, offset, recvBuffer, (short)1, (short)altcoinSize);
