@@ -94,9 +94,9 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	// 0.7-0.2: 2FA patch to mitigate replay attack when importing a new seed
 	// 0.8-0.1: add APDUs to reset the seed/eckey/2FA. 2FA required to sign tx/msg and reset seed/eckey/2FA. 2FA can only be disabled when all privkeys are cleared.
 	// 0.9-0.1: Message signing for altcoin. 
-	// 0.10-0.1: ad method SignTransactionHash()
+	// 0.10-0.1: add method SignTransactionHash()
 	private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
-	private final static byte PROTOCOL_MINOR_VERSION = (byte) 8;
+	private final static byte PROTOCOL_MINOR_VERSION = (byte) 10;
 	private final static byte APPLET_MAJOR_VERSION = (byte) 0;
 	private final static byte APPLET_MINOR_VERSION = (byte) 1;
 	
@@ -344,9 +344,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * - Tx approval: [ 32b TX hash | 32-bit 0x00-padding ]
 	 * - ECkey import:[ 32b coordx  | 32-bit (0x10^key_nb)-padding ]
 	 * - ECkey reset: [ 32b coordx  | 32-bit (0x20^key_nb)-padding ] 
-	 * - 2FA reset:   [ 20b 2FA_ID  | 32-bit 0xAA-padding ]  
-	 * - Seed reset:  [ 32b authntikey-coordx  | 32-bit 0xFF-padding ] 
+	 * - Seed reset:  [ 32b authentikey-coordx  | 32-bit 0xFF-padding ] 
+	 * - 2FA reset:   [ 20b 2FA_ID  | 44-bit 0xAA-padding ]  
 	 * - Msg signing: [ 32b SHA26(btcHeader+msg) | 32-bit 0xBB-padding ]
+	 * - Hash signing:[ 32b Hash | 32-bit 0xCC-padding ]
 	 *  */ 
     
     // 2FA msg encryption
@@ -1202,7 +1203,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 *  p1: 0x00 
 	 *  p2: 0x00 
 	 *  data: none
-	 *  return: [versions(4b) | PIN0-PUK0-PIN1-PUK1 tries (4b) | need2FA (1b)]
+	 *  return: [versions(4b) | PIN0-PUK0-PIN1-PUK1 tries (4b) | needs2FA (1b) | is_seeded(1b) ]
 	 */
 	private void GetStatus(APDU apdu, byte[] buffer) {
 		// check that PIN[0] has been entered previously
@@ -1224,6 +1225,10 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		buffer[pos++] = pins[1].getTriesRemaining();
 		buffer[pos++] = ublk_pins[1].getTriesRemaining();
 		if (needs_2FA)
+			buffer[pos++] = (byte)0x01;
+		else
+			buffer[pos++] = (byte)0x00;
+		if (bip32_seeded)
 			buffer[pos++] = (byte)0x01;
 		else
 			buffer[pos++] = (byte)0x00;
@@ -2230,9 +2235,22 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		if (key_nb==(byte)0xFF && !bip32_seeded)
 			ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
     	
-		// check challenge-response answer if necessary
-		// TODO!
-		//if(needs_2FA){}
+		// check 2FA if required
+		if(needs_2FA){
+			// check data length
+			if (bytesLeft<MessageDigest.LENGTH_SHA_256+MessageDigest.LENGTH_SHA+(short)2)
+				ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+			// check flag for 2fa_hmac_chalresp
+			short hmac_flags= Util.getShort(buffer, (short)(ISO7816.OFFSET_CDATA+32));
+			if (hmac_flags!=HMAC_CHALRESP_2FA)
+				ISOException.throwIt(SW_INCORRECT_ALG);
+			// hmac of 64-bytes msg: ( 32bytes tx_hash | 32bytes 0xCC-padding)
+			Util.arrayCopyNonAtomic(buffer, (short)ISO7816.OFFSET_CDATA, recvBuffer, (short)0, (short)32);
+			Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0xCC);
+			HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
+			if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20)!=0)
+				ISOException.throwIt(SW_SIGNATURE_INVALID);
+		}
 		
 		// hash+sign singlehash
     	if (key_nb==(byte)0xFF)
