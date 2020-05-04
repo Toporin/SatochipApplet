@@ -820,7 +820,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		bytesLeft--;
 		short key_size = Util.getShort(buffer, dataOffset);
 		if (key_size != LENGTH_EC_FP_256)
-			ISOException.throwIt(key_size);
+			ISOException.throwIt(SW_INVALID_PARAMETER );
 		dataOffset += (short) 2; // Skip Key Size
 		bytesLeft -= (short) 2;
 		dataOffset += (short) 6; // Skip ACL (deprecated)
