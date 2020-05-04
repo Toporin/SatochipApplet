@@ -1503,7 +1503,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		byte bip32_depth = buffer[ISO7816.OFFSET_P1];
 		if ((bip32_depth < 0) || (bip32_depth > MAX_BIP32_DEPTH) )
         	ISOException.throwIt(SW_INCORRECT_P1);
-		if (bytesLeft < 4*bip32_depth)
+		if (bytesLeft < (short)(4*bip32_depth))
 			ISOException.throwIt(SW_INVALID_PARAMETER);
 		
 		// P2 option flags
@@ -1819,7 +1819,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 					offset+=4;
 					byte altcoinSize= buffer[offset];
 					offset++;
-					if (bytesLeft!=(5+altcoinSize))
+					if (bytesLeft!=(short)(5+altcoinSize))
 						ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 					recvBuffer[0]= (byte) (altcoinSize+17);
 					Util.arrayCopyNonAtomic(buffer, offset, recvBuffer, (short)1, (short)altcoinSize);
