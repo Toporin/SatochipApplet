@@ -95,6 +95,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	// 0.8-0.1: add APDUs to reset the seed/eckey/2FA. 2FA required to sign tx/msg and reset seed/eckey/2FA. 2FA can only be disabled when all privkeys are cleared.
 	// 0.9-0.1: Message signing for altcoin. 
 	// 0.10-0.1: add method SignTransactionHash()
+	// 0.10-0.2: support for native sha512
 	private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
 	private final static byte PROTOCOL_MINOR_VERSION = (byte) 10;
 	private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -667,7 +668,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		aes128= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_ECB_NOPAD, false);
 		
 		// HD wallet
-		Sha512.init();
+		//Sha512.init();
 		HmacSha512.init(tmpBuffer);
 		//EccComputation.init(tmpBuffer); //debug
 		
