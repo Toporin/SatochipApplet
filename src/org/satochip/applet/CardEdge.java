@@ -59,6 +59,7 @@ import javacard.security.AESKey;
 import javacard.security.ECPrivateKey;
 import javacard.security.ECPublicKey;
 //import javacard.security.HMACKey;
+import javacard.security.CryptoException;
 import javacard.security.Key;
 import javacard.security.KeyAgreement;
 import javacard.security.KeyBuilder;
@@ -96,6 +97,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	// 0.9-0.1: Message signing for altcoin. 
 	// 0.10-0.1: add method SignTransactionHash()
 	// 0.10-0.2: support for native sha512
+	// 0.10-0.3: ECkey recovery optimisation: support ALG_EC_SVDP_DH_PLAIN_XY
 	private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
 	private final static byte PROTOCOL_MINOR_VERSION = (byte) 10;
 	private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -234,6 +236,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	// JC API 2.2.2 does not define these constants:
 	private final static byte ALG_ECDSA_SHA_256= (byte) 33;
 	private final static byte ALG_EC_SVDP_DH_PLAIN= (byte) 3; //https://javacard.kenai.com/javadocs/connected/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN
+	private final static byte ALG_EC_SVDP_DH_PLAIN_XY= (byte) 6; //https://docs.oracle.com/javacard/3.0.5/api/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN_XY
 	private final static short LENGTH_EC_FP_256= (short) 256;
 		
 	/****************************************
@@ -264,6 +267,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	// shared cryptographic objects
 	private RandomData randomData;
 	private KeyAgreement keyAgreement;
+	private boolean isKeyAgreementXY= false;
 	private Signature sigECDSA;
 	private Cipher aes128;
     
@@ -663,7 +667,14 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		}
 
 		// shared cryptographic objects
-		keyAgreement = KeyAgreement.getInstance(ALG_EC_SVDP_DH_PLAIN, false); 
+		try {
+			keyAgreement = KeyAgreement.getInstance(ALG_EC_SVDP_DH_PLAIN_XY, false); 
+			isKeyAgreementXY= true;
+		} catch (CryptoException e) {
+			ISOException.throwIt((short)0x9C05);// debug: ensure that we use ALG_EC_SVDP_DH_PLAIN_XY
+			keyAgreement = KeyAgreement.getInstance(ALG_EC_SVDP_DH_PLAIN, false); 
+			isKeyAgreementXY= false;
+		}
 		sigECDSA= Signature.getInstance(ALG_ECDSA_SHA_256, false); 
 		aes128= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_ECB_NOPAD, false);
 		
@@ -857,7 +868,12 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			tmpkey.setS(buffer, dataOffset, blob_size);
 			// compute the corresponding partial public key...
 			keyAgreement.init(tmpkey);
-	        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); // compute x coordinate of public key as k*G
+			if (isKeyAgreementXY){
+				keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form
+				Util.arrayCopy(tmpBuffer, (short)1, recvBuffer, (short)0, (short)32);
+			}else{
+				keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); // compute x coordinate of public key as k*G
+			}
 	        // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x10^key_nb)-padding)
 			Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)(0x10^key_nb));
 			HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
@@ -907,8 +923,13 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			
 			// compute the corresponding partial public key...
 			keyAgreement.init((ECPrivateKey)key);
-	        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); // compute x coordinate of public key as k*G
-	        // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x20^key_nb)-padding)
+			if (isKeyAgreementXY){
+				keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form
+				Util.arrayCopy(tmpBuffer, (short)1, recvBuffer, (short)0, (short)32);
+			}else{
+				keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); // compute x coordinate of public key as k*G
+			}
+			// hmac of 64-bytes msg: (pubkey-x | 32bytes (0x20^key_nb)-padding)
 			Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte) (0x20^key_nb));
 			HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
 			if (Util.arrayCompare(buffer, ISO7816.OFFSET_CDATA, recvBuffer, (short)64, (short)20)!=0)
@@ -958,7 +979,12 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 				
 		// compute the corresponding partial public key...
         keyAgreement.init((ECPrivateKey)key);
-        short coordx_size = keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)2); // compute x coordinate of public key as k*G
+        short coordx_size=(short)32;
+        if (isKeyAgreementXY){
+			keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
+		}else{
+			keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)2); // compute x coordinate of public key as k*G
+		}
         Util.setShort(buffer, (short)0, coordx_size);
         
         // sign fixed message
@@ -1292,8 +1318,15 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 		
 		// compute the partial authentikey public key...
         keyAgreement.init(bip32_authentikey);
-        authentikey_pubkey[0]=0x00; // 0x00 means coordy is not set (yet), otherwise 0x04
-        short coordx_size = keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, authentikey_pubkey, (short)1); // compute x coordinate of public key as k*G
+        short coordx_size= (short)32;
+        if (isKeyAgreementXY){
+			keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, authentikey_pubkey, (short)0); //pubkey in uncompressed form
+			Util.arrayCopy(tmpBuffer, (short)1, buffer, (short)2, (short)32);
+		}else{
+			keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, authentikey_pubkey, (short)1); // compute x coordinate of public key as k*G
+			authentikey_pubkey[0]=0x00; // 0x00 means coordy is not set (yet), otherwise 0x04
+	    }
+        
         Util.setShort(buffer, (short)0, coordx_size);
         Util.arrayCopyNonAtomic(authentikey_pubkey, (short)1, buffer, (short)2, coordx_size);
         // self signed public key
@@ -1393,8 +1426,13 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 			ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
 		
 		// compute the partial authentikey public key...
-        keyAgreement.init(bip32_authentikey);
-        short coordx_size = keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)2); // compute x coordinate of public key as k*G
+        keyAgreement.init(bip32_authentikey);        
+        short coordx_size= (short)32;
+        if (isKeyAgreementXY){
+			keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
+		}else{
+			keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)2); // compute x coordinate of public key as k*G
+	    }
         Util.setShort(buffer, (short)0, coordx_size);
         // self signed public key
         sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
@@ -1473,7 +1511,7 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 	 * The function computes the Bip32 extended key derived from the master key and returns the 
 	 * x-coordinate of the public key signed by the authentikey.
 	 * Extended key is stored in the chip in a temporary EC key, along with corresponding ACL
-	 * Extended key and chaincode is also cached as a Bip32 object is secure memory
+	 * Extended key and chaincode is also cached as a Bip32 object in secure memory
 	 * 
 	 * ins: 0x6D
 	 * p1: depth of the extended key (master is depth 0, m/i is depht 1). Max depth is 10
@@ -1552,42 +1590,55 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 					// compute coord x from privkey 
 					bip32_extendedkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
 					keyAgreement.init(bip32_extendedkey);
-					short coordx_size= keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, BIP32_OFFSET_PUBX); 
 			        
-			        // compute compbyte from coord y if necessary (slow!)
-			        if (compbyte==0x04 && (opts & 0x40)!=0x40){
-				        // coord y= square root of X^3+7 mod p => 2 solutions!
-						EccComputation.SqrtRootOpt(recvBuffer, BIP32_OFFSET_PUBX, recvBuffer, BIP32_OFFSET_PUBY);
-						recvBuffer[BIP32_OFFSET_PUB]=0x04;
-						// sign a dummy message 
-						sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
-						short sigsize=sigECDSA.sign(recvBuffer, (short)0, (short)32, buffer, BIP32_OFFSET_SIG);
-						// verify sig with pubkey (x,y) & recover compression byte
-						bip32_pubkey.setW(recvBuffer, BIP32_OFFSET_PUB, (short)(2*BIP32_KEY_SIZE+1)) ;
-						sigECDSA.init(bip32_pubkey, Signature.MODE_VERIFY);
-						boolean verify= sigECDSA.verify(recvBuffer, (short)0, (short)32, buffer, BIP32_OFFSET_SIG, sigsize);
+			        // keyAgreement.generateSecret() recovers X and Y coordinates
+					if (isKeyAgreementXY){ 
+						keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, BIP32_OFFSET_PUB); //pubkey in uncompressed form
 						boolean parity= ((recvBuffer[(short)(BIP32_OFFSET_PUBY+31)]&0x01)==0);
-						compbyte= (verify^parity)?(byte)0x03:(byte)0x02;
+						compbyte= (parity)?(byte)0x02:(byte)0x03; //ORIGINAL: compbyte= (parity)?(byte)0x03:(byte)0x02;
 						// save compbyte in parent's object for future use
 						if (parent_base==Bip32ObjectManager.NULL_OFFSET)
 							bip32_master_compbyte= compbyte;
 						else
-							bip32_om.setByte(parent_base, (short)(BIP32_OBJECT_SIZE-1), compbyte);//bip32_mem.setByte(parent_base, (short)(BIP32_OBJECT_SIZE-1), compbyte);//debugOM
-			        }
-			        // compute compbyte from coord y externally (faster!)
-			        if (compbyte==0x04 && (opts & 0x40)==0x40){
-			        	// exit the for loop prematurely
-			        	// the data returned is related to the parent with non-hardened child
-			        	// we can then compute the coord-y externally
-			        	// save hash of parent path (or 000...0 if masterkey)
-			        	if (parent_base==Bip32ObjectManager.NULL_OFFSET){
-			        		Util.arrayFillNonAtomic(buffer, (short)0, (short)32, (byte)0);
-			        	}else{
-							sha256.reset(); 
-							sha256.doFinal(recvBuffer, BIP32_OFFSET_PATH, (short)(4*(i-1)), buffer, (byte)0);
-						}
-						exit_early=(short)0x8000;
-			        	break; 
+							bip32_om.setByte(parent_base, (short)(BIP32_OBJECT_SIZE-1), compbyte);
+					// keyAgreement.generateSecret() recovers X coordinate only
+					} else{ 
+						keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, BIP32_OFFSET_PUBX);  // compute x coordinate of public key as k*G
+						// compute compbyte from coord y internally (slow!)
+				        if (compbyte==0x04 && (opts & 0x40)!=0x40){
+					        // coord y= square root of X^3+7 mod p => 2 solutions!
+							EccComputation.SqrtRootOpt(recvBuffer, BIP32_OFFSET_PUBX, recvBuffer, BIP32_OFFSET_PUBY);
+							recvBuffer[BIP32_OFFSET_PUB]=0x04;
+							// sign a dummy message 
+							sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
+							short sigsize=sigECDSA.sign(recvBuffer, (short)0, (short)32, buffer, BIP32_OFFSET_SIG);
+							// verify sig with pubkey (x,y) & recover compression byte
+							bip32_pubkey.setW(recvBuffer, BIP32_OFFSET_PUB, (short)(2*BIP32_KEY_SIZE+1)) ;
+							sigECDSA.init(bip32_pubkey, Signature.MODE_VERIFY);
+							boolean verify= sigECDSA.verify(recvBuffer, (short)0, (short)32, buffer, BIP32_OFFSET_SIG, sigsize);
+							boolean parity= ((recvBuffer[(short)(BIP32_OFFSET_PUBY+31)]&0x01)==0);
+							compbyte= (verify^parity)?(byte)0x03:(byte)0x02;
+							// save compbyte in parent's object for future use
+							if (parent_base==Bip32ObjectManager.NULL_OFFSET)
+								bip32_master_compbyte= compbyte;
+							else
+								bip32_om.setByte(parent_base, (short)(BIP32_OBJECT_SIZE-1), compbyte);//bip32_mem.setByte(parent_base, (short)(BIP32_OBJECT_SIZE-1), compbyte);//debugOM
+				        }
+				        // compute compbyte from coord y externally (faster!)
+				        if (compbyte==0x04 && (opts & 0x40)==0x40){
+				        	// exit the for loop prematurely
+				        	// the data returned is related to the parent with non-hardened child
+				        	// we can then compute the coord-y externally
+				        	// save hash of parent path (or 000...0 if masterkey)
+				        	if (parent_base==Bip32ObjectManager.NULL_OFFSET){
+				        		Util.arrayFillNonAtomic(buffer, (short)0, (short)32, (byte)0);
+				        	}else{
+								sha256.reset(); 
+								sha256.doFinal(recvBuffer, BIP32_OFFSET_PATH, (short)(4*(i-1)), buffer, (byte)0);
+							}
+							exit_early=(short)0x8000;
+				        	break; 
+				        }
 			        }
 			    	
 			        // compute HMAC of compressed pubkey + index
@@ -1660,7 +1711,12 @@ public class CardEdge extends javacard.framework.Applet implements ExtendedLengt
 				
 		// compute the corresponding partial public key...
         keyAgreement.init(bip32_extendedkey);
-        short coordx_size = keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)34); // compute x coordinate of public key as k*G
+        short coordx_size= (short)32;
+        if (isKeyAgreementXY){
+			keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)33); //pubkey in uncompressed form
+		}else{
+			keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)34); // compute x coordinate of public key as k*G
+	    }
         Util.setShort(buffer, BIP32_KEY_SIZE, (short)(coordx_size^exit_early)); //exit_early flag signals we want to compute pubkey externaly
         
         // self-sign coordx

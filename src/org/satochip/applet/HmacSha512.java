@@ -45,7 +45,7 @@ public class HmacSha512 {
 			sha512 = MessageDigest.getInstance(MessageDigest.ALG_SHA_512, false); 
 			nativeSha512= true;
 		} catch (CryptoException e) {
-			ISOException.throwIt((short)0x9C05);// debug
+			ISOException.throwIt((short)0x9C05);// debug: ensure that we use native sha512
 			nativeSha512= false;
 			Sha512.init();			
 		}
