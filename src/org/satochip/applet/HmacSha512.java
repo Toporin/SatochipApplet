@@ -33,21 +33,17 @@ public class HmacSha512 {
 	public static final short HASHSIZE=64;
 	private static final short SW_UNSUPPORTED_KEYSIZE = (short) 0x9c0E;
 	private static final short SW_UNSUPPORTED_MSGSIZE = (short) 0x9c0F;
+	private static final short SW_UNSUPPORTED_FEATURE = (short) 0x9c05;
 	private static byte[] data;
 	
 	private static MessageDigest sha512;  
-	private static boolean nativeSha512= false;
 	
 	public static void init(byte[] tmp){
 		data= tmp;
-		
 		try {
 			sha512 = MessageDigest.getInstance(MessageDigest.ALG_SHA_512, false); 
-			nativeSha512= true;
 		} catch (CryptoException e) {
-			ISOException.throwIt((short)0x9C05);// debug: ensure that we use native sha512
-			nativeSha512= false;
-			Sha512.init();			
+			ISOException.throwIt(SW_UNSUPPORTED_FEATURE);// unsupported feature => use a more recent card!
 		}
 	}
 	
@@ -68,12 +64,8 @@ public class HmacSha512 {
 		}
 		Util.arrayFillNonAtomic(data, key_length, (short)(BLOCKSIZE-key_length), (byte)0x36);		
 		Util.arrayCopyNonAtomic(message, message_offset, data, BLOCKSIZE, message_length);
-		if (nativeSha512){
-			sha512.reset();
-			sha512.doFinal(data, (short)0, (short)(BLOCKSIZE+message_length), data, BLOCKSIZE); // copy hash result to data buffer!
-		} else{
-			Sha512.resetUpdateDoFinal(data, (short)0, (short)(BLOCKSIZE+message_length), data, BLOCKSIZE); // copy hash result to data buffer!
-		}
+		sha512.reset();
+		sha512.doFinal(data, (short)0, (short)(BLOCKSIZE+message_length), data, BLOCKSIZE); // copy hash result to data buffer!
 		
 		// compute outer hash
 		for (short i=0; i<key_length; i++){
@@ -81,12 +73,8 @@ public class HmacSha512 {
 		}
 		Util.arrayFillNonAtomic(data, key_length, (short)(BLOCKSIZE-key_length), (byte)0x5c);
 		// previous hash already copied to correct offset in data
-		if (nativeSha512){
-			sha512.reset();
-			sha512.doFinal(data, (short)0, (short)(BLOCKSIZE+HASHSIZE), mac, mac_offset);
-		} else{
-			Sha512.resetUpdateDoFinal(data, (short)0, (short)(BLOCKSIZE+HASHSIZE), mac, mac_offset);
-		}
+		sha512.reset();
+		sha512.doFinal(data, (short)0, (short)(BLOCKSIZE+HASHSIZE), mac, mac_offset);
 		
 		return HASHSIZE;
 	}	
