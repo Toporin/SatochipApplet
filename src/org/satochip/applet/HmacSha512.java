@@ -31,9 +31,6 @@ public class HmacSha512 {
 
 	public static final short BLOCKSIZE=128; // 128 bytes 
 	public static final short HASHSIZE=64;
-	private static final short SW_UNSUPPORTED_KEYSIZE = (short) 0x9c0E;
-	private static final short SW_UNSUPPORTED_MSGSIZE = (short) 0x9c0F;
-	private static final short SW_UNSUPPORTED_FEATURE = (short) 0x9c05;
 	private static byte[] data;
 	
 	private static MessageDigest sha512;  
@@ -43,7 +40,7 @@ public class HmacSha512 {
 		try {
 			sha512 = MessageDigest.getInstance(MessageDigest.ALG_SHA_512, false); 
 		} catch (CryptoException e) {
-			ISOException.throwIt(SW_UNSUPPORTED_FEATURE);// unsupported feature => use a more recent card!
+			ISOException.throwIt(CardEdge.SW_UNSUPPORTED_FEATURE); // unsupported feature => use a more recent card!
 		}
 	}
 	
@@ -52,10 +49,10 @@ public class HmacSha512 {
 			byte[] mac, short mac_offset){
 		
 		if (key_length>BLOCKSIZE || key_length<0){
-			ISOException.throwIt(SW_UNSUPPORTED_KEYSIZE); // don't accept keys bigger than block size 
+			ISOException.throwIt(CardEdge.SW_HMAC_UNSUPPORTED_KEYSIZE); // don't accept keys bigger than block size 
 		}
 		if (message_length>HASHSIZE || message_length<0){
-			ISOException.throwIt(SW_UNSUPPORTED_MSGSIZE); // don't accept message bigger than block size (should be sufficient for BIP32)
+			ISOException.throwIt(CardEdge.SW_HMAC_UNSUPPORTED_MSGSIZE); // don't accept message bigger than block size (should be sufficient for BIP32)
 		}
 		
 		// compute inner hash
