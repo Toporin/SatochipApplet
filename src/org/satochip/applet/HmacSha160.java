@@ -31,8 +31,6 @@ public class HmacSha160 {
 	public static final short BLOCKSIZE=64; // 64 bytes 
 	public static final short HASHSIZE=20;
 	public static final short MAXMSGSIZE=192; 
-	private static final short SW_UNSUPPORTED_KEYSIZE = (short) 0x9c0E;
-	private static final short SW_UNSUPPORTED_MSGSIZE = (short) 0x9c0F;
 	private static byte[] data;
 	
 	
@@ -47,10 +45,10 @@ public class HmacSha160 {
 			byte[] mac, short mac_offset){
 		
 		if (key_length>BLOCKSIZE || key_length<0){
-			ISOException.throwIt(SW_UNSUPPORTED_KEYSIZE); // don't accept keys bigger than block size 
+			ISOException.throwIt(CardEdge.SW_HMAC_UNSUPPORTED_KEYSIZE); // don't accept keys bigger than block size 
 		}
 		if (message_length>MAXMSGSIZE || message_length<0){
-			ISOException.throwIt(SW_UNSUPPORTED_MSGSIZE); 
+			ISOException.throwIt(CardEdge.SW_HMAC_UNSUPPORTED_MSGSIZE); 
 		}
 		
 		// compute inner hash
