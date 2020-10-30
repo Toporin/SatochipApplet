@@ -24,11 +24,11 @@ import javacard.framework.Util;
 
 public class Biginteger {
 
-	// used for +-< operations on byte arrays
-	private static final short digit_mask = 0xff;
-	private static final short digit_len = 8;
-	
-	/**
+    // used for +-< operations on byte arrays
+    private static final short digit_mask = 0xff;
+    private static final short digit_len = 8;
+    
+    /**
      * Addition with carry report. Adds other to this number. If this
      * is too small for the result (i.e., an overflow occurs) the
      * method returns true. Further, the result in {@code this} will
@@ -44,7 +44,7 @@ public class Biginteger {
      * size is the size in bytes of the operands (should be same size, padded with 0..0 if needed)
      * @param other 
      */
-	public static boolean add_carry(byte[] x, short offsetx, byte[] y, short offsety, short size)
+    public static boolean add_carry(byte[] x, short offsetx, byte[] y, short offsety, short size)
     {
         short akku = 0;
         short j = (short)(offsetx+size-1); 
@@ -57,17 +57,17 @@ public class Biginteger {
         
         return akku != 0;
     }
-	
-	/**
-	 * compute x= x+1
-	 * operands are stored Most Signifiant Byte First
-	 * size is the size in bytes of the operand x
-	 */
-	public static boolean add1_carry(byte[] x, short offsetx, short size)
+    
+    /**
+     * compute x= x+1
+     * operands are stored Most Signifiant Byte First
+     * size is the size in bytes of the operand x
+     */
+    public static boolean add1_carry(byte[] x, short offsetx, short size)
     {
-		//short digit_mask = (short)0xff;
-		//short digit_len = 8;
-		short akku = 1; // first carry set to 1 for increment
+        //short digit_mask = (short)0xff;
+        //short digit_len = 8;
+        short akku = 1; // first carry set to 1 for increment
         for(short i = (short)(offsetx+size-1); i >= offsetx; i--) {
             akku = (short) ((x[i] & digit_mask) + akku);
 
@@ -77,8 +77,8 @@ public class Biginteger {
         
         return akku != 0;
     }
-	
-	/**
+    
+    /**
      * 
      * Subtraction. Subtract {@code other} from {@code this} and store
      * the result in {@code this}. If an overflow occurs the return
@@ -93,7 +93,7 @@ public class Biginteger {
      */
     public static boolean subtract(byte[] x, short offsetx, byte[] y, short offsety, short size) {
         
-    	short subtraction_result = 0;
+        short subtraction_result = 0;
         short carry = 0;
 
         short i = (short)(offsetx+size-1);
@@ -108,13 +108,13 @@ public class Biginteger {
     }
     
     /**
-	 * compute x= x-1
-	 * operands are stored Most Signifiant Byte First
-	 * size is the size in bytes of the operand x
-	 */
-	public static boolean subtract1_carry(byte[] x, short offsetx, short size) {
+     * compute x= x-1
+     * operands are stored Most Signifiant Byte First
+     * size is the size in bytes of the operand x
+     */
+    public static boolean subtract1_carry(byte[] x, short offsetx, short size) {
         
-    	short subtraction_result = 0;
+        short subtraction_result = 0;
         short carry = 1;  // first carry set to 1 for decrement
 
         short i = (short)(offsetx+size-1);
@@ -135,12 +135,12 @@ public class Biginteger {
      */
     public static boolean lessThan(byte[] x, short offsetx, byte[] y, short offsety, short size) {
         
-    	short xs, ys;
+        short xs, ys;
         for(short i = offsetx, j=offsety; i < (short)(offsetx+size); i++, j++) {
             xs= (short)(x[i] & digit_mask);
             ys= (short)(y[j] & digit_mask);
-        	
-        	if(xs < ys) return true;
+            
+            if(xs < ys) return true;
             if(xs > ys) return false;
         }
         return false; // in case of equality
@@ -151,11 +151,11 @@ public class Biginteger {
      * http://www.javamex.com/java_equivalents/unsigned_arithmetic.shtml 
      */
     public static boolean isStrictlyLessThanUnsigned(byte n1, byte n2) {
-    	return (n1 < n2) ^ ((n1 < 0) != (n2 < 0));
-	}
+        return (n1 < n2) ^ ((n1 < 0) != (n2 < 0));
+    }
     public static boolean isStrictlyLessThanUnsigned(short n1, short n2) {
-    	return (n1 < n2) ^ ((n1 < 0) != (n2 < 0));
-	}
+        return (n1 < n2) ^ ((n1 < 0) != (n2 < 0));
+    }
     
     /**
     * Check whether x is strictly equal to 0 
@@ -172,32 +172,32 @@ public class Biginteger {
     }
     
     public static void Shift1bit(byte[] src, short srcOffset, short size){
-		short rightShifts=(short)1;
-		short leftShifts = (short)7;
-		short mask= 0x00FF;
-		 
-		byte previousByte = src[srcOffset]; // keep the byte before modification
-		src[srcOffset]= (byte) (((src[srcOffset]&mask)>>rightShifts)&mask);
-		for(short i = (short)(srcOffset+1); i < (short)(srcOffset+size); i++) {
-			byte tmp = src[i];
-			src[i]= (byte) ( (((src[i]&mask)>>rightShifts)&mask) | ((previousByte&mask)<<leftShifts) );
-			previousByte= tmp;
-		}    
+        short rightShifts=(short)1;
+        short leftShifts = (short)7;
+        short mask= 0x00FF;
+         
+        byte previousByte = src[srcOffset]; // keep the byte before modification
+        src[srcOffset]= (byte) (((src[srcOffset]&mask)>>rightShifts)&mask);
+        for(short i = (short)(srcOffset+1); i < (short)(srcOffset+size); i++) {
+            byte tmp = src[i];
+            src[i]= (byte) ( (((src[i]&mask)>>rightShifts)&mask) | ((previousByte&mask)<<leftShifts) );
+            previousByte= tmp;
+        }    
     }
     
     /**
      * For a Biginteger bi of given size stored in a given byte array at given offset, 
      * the function sets the Biginteger to zero*/
     public static void setZero(byte[] x, short offsetx, short size) {
-    	Util.arrayFillNonAtomic(x, offsetx, (short)size, (byte)0x00);
+        Util.arrayFillNonAtomic(x, offsetx, (short)size, (byte)0x00);
     }
     
     /**
      * For a Biginteger bi of given size stored in a given byte array at given offset, 
      * the function sets the Biginteger LSB to value*/
     public static void setByte(byte[] x, short offsetx, short size, byte value) {
-    	setZero(x, offsetx, size);
-    	x[(short)(offsetx+size-1)] = value;	
+        setZero(x, offsetx, size);
+        x[(short)(offsetx+size-1)] = value; 
     }
     
     /**
@@ -205,9 +205,9 @@ public class Biginteger {
      * the function returns the least significant byte lsb if (bi==lsb) or Ox00ff otherwise*/
     public static short getLSB(byte[] x, short offsetx, short size) {
         for (short i= offsetx; i<(short)(offsetx+size-1); i++){
-    		if (x[i]!=0)
-    			return (short)0xff;
-    	}
+            if (x[i]!=0)
+                return (short)0xff;
+        }
         return (short)(x[(short)(offsetx+size-1)] & digit_mask);
     }
     
@@ -215,46 +215,46 @@ public class Biginteger {
      * This function swaps the bytes of Biginteger in x to Biginteger in y*/
     public static void swap(byte[] x, short offsetx, byte[] y, short offsety, short size) {
         for (short i= 0; i<size; i++){
-        	y[(short)(offsety+size-i-1)]=x[(short)(offsetx+i)];
-    	}
+            y[(short)(offsety+size-i-1)]=x[(short)(offsetx+i)];
+        }
     }
     
     // VarInt
     /* Encode a short into Bitcoin's VarInt format and return number of byte set */
     public static short encodeShortToVarInt(short value, byte[] buffer, short offset) {
         
-    	//if (value<((short)253)) { // signed comparison!!
+        //if (value<((short)253)) { // signed comparison!!
         if (Biginteger.isStrictlyLessThanUnsigned(value,(short)253)){
-    		buffer[offset]=(byte)(value & 0xFF);
+            buffer[offset]=(byte)(value & 0xFF);
             return (short)1;
         } else {
-        	buffer[offset++]= (byte)253;
-        	buffer[offset++]= (byte)(value & 0xff);
-        	buffer[offset++]= (byte)(value>>>8);
-        	return (short)3; 
+            buffer[offset++]= (byte)253;
+            buffer[offset++]= (byte)(value & 0xff);
+            buffer[offset++]= (byte)(value>>>8);
+            return (short)3; 
         } 
     }
     
     /* Encode a 4-byte int into Bitcoin's VarInt format and return number of byte set */
     public static short encodeVarInt(byte[] src, short src_offset, byte[] dst, short dst_offset) {
         if (src[src_offset]!=0 | 
-        	src[(short)(src_offset+1)]!=0){ // 4-bytes integer
-        	dst[dst_offset]= (byte)0xfe;
-        	dst[(short)(dst_offset+1)]= src[(short)(src_offset+3)]; // little endian
-        	dst[(short)(dst_offset+2)]= src[(short)(src_offset+2)]; 
-        	dst[(short)(dst_offset+3)]= src[(short)(src_offset+1)]; 
-        	dst[(short)(dst_offset+4)]= src[src_offset]; 
-        	return (short)5;
+            src[(short)(src_offset+1)]!=0){ // 4-bytes integer
+            dst[dst_offset]= (byte)0xfe;
+            dst[(short)(dst_offset+1)]= src[(short)(src_offset+3)]; // little endian
+            dst[(short)(dst_offset+2)]= src[(short)(src_offset+2)]; 
+            dst[(short)(dst_offset+3)]= src[(short)(src_offset+1)]; 
+            dst[(short)(dst_offset+4)]= src[src_offset]; 
+            return (short)5;
         }
         else if (src[(short)(src_offset+2)]!=0 | 
-        		 (src[(short)(src_offset+3)] & 0xff)>=0xfd){ // short integer
-        	dst[dst_offset]= (byte)0xfd;
-        	dst[(short)(dst_offset+1)]= src[(short)(src_offset+3)]; // little endian
-        	dst[(short)(dst_offset+2)]= src[(short)(src_offset+2)]; 
-        	return (short)3;
+                 (src[(short)(src_offset+3)] & 0xff)>=0xfd){ // short integer
+            dst[dst_offset]= (byte)0xfd;
+            dst[(short)(dst_offset+1)]= src[(short)(src_offset+3)]; // little endian
+            dst[(short)(dst_offset+2)]= src[(short)(src_offset+2)]; 
+            return (short)3;
         }
         else{
-        	dst[dst_offset]=src[(short)(src_offset+3)];
+            dst[dst_offset]=src[(short)(src_offset+3)];
             return (short)1;
         }
     }

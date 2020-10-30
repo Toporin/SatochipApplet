@@ -1,7 +1,7 @@
 /*  
  *   SatoChip: Bitcoin Hardware Wallet based on javacard
  *   (c) 2015-2019 by Toporin - 16DMCk4WUaHofchAhpMaQS4UPm4urcy2dN
- *   Sources available on https://github.com/Toporin	
+ *   Sources available on https://github.com/Toporin    
  * 
  *   Bitcoin transaction parser derived from:
  *   BTChip Bitcoin Hardware Wallet Java Card implementation
@@ -87,7 +87,7 @@ public class Transaction {
     }
     
     public static void resetTransaction(){
-    		ctx[TX_STATE] = STATE_NONE;          
+            ctx[TX_STATE] = STATE_NONE;          
             Biginteger.setZero(ctx, TX_REMAINING_I, (short)4);
             Biginteger.setZero(ctx, TX_REMAINING_O, (short)4);
             Biginteger.setZero(ctx, TX_CURRENT_I, (short)4);
@@ -120,12 +120,12 @@ public class Transaction {
                 ctx[TX_STATE] = STATE_WAIT_INPUT;
             }
             if (ctx[TX_STATE] == STATE_WAIT_INPUT) {
-                if (Biginteger.equalZero(ctx, TX_REMAINING_I,(short)4)) {	
-            		if (ctx[TX_SCRIPT_ACTIVE]== INACTIVE){
-                		// there should be exactly one input script active at this point
-                		return RESULT_ERROR;
-                	}
-                	// No more inputs to hash, move forward
+                if (Biginteger.equalZero(ctx, TX_REMAINING_I,(short)4)) {   
+                    if (ctx[TX_SCRIPT_ACTIVE]== INACTIVE){
+                        // there should be exactly one input script active at this point
+                        return RESULT_ERROR;
+                    }
+                    // No more inputs to hash, move forward
                     ctx[TX_STATE] = STATE_HASHING_INPUT_DONE;
                     continue;
                 }
@@ -143,14 +143,14 @@ public class Transaction {
                     return RESULT_ERROR;
                 }
                 else if (!Biginteger.equalZero(ctx,TX_SCRIPT_REMAINING, (short)4)){
-                	// check if a script was already present
-                	if (ctx[TX_SCRIPT_ACTIVE]== INACTIVE){
-                		ctx[TX_SCRIPT_ACTIVE]= ACTIVE;
+                    // check if a script was already present
+                    if (ctx[TX_SCRIPT_ACTIVE]== INACTIVE){
+                        ctx[TX_SCRIPT_ACTIVE]= ACTIVE;
                         Util.arrayCopyNonAtomic(ctx, TX_CURRENT_I, ctx, TX_SCRIPT_COORD, SIZEOF_U32); 
-                	}
-                	else { // there should be only one input script active
-                		return RESULT_ERROR;
-                	}
+                    }
+                    else { // there should be only one input script active
+                        return RESULT_ERROR;
+                    }
                 }
                 ctx[TX_STATE] = STATE_HASHING_INPUT_SCRIPT;                
             }
@@ -195,7 +195,7 @@ public class Transaction {
                 ctx[TX_STATE] = STATE_WAIT_OUTPUT;
             }
             if (ctx[TX_STATE] == STATE_WAIT_OUTPUT) {
-            	if (Biginteger.equalZero(ctx, TX_REMAINING_O,(short)4)) {
+                if (Biginteger.equalZero(ctx, TX_REMAINING_O,(short)4)) {
                     // No more outputs to hash, move forward
                     ctx[TX_STATE] = STATE_HASHING_OUTPUT_DONE;
                     continue;
@@ -277,7 +277,7 @@ public class Transaction {
                 ctx[TX_STATE] = STATE_WAIT_OUTPUT;     
             }
             if (ctx[TX_STATE] == STATE_WAIT_OUTPUT) {
-            	if (ctx2[NBOUTPUTS]==0) {
+                if (ctx2[NBOUTPUTS]==0) {
                     // No more outputs to hash, move forward
                     ctx[TX_STATE] = STATE_PARSED_OUTPUTS; // todo: special state?
                     return RESULT_FINISHED;
