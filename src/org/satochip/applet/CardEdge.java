@@ -99,10 +99,11 @@ public class CardEdge extends javacard.framework.Applet {
 	// 0.10-0.4: Cleanup: optimised code only, removed legacy sha512 implementation and slow pubkey recovery
 	// 0.11-0.1: support (mandatory) secure channel
 	// 0.12-0.1: Card label & Support for encrypted seed import from a SeedKeeper
+	// 0.12-0.2: 2FA can be disabled using reset2FAKey() without reseting the seed
 	private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
 	private final static byte PROTOCOL_MINOR_VERSION = (byte) 12;
 	private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-	private final static byte APPLET_MINOR_VERSION = (byte) 1;
+	private final static byte APPLET_MINOR_VERSION = (byte) 2;
 	
 	// Maximum number of keys handled by the Cardlet
 	private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -2372,13 +2373,14 @@ public class CardEdge extends javacard.framework.Applet {
 		if (bytesLeft < (short)20)
 			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 		
-		// reset 2FA can only be done if all private keys are cleared
 		if (!needs_2FA)
 			ISOException.throwIt(SW_2FA_UNINITIALIZED_KEY);
-		if (bip32_seeded)
-			ISOException.throwIt(SW_BIP32_INITIALIZED_SEED);
-		if (eckeys_flag != 0x0000)
-			ISOException.throwIt(SW_ECKEYS_INITIALIZED_KEY);
+		
+//		// DEPRECATED: reset 2FA can only be done if all private keys are cleared
+//		if (bip32_seeded)
+//			ISOException.throwIt(SW_BIP32_INITIALIZED_SEED);
+//		if (eckeys_flag != 0x0000)
+//			ISOException.throwIt(SW_ECKEYS_INITIALIZED_KEY);
 		
 		// compute hmac(2FA_ID) and compare with value provided 
 		// hmac of 64-bytes msg: (id_2FA(20b) | 44 bytes 0xAA-padding)
