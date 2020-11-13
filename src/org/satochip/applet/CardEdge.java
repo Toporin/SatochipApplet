@@ -100,10 +100,11 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.11-0.1: support (mandatory) secure channel
     // 0.12-0.1: Card label & Support for encrypted seed import from a SeedKeeper
     // 0.12-0.2: 2FA can be disabled using reset2FAKey() without reseting the seed
+    // 0.12-0.3: SeedKeeper support: label & labelsize no longer required 
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 12;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-    private final static byte APPLET_MINOR_VERSION = (byte) 2;
+    private final static byte APPLET_MINOR_VERSION = (byte) 3;
 
     // Maximum number of keys handled by the Cardlet
     private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -422,7 +423,7 @@ public class CardEdge extends javacard.framework.Applet {
     private byte[] trusted_pubkey;
     private AESKey secret_sc_sessionkey;
     private final static byte[] SECRET_CST_SC = {'s','e','c','k','e','y','s','e','c','m','a','c'};
-    private final static byte SECRET_HEADER_SIZE = (byte) 13;
+    private final static byte SECRET_HEADER_SIZE = (byte) 12;
     private final static byte SECRET_FINGERPRINT_SIZE = (byte) 4;
     private final static byte MAX_LABEL_SIZE = (byte) 127;
     private final static byte SECRET_OFFSET_FINGERPRINT = (byte) 6;
@@ -2568,7 +2569,7 @@ public class CardEdge extends javacard.framework.Applet {
      * ins: 0xAC
      * p1: 0x0 (secure import) 
      * p2: 0x00 
-     * data: [ header | IV(16b) | encrypted_secret_size(2b) | encrypted_secret | hmac_size(1b) | hmac(20b)] 
+     * data: [ header(12b - without label & labelsize) | IV(16b) | encrypted_secret_size(2b) | encrypted_secret | hmac_size(1b) | hmac(20b)] 
      * return: (see importBip32Seed() )
      */
     private short importBIP32EncryptedSeed(APDU apdu, byte[] buffer) {
@@ -2584,9 +2585,7 @@ public class CardEdge extends javacard.framework.Applet {
         short bytes_left = Util.makeShort((byte) 0x00,
                 buffer[ISO7816.OFFSET_LC]);
         short buffer_offset = ISO7816.OFFSET_CDATA;
-        // short recv_offset = (short)0;
         short data_size = (short) 0;
-        // short enc_size=(short)0;
         short dec_size = (short) 0;
 
         if (bytes_left < SECRET_HEADER_SIZE)
@@ -2594,23 +2593,22 @@ public class CardEdge extends javacard.framework.Applet {
 
         byte type = buffer[buffer_offset];
         if (type != 0x10)
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        buffer_offset += 12;
-        short label_size = Util.makeShort((byte) 0x00, buffer[buffer_offset]);
-        if (label_size > MAX_LABEL_SIZE)
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        buffer_offset++;
+            ISOException.throwIt(SW_INVALID_PARAMETER);// can only import a masterseed (16-64bytes random)
+        buffer_offset += SECRET_HEADER_SIZE;
         bytes_left -= SECRET_HEADER_SIZE;
-        if (bytes_left < label_size)
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        // short label_offset= buffer_offset;
-        buffer_offset += label_size;
-        bytes_left -= label_size;
+//        short label_size = Util.makeShort((byte) 0x00, buffer[buffer_offset]);
+//        if (label_size > MAX_LABEL_SIZE)
+//            ISOException.throwIt(SW_INVALID_PARAMETER);
+//        buffer_offset++;
+//        bytes_left -= SECRET_HEADER_SIZE;
+//        if (bytes_left < label_size)
+//            ISOException.throwIt(SW_INVALID_PARAMETER);
+//        buffer_offset += label_size;
+//        bytes_left -= label_size;
 
         // hash header for mac
         sha256.reset();
-        sha256.update(buffer, ISO7816.OFFSET_CDATA,
-                (short) (SECRET_HEADER_SIZE + label_size));
+        sha256.update(buffer, ISO7816.OFFSET_CDATA, (short) (SECRET_HEADER_SIZE));
 
         // compute shared static key
         if (bytes_left < SIZE_SC_IV)// IV
