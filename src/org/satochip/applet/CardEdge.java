@@ -170,7 +170,8 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte INS_PROCESS_SECURE_CHANNEL = (byte) 0x82;
     
     // secure import from SeedKeeper
-    private final static byte INS_BIP32_IMPORT_ENCRYPTED_SEED = (byte) 0xAC;
+    //private final static byte INS_BIP32_IMPORT_ENCRYPTED_SEED = (byte) 0xAC; //deprecated
+    private final static byte INS_IMPORT_ENCRYPTED_SECRET = (byte) 0xAC;
     private final static byte INS_IMPORT_TRUSTED_PUBKEY = (byte) 0xAA;
     private final static byte INS_EXPORT_TRUSTED_PUBKEY = (byte) 0xAB;
     private final static byte INS_EXPORT_AUTHENTIKEY= (byte) 0xAD;
@@ -427,7 +428,9 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte SECRET_FINGERPRINT_SIZE = (byte) 4;
     private final static byte MAX_LABEL_SIZE = (byte) 127;
     private final static byte SECRET_OFFSET_FINGERPRINT = (byte) 6;
-    private final static byte PUBKEY_SIZE = (byte) 65;                                               
+    private final static byte PUBKEY_SIZE = (byte) 65; 
+    private final static byte SECRET_TYPE_MASTER_SEED = (byte) 0x10;
+    private final static byte SECRET_TYPE_2FA= (byte) 0xB0;
     // additional options
     private short option_flags;
     
@@ -628,9 +631,12 @@ public class CardEdge extends javacard.framework.Applet {
         case INS_BIP32_IMPORT_SEED:
             sizeout= importBIP32Seed(apdu, buffer);
             break;
-        case INS_BIP32_IMPORT_ENCRYPTED_SEED:
-            sizeout= importBIP32EncryptedSeed(apdu, buffer);
-            break;
+//        case INS_BIP32_IMPORT_ENCRYPTED_SEED:
+//            sizeout= importBIP32EncryptedSeed(apdu, buffer);
+//            break;
+        case INS_IMPORT_ENCRYPTED_SECRET:
+            sizeout= importEncryptedSecret(apdu, buffer);
+            break;    
         case INS_BIP32_RESET_SEED:
             sizeout= resetBIP32Seed(apdu, buffer);
             break;
@@ -668,9 +674,6 @@ public class CardEdge extends javacard.framework.Applet {
         case INS_RESET_2FA_KEY: 
             sizeout= reset2FAKey(apdu, buffer);
             break;
-                                 
-                                              
-         
         case INS_CRYPT_TRANSACTION_2FA:
             sizeout= CryptTransaction2FA(apdu, buffer);
             break;
@@ -885,8 +888,7 @@ public class CardEdge extends javacard.framework.Applet {
 
         // import from SeedKeeper
         trusted_pubkey = new byte[PUBKEY_SIZE];
-        secret_sc_sessionkey = (AESKey) KeyBuilder.buildKey(
-                KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
+        secret_sc_sessionkey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
 
         setupDone = true;
         return (short)0;//nothing to return
@@ -1618,8 +1620,7 @@ public class CardEdge extends javacard.framework.Applet {
         // reset trusted pubkey (for secure import from SeedKeeper)
         if (is_trusted_pubkey) {
             is_trusted_pubkey = false;
-            Util.arrayFillNonAtomic(trusted_pubkey, (short) 0,
-                    (short) (PUBKEY_SIZE), (byte) 0x00);
+            Util.arrayFillNonAtomic(trusted_pubkey, (short) 0, (short) (PUBKEY_SIZE), (byte) 0x00);
         }
         LogOutAll();
         return (short)0;
@@ -2520,8 +2521,7 @@ public class CardEdge extends javacard.framework.Applet {
         if (buffer[buffer_offset] != 0x04) {
             ISOException.throwIt(SW_INVALID_PARAMETER);
         }
-        Util.arrayCopyNonAtomic(buffer, buffer_offset, trusted_pubkey,
-                (short) 0, PUBKEY_SIZE);
+        Util.arrayCopyNonAtomic(buffer, buffer_offset, trusted_pubkey, (short) 0, PUBKEY_SIZE);
         is_trusted_pubkey = true;
 
         return exportTrustedPubkey(apdu, buffer);
@@ -2559,12 +2559,12 @@ public class CardEdge extends javacard.framework.Applet {
         short sign_size = sigECDSA.sign(buffer, (short) 0, buffer_offset, buffer, (short) (buffer_offset + 2));
         Util.setShort(buffer, buffer_offset, sign_size);
         buffer_offset += (short) (2 + sign_size);
-        return (short) (buffer_offset);
+        return buffer_offset;
     }
 
     /**
-     * This function imports a secret in encrypted form from a SeedKeeper
-     * device.
+     * Deprecated: use importEncryptedSecret() instead.
+     * This function imports a secret in encrypted form from a SeedKeeper device.
      * 
      * ins: 0xAC
      * p1: 0x0 (secure import) 
@@ -2667,6 +2667,121 @@ public class CardEdge extends javacard.framework.Applet {
         buffer[ISO7816.OFFSET_P1] = bip32_seedsize;
         Util.arrayCopyNonAtomic(buffer, (short)(buffer_offset+1), buffer, ISO7816.OFFSET_CDATA, bip32_seedsize);
         return importBIP32Seed(apdu, buffer);
+    }
+
+    /**
+     * This function imports a secret in encrypted form from a SeedKeeper device.
+     * Secret can be either a Masterseed or a 2FA secret 
+     * 
+     * ins: 0xAC
+     * p1: 0x0 (secure import) 
+     * p2: 0x00 
+     * data: [ header(12b - without label & labelsize) | IV(16b) | encrypted_secret_size(2b) | encrypted_secret | hmac_size(1b) | hmac(20b)] 
+     * return: (see importBip32Seed() or set2FAKey())
+     */
+    private short importEncryptedSecret(APDU apdu, byte[] buffer) {
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        // authentikey used for import (and decryption) must be known in advance
+        if (!is_trusted_pubkey)
+            ISOException.throwIt(SW_SECURE_IMPORT_NO_TRUSTEDPUBKEY);
+
+        short bytes_left = Util.makeShort((byte) 0x00,
+                buffer[ISO7816.OFFSET_LC]);
+        short buffer_offset = ISO7816.OFFSET_CDATA;
+        short data_size = (short) 0;
+        short dec_size = (short) 0;
+
+        if (bytes_left < SECRET_HEADER_SIZE)
+            ISOException.throwIt((short)0x0001);//ISOException.throwIt(SW_INVALID_PARAMETER);
+
+        byte type = buffer[buffer_offset];
+        if (type == SECRET_TYPE_MASTER_SEED){
+            // if already seeded, must call resetBIP32Seed first!
+            if (bip32_seeded)
+                ISOException.throwIt(SW_BIP32_INITIALIZED_SEED);
+        } else if (type == SECRET_TYPE_2FA){
+            // cannot modify an existing 2FA!
+            if (needs_2FA)
+                ISOException.throwIt(SW_2FA_INITIALIZED_KEY);
+        } else {
+            ISOException.throwIt((short)type);//ISOException.throwIt(SW_INVALID_PARAMETER);// can only import a masterseed (16-64bytes random) or 2FA secret
+        }
+        // the header contains other data but they are not useful for a satochip
+        buffer_offset += SECRET_HEADER_SIZE;
+        bytes_left -= SECRET_HEADER_SIZE;
+        
+        // hash header for mac
+        sha256.reset();
+        sha256.update(buffer, ISO7816.OFFSET_CDATA, (short) (SECRET_HEADER_SIZE));
+
+        // compute shared static key
+        if (bytes_left < SIZE_SC_IV)// IV
+            ISOException.throwIt((short)0x0003);//ISOException.throwIt(SW_INVALID_PARAMETER);
+        keyAgreement.init(bip32_authentikey);
+        keyAgreement.generateSecret(trusted_pubkey, (short)0, (short)65, recvBuffer, (short)0); // pubkey in uncompressed form
+        // derive secret_sessionkey & secret_mackey
+        HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)0, (short)6, recvBuffer, (short)33);
+        secret_sc_sessionkey.setKey(recvBuffer, (short)33); // AES-128:
+        // 16-bytes key!!
+        HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)6, (short)6, recvBuffer, (short)33);
+        sc_aes128_cbc.init(secret_sc_sessionkey, Cipher.MODE_DECRYPT, buffer, buffer_offset, SIZE_SC_IV);
+        buffer_offset += SIZE_SC_IV;
+        bytes_left -= SIZE_SC_IV;
+
+        // load the new (sensitive) data
+        data_size = Util.getShort(buffer, buffer_offset);
+        buffer_offset += 2;
+        bytes_left -= 2;
+        if (bytes_left < data_size) {
+            ISOException.throwIt((short)0x0004);//ISOException.throwIt(SW_INVALID_PARAMETER);
+        }
+
+        // hash the ciphertext to check hmac
+        sha256.doFinal(buffer, buffer_offset, data_size, recvBuffer, (short) (53));
+        short hmac_offset = (short) (buffer_offset + data_size);
+        bytes_left -= data_size;
+        if (bytes_left < 1)
+            ISOException.throwIt((short)0x0005);//ISOException.throwIt(SW_INVALID_PARAMETER);
+        short hmac_size = buffer[hmac_offset];
+        hmac_offset++;
+        bytes_left--;
+        if (hmac_size != (short) 20 || bytes_left < hmac_size) {
+            ISOException.throwIt((short)0x0006);//ISOException.throwIt(SW_INVALID_PARAMETER);
+        }
+        short sign_size = HmacSha160.computeHmacSha160(recvBuffer, (short)33, SIZE_SC_MACKEY, recvBuffer, (short)53, (short)32, recvBuffer, (short)85);
+        if (Util.arrayCompare(buffer, hmac_offset, recvBuffer, (short)(85), (short)20) != (byte)0)
+            ISOException.throwIt(SW_SECURE_IMPORT_WRONG_MAC);
+
+        // decrypt secret
+        dec_size = sc_aes128_cbc.update(buffer, buffer_offset, data_size, buffer, buffer_offset);
+        // padding
+        short padsize = buffer[ (short)(buffer_offset+dec_size-1) ];
+        data_size = (short)(dec_size-padsize);
+        // hash for fingerprinting
+        sha256.reset();
+        sha256.doFinal(buffer, buffer_offset, data_size, recvBuffer, (short)0);
+        // compare with fingerprint in header
+        if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA + SECRET_OFFSET_FINGERPRINT), recvBuffer, (short)0, SECRET_FINGERPRINT_SIZE) != (byte)0) {
+            ISOException.throwIt(SW_SECURE_IMPORT_WRONG_FINGERPRINT);
+        }
+        
+        // rewrite buffer and call the standard import method
+        if (type == SECRET_TYPE_MASTER_SEED){ 
+            byte bip32_seedsize = buffer[buffer_offset];
+            buffer[ISO7816.OFFSET_LC] = bip32_seedsize;
+            buffer[ISO7816.OFFSET_P1] = bip32_seedsize;
+            Util.arrayCopyNonAtomic(buffer, (short)(buffer_offset+1), buffer, ISO7816.OFFSET_CDATA, bip32_seedsize);
+            return importBIP32Seed(apdu, buffer);
+        }
+        else if (type == SECRET_TYPE_2FA){
+            byte size_2FA = buffer[buffer_offset];
+            Util.arrayCopyNonAtomic(buffer, (short)(buffer_offset+1), buffer, ISO7816.OFFSET_CDATA, size_2FA);
+            Util.arrayFillNonAtomic(buffer, (short)(ISO7816.OFFSET_CDATA+size_2FA), (short)8, (byte)0);
+            return set2FAKey(apdu, buffer);
+        }
+        return (short)0;
     }
     
     /**
