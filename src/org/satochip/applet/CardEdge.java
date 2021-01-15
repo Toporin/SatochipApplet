@@ -48,7 +48,6 @@
 package org.satochip.applet;
 
 import javacard.framework.APDU;
-//import javacard.framework.CardRuntimeException;
 import javacard.framework.ISO7816;
 import javacard.framework.ISOException;
 import javacard.framework.JCSystem;
@@ -62,6 +61,7 @@ import javacard.security.CryptoException;
 import javacard.security.Key;
 import javacard.security.KeyAgreement;
 import javacard.security.KeyBuilder;
+import javacard.security.KeyPair;
 import javacard.security.Signature;
 import javacard.security.MessageDigest;
 import javacard.security.RandomData;
@@ -102,10 +102,11 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.12-0.2: 2FA can be disabled using reset2FAKey() without reseting the seed
     // 0.12-0.3: SeedKeeper support: label & labelsize no longer required 
     // 0.12-0.4: add reset to factory support
+    // 0.12-0.5: add support for personnalisation PKI
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 12;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-    private final static byte APPLET_MINOR_VERSION = (byte) 4;
+    private final static byte APPLET_MINOR_VERSION = (byte) 5;
 
     // Maximum number of keys handled by the Cardlet
     private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -176,6 +177,14 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte INS_IMPORT_TRUSTED_PUBKEY = (byte) 0xAA;
     private final static byte INS_EXPORT_TRUSTED_PUBKEY = (byte) 0xAB;
     private final static byte INS_EXPORT_AUTHENTIKEY= (byte) 0xAD;
+    
+    // Personalization PKI support
+    private final static byte INS_IMPORT_PKI_CERTIFICATE = (byte) 0x92;
+    private final static byte INS_EXPORT_PKI_CERTIFICATE = (byte) 0x93;
+    private final static byte INS_SIGN_PKI_CSR = (byte) 0x94;
+    private final static byte INS_EXPORT_PKI_PUBKEY = (byte) 0x98;
+    private final static byte INS_LOCK_PKI = (byte) 0x99;
+    private final static byte INS_CHALLENGE_RESPONSE_PKI= (byte) 0x9A;
     
     // reset to factory settings
     private final static byte INS_RESET_TO_FACTORY = (byte) 0xFF;
@@ -259,6 +268,8 @@ public class CardEdge extends javacard.framework.Applet {
     /** No Trusted Pubkey when importing Secret through Secure import **/
     private final static short SW_SECURE_IMPORT_NO_TRUSTEDPUBKEY = (short) 0x9C35;
     
+    /** PKI perso error */
+    private final static short SW_PKI_ALREADY_LOCKED = (short) 0x9C40;
     /** CARD HAS BEEN RESET TO FACTORY */
     private final static short SW_RESET_TO_FACTORY = (short) 0xFF00;
     /** For instructions that have been deprecated*/
@@ -281,7 +292,7 @@ public class CardEdge extends javacard.framework.Applet {
     private final static short LENGTH_EC_FP_256= (short) 256;
         
     /****************************************
-     * Instance variables declaration *
+     *    Instance variables declaration    *
      ****************************************/
     
     // Key objects (allocated on demand)
@@ -359,6 +370,18 @@ public class CardEdge extends javacard.framework.Applet {
     private ECPrivateKey bip32_authentikey; // key used to authenticate data
     //private ECPublicKey bip32_pubkey; // TODO: remove?
     private byte[] authentikey_pubkey;// store authentikey coordx pubkey TODO: remove?
+    
+    /*********************************************
+     *               PKI objects                 *
+     *********************************************/
+    private static final byte[] PKI_CHALLENGE_MSG = {'C','h','a','l','l','e','n','g','e',':'};
+    private boolean personalizationDone=false;
+    private ECPrivateKey pki_ecprivkey;
+    private ECPublicKey pki_ecpubkey;
+    private KeyPair pki_eckeypair;
+    //private byte[] pki_ecpubkey_bytes;
+    private short pki_certificate_size=0;
+    private byte[] pki_certificate;
     
     /*********************************************
      *        Other data instances               *
@@ -508,6 +531,7 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(SW_UNSUPPORTED_FEATURE);// unsupported feature => use a more recent card!
         }
         
+        // secure channel
         sc_sessionkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false); // todo: make transient?
         sc_ephemeralkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
         sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false); 
@@ -519,6 +543,15 @@ public class CardEdge extends javacard.framework.Applet {
         randomData.generateData(recvBuffer, (short) 0, BIP32_KEY_SIZE);
         bip32_authentikey.setS(recvBuffer, (short) 0, BIP32_KEY_SIZE);
         authentikey_pubkey = new byte[PUBKEY_SIZE];
+        
+        // perso PKI: generate public/private keypair
+        // TODO: merge with bip32_authentikey & rename to authentikey?
+        pki_ecprivkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+        Secp256k1.setCommonCurveParameters(pki_ecprivkey);
+        pki_ecpubkey= (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, LENGTH_EC_FP_256, false); 
+        Secp256k1.setCommonCurveParameters(pki_ecprivkey);
+        pki_eckeypair= new KeyPair(pki_ecpubkey, pki_ecprivkey);
+        pki_eckeypair.genKeyPair();
         
         // BIP32 material
         bip32_masterkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
@@ -653,8 +686,19 @@ public class CardEdge extends javacard.framework.Applet {
         // at this point, the encrypted content has been deciphered in the buffer
         ins = buffer[ISO7816.OFFSET_INS];
         // check setup status
-        if (!setupDone && (ins != (byte) INS_SETUP))
-            ISOException.throwIt(SW_SETUP_NOT_DONE);
+        //if (!setupDone && (ins != (byte) INS_SETUP))
+        //    ISOException.throwIt(SW_SETUP_NOT_DONE);
+        if (!setupDone && (ins != INS_SETUP)){
+            //before setup, only personalization is allowed
+            if (personalizationDone ||
+                    ((ins != INS_VERIFY_PIN) 
+                    && (ins != INS_EXPORT_PKI_PUBKEY)
+                    && (ins != INS_IMPORT_PKI_CERTIFICATE)
+                    && (ins != INS_SIGN_PKI_CSR)
+                    && (ins != INS_LOCK_PKI)) ){
+                ISOException.throwIt(SW_SETUP_NOT_DONE);
+            } 
+        }
         if (setupDone && (ins == (byte) INS_SETUP))
             ISOException.throwIt(SW_SETUP_ALREADY_DONE);
         
@@ -695,15 +739,10 @@ public class CardEdge extends javacard.framework.Applet {
         case INS_CARD_LABEL:
             sizeout = cardLabel(apdu, buffer);
             break;
+        // BIP32
         case INS_BIP32_IMPORT_SEED:
             sizeout= importBIP32Seed(apdu, buffer);
             break;
-//        case INS_BIP32_IMPORT_ENCRYPTED_SEED:
-//            sizeout= importBIP32EncryptedSeed(apdu, buffer);
-//            break;
-        case INS_IMPORT_ENCRYPTED_SECRET:
-            sizeout= importEncryptedSecret(apdu, buffer);
-            break;    
         case INS_BIP32_RESET_SEED:
             sizeout= resetBIP32Seed(apdu, buffer);
             break;
@@ -735,6 +774,7 @@ public class CardEdge extends javacard.framework.Applet {
         case INS_PARSE_TRANSACTION:
             sizeout= ParseTransaction(apdu, buffer);
             break;
+        // 2FA
         case INS_SET_2FA_KEY:
             sizeout= set2FAKey(apdu, buffer);
             break;
@@ -744,6 +784,10 @@ public class CardEdge extends javacard.framework.Applet {
         case INS_CRYPT_TRANSACTION_2FA:
             sizeout= CryptTransaction2FA(apdu, buffer);
             break;
+        // SEEDKEEPER support
+        case INS_IMPORT_ENCRYPTED_SECRET:
+            sizeout= importEncryptedSecret(apdu, buffer);
+            break;    
         case INS_IMPORT_TRUSTED_PUBKEY:
             sizeout= importTrustedPubkey(apdu, buffer);
             break;   
@@ -752,6 +796,25 @@ public class CardEdge extends javacard.framework.Applet {
             break;
         case INS_EXPORT_AUTHENTIKEY:
             sizeout= exportAuthentikey(apdu, buffer);
+            break;
+        //PKI
+        case INS_EXPORT_PKI_PUBKEY:
+            sizeout= export_PKI_pubkey(apdu, buffer);
+            break;
+        case INS_SIGN_PKI_CSR:
+            sizeout= sign_PKI_CSR(apdu, buffer);
+            break;
+        case INS_IMPORT_PKI_CERTIFICATE:
+            sizeout= import_PKI_certificate(apdu, buffer);
+            break;
+        case INS_EXPORT_PKI_CERTIFICATE:
+            sizeout= export_PKI_certificate(apdu, buffer);
+            break;
+        case INS_LOCK_PKI:
+            sizeout= lock_PKI(apdu, buffer);
+            break;
+        case INS_CHALLENGE_RESPONSE_PKI:
+            sizeout= challenge_response_pki(apdu, buffer);
             break;
         default:
             ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
@@ -815,9 +878,10 @@ public class CardEdge extends javacard.framework.Applet {
      * return: none
      */
     private short setup(APDU apdu, byte[] buffer) {
+        personalizationDone=true;// perso PKI should be locked once setup is done
+        
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         short base = (short) (ISO7816.OFFSET_CDATA);
-
         byte numBytes = buffer[base++];
         bytesLeft--;
 
@@ -2914,7 +2978,7 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(SW_INVALID_PARAMETER);
             
         // generate a new ephemeral key
-        sc_ephemeralkey.clearKey();
+        sc_ephemeralkey.clearKey(); //todo: simply generate new random S param instead?
         Secp256k1.setCommonCurveParameters(sc_ephemeralkey);// keep public params!
         randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
         sc_ephemeralkey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE); //random value first
@@ -3060,6 +3124,227 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         short sizeout=sc_aes128_cbc.doFinal(buffer, offset, sizein, buffer, (short) (0));
         return sizeout;
+    }
+    
+    /*********************************************
+     *      Methods for PKI personalization      *
+     *********************************************/
+    
+    /**
+     * This function export the ECDSA secp256k1 public key that corresponds to the private key
+     *  
+     *  ins: 
+     *  p1: 0x00
+     *  p2: 0x00 
+     *  data: [none]
+     *  return: [ pubkey (65b) ]
+     */
+    private short export_PKI_pubkey(APDU apdu, byte[] buffer) {
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        
+        pki_ecpubkey.getW(buffer, (short)0); 
+        return (short)65;
+    }
+    
+    /**
+     * This function is used to self-sign the CSR of the device
+     *  
+     *  ins: 0x94
+     *  p1: 0x00  
+     *  p2: 0x00 
+     *  data: [hash(32b)]
+     *  return: [signature]
+     */
+    private short sign_PKI_CSR(APDU apdu, byte[] buffer) {
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        if (personalizationDone)
+            ISOException.throwIt(SW_PKI_ALREADY_LOCKED);
+        
+        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+        if (bytesLeft < (short)32)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        
+        sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
+        short sign_size= sigECDSA.signPreComputedHash(buffer, ISO7816.OFFSET_CDATA, MessageDigest.LENGTH_SHA_256, buffer, (short)0);
+        return sign_size;
+    }
+    
+    /**
+     * This function imports the device certificate
+     *  
+     *  ins: 
+     *  p1: 0x00
+     *  p2: Init-Update 
+     *  data(init): [ full_size(2b) ]
+     *  data(update): [chunk_offset(2b) | chunk_size(2b) | chunk_data ]
+     *  return: [none]
+     */
+    private short import_PKI_certificate(APDU apdu, byte[] buffer) {
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        if (personalizationDone)
+            ISOException.throwIt(SW_PKI_ALREADY_LOCKED);
+        
+        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+        short buffer_offset = (short) (ISO7816.OFFSET_CDATA);
+        
+        byte op = buffer[ISO7816.OFFSET_P2];
+        switch(op){
+            case OP_INIT:
+                if (bytesLeft < (short)2)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                
+                short new_certificate_size=Util.getShort(buffer, buffer_offset);
+                if (new_certificate_size < 0)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                if (pki_certificate==null){
+                    // create array
+                    pki_certificate= new byte[new_certificate_size];
+                    pki_certificate_size=new_certificate_size;
+                }else{
+                    if (new_certificate_size>pki_certificate.length)
+                        ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                    pki_certificate_size=new_certificate_size;
+                }
+                break;
+                
+            case OP_PROCESS: 
+                if (bytesLeft < (short)4)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                short chunk_offset= Util.getShort(buffer, buffer_offset);
+                buffer_offset+=2;
+                short chunk_size= Util.getShort(buffer, buffer_offset);
+                buffer_offset+=2;
+                bytesLeft-=4;
+                if (bytesLeft < chunk_size)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                if ((chunk_offset<0) || (chunk_offset>=pki_certificate_size))
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                if (((short)(chunk_offset+chunk_size))>pki_certificate_size)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                
+                Util.arrayCopyNonAtomic(buffer, buffer_offset, pki_certificate, chunk_offset, chunk_size);
+                break;
+                
+            default:
+                ISOException.throwIt(SW_INCORRECT_P2);
+        }
+        return (short)0;
+    }
+    
+    /**
+     * This function exports the device certificate
+     *  
+     *  ins: 
+     *  p1: 0x00  
+     *  p2: Init-Update 
+     *  data(init): [ none ]
+     *  return(init): [ full_size(2b) ]
+     *  data(update): [ chunk_offset(2b) | chunk_size(2b) ]
+     *  return(update): [ chunk_data ] 
+     */
+    private short export_PKI_certificate(APDU apdu, byte[] buffer) {
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        
+        byte op = buffer[ISO7816.OFFSET_P2];
+        switch(op){
+            case OP_INIT:
+                Util.setShort(buffer, (short)0, pki_certificate_size);
+                return (short)2; 
+                
+            case OP_PROCESS: 
+                short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+                if (bytesLeft < (short)4)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                
+                short buffer_offset = (short) (ISO7816.OFFSET_CDATA);
+                short chunk_offset= Util.getShort(buffer, buffer_offset);
+                buffer_offset+=2;
+                short chunk_size= Util.getShort(buffer, buffer_offset);
+                
+                if ((chunk_offset<0) || (chunk_offset>=pki_certificate_size))
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                if (((short)(chunk_offset+chunk_size))>pki_certificate_size)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                Util.arrayCopyNonAtomic(pki_certificate, chunk_offset, buffer, (short)0, chunk_size);
+                return chunk_size; 
+                
+            default:
+                ISOException.throwIt(SW_INCORRECT_P2);
+                return (short)0; 
+        }
+    }
+    
+    /**
+     * This function locks the PKI config.
+     * Once it is locked, it is not possible to modify private key, certificate or allowed_card_AID.
+     *  
+     *  ins: 
+     *  p1: 0x00 
+     *  p2: 0x00 
+     *  data: [none]
+     *  return: [none]
+     */
+    private short lock_PKI(APDU apdu, byte[] buffer) {
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        personalizationDone=true;
+        return (short)0;
+    }
+    
+    /**
+     * This function performs a challenge-response to verify the authenticity of the device.
+     * The challenge is made of three parts: 
+     *          - a constant header
+     *          - a 32-byte challenge provided by the requester
+     *          - a 32-byte random nonce generated by the device
+     * The response is the signature over this challenge. 
+     * This signature can be verified with the certificate stored in the device.
+     * 
+     *  ins: 
+     *  p1: 0x00 
+     *  p2: 0x00 
+     *  data: [challenge1(32b)]
+     *  return: [challenge2(32b) | sig_size(2b) | sig]
+     */
+    private short challenge_response_pki(APDU apdu, byte[] buffer) {
+        // todo: require PIN?
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+        
+        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+        if (bytesLeft < (short)32)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        
+        //copy all data into array
+        short offset=(short)0;
+        Util.arrayCopyNonAtomic(PKI_CHALLENGE_MSG, (short)0, recvBuffer, offset, (short)PKI_CHALLENGE_MSG.length);
+        offset+=PKI_CHALLENGE_MSG.length;
+        randomData.generateData(recvBuffer, offset, (short)32);
+        offset+=(short)32;
+        Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, recvBuffer, offset, (short)32);
+        offset+=(short)32;
+         
+        //sign challenge
+        sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
+        short sign_size= sigECDSA.sign(recvBuffer, (short)0, offset, buffer, (short)34);
+        Util.setShort(buffer, (short)32, sign_size);
+        Util.arrayCopyNonAtomic(recvBuffer, (short)PKI_CHALLENGE_MSG.length, buffer, (short)0, (short)32);
+        
+        // verify response
+        sigECDSA.init(pki_ecpubkey, Signature.MODE_VERIFY);
+        boolean is_valid= sigECDSA.verify(recvBuffer, (short)0, offset, buffer, (short)(34), sign_size);
+        if (!is_valid)
+            ISOException.throwIt(SW_SIGNATURE_INVALID);
+        
+        return (short)(32+2+sign_size);
     }
     
 } // end of class JAVA_APPLET
