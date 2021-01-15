@@ -335,7 +335,7 @@ public class CardEdge extends javacard.framework.Applet {
     
     // seed derivation
     private static final byte[] BITCOIN_SEED = {'B','i','t','c','o','i','n',' ','s','e','e','d'};
-    private static final byte[] BITCOIN_SEED2 = {'B','i','t','c','o','i','n',' ','s','e','e','d','2'};
+    //private static final byte[] BITCOIN_SEED2 = {'B','i','t','c','o','i','n',' ','s','e','e','d','2'}; //TODO:remove
     private static final byte MAX_BIP32_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
     
     // BIP32_object= [ hash(address) (4b) | extended_key (32b) | chain_code (32b) | compression_byte(1b)]
@@ -367,18 +367,18 @@ public class CardEdge extends javacard.framework.Applet {
     private AESKey bip32_masterchaincode; 
     private AESKey bip32_encryptkey; // used to encrypt sensitive data in object
     private ECPrivateKey bip32_extendedkey; // object storing last extended key used
-    private ECPrivateKey bip32_authentikey; // key used to authenticate data
+    //private ECPrivateKey bip32_authentikey; // key used to authenticate data TODO:remove
     //private ECPublicKey bip32_pubkey; // TODO: remove?
-    private byte[] authentikey_pubkey;// store authentikey coordx pubkey TODO: remove?
+    //private byte[] authentikey_pubkey;// store authentikey coordx pubkey TODO: remove?
     
     /*********************************************
      *               PKI objects                 *
      *********************************************/
     private static final byte[] PKI_CHALLENGE_MSG = {'C','h','a','l','l','e','n','g','e',':'};
     private boolean personalizationDone=false;
-    private ECPrivateKey pki_ecprivkey;
-    private ECPublicKey pki_ecpubkey;
-    private KeyPair pki_eckeypair;
+    private ECPrivateKey authentikey_private;
+    private ECPublicKey authentikey_public;
+    private KeyPair authentikey_pair;
     //private byte[] pki_ecpubkey_bytes;
     private short pki_certificate_size=0;
     private byte[] pki_certificate;
@@ -537,27 +537,29 @@ public class CardEdge extends javacard.framework.Applet {
         sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false); 
         
         // authentikey => used to authenticate sensitive data from applet
-        bip32_authentikey = (ECPrivateKey) KeyBuilder.buildKey(
-        KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
-        Secp256k1.setCommonCurveParameters(bip32_authentikey);
-        randomData.generateData(recvBuffer, (short) 0, BIP32_KEY_SIZE);
-        bip32_authentikey.setS(recvBuffer, (short) 0, BIP32_KEY_SIZE);
-        authentikey_pubkey = new byte[PUBKEY_SIZE];
+        // TODO: remove and use authentikey_private instead
+        //bip32_authentikey = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+        //Secp256k1.setCommonCurveParameters(bip32_authentikey);
+        //randomData.generateData(recvBuffer, (short) 0, BIP32_KEY_SIZE);
+        //bip32_authentikey.setS(recvBuffer, (short) 0, BIP32_KEY_SIZE);
+        //authentikey_pubkey = new byte[PUBKEY_SIZE];
         
         // perso PKI: generate public/private keypair
         // TODO: merge with bip32_authentikey & rename to authentikey?
-        pki_ecprivkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
-        Secp256k1.setCommonCurveParameters(pki_ecprivkey);
-        pki_ecpubkey= (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, LENGTH_EC_FP_256, false); 
-        Secp256k1.setCommonCurveParameters(pki_ecprivkey);
-        pki_eckeypair= new KeyPair(pki_ecpubkey, pki_ecprivkey);
-        pki_eckeypair.genKeyPair();
+        authentikey_private= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+        Secp256k1.setCommonCurveParameters(authentikey_private);
+        authentikey_public= (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, LENGTH_EC_FP_256, false); 
+        Secp256k1.setCommonCurveParameters(authentikey_private);
+        authentikey_pair= new KeyPair(authentikey_public, authentikey_private);
+        authentikey_pair.genKeyPair();
         
         // BIP32 material
         bip32_masterkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
         bip32_masterchaincode= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
-        bip32_encryptkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
         bip32_extendedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+        bip32_encryptkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
+        randomData.generateData(recvBuffer, (short) 0, (short)16);
+        bip32_encryptkey.setKey(recvBuffer, (short)0);
         
         // private key array
         eckeys = new Key[MAX_NUM_KEYS];
@@ -795,7 +797,7 @@ public class CardEdge extends javacard.framework.Applet {
             sizeout= exportTrustedPubkey(apdu, buffer);
             break;
         case INS_EXPORT_AUTHENTIKEY:
-            sizeout= exportAuthentikey(apdu, buffer);
+            sizeout= getAuthentikey(apdu, buffer);
             break;
         //PKI
         case INS_EXPORT_PKI_PUBKEY:
@@ -1094,17 +1096,16 @@ public class CardEdge extends javacard.framework.Applet {
         bip32_seeded= false;
         bip32_masterkey.clearKey(); 
         bip32_masterchaincode.clearKey();
-        bip32_encryptkey.clearKey();
+        //bip32_encryptkey.clearKey();
         
-        // generate a fresh random authentikey
-        randomData.generateData(recvBuffer, (short) 0, BIP32_KEY_SIZE);
-        bip32_authentikey.setS(recvBuffer, (short) 0, BIP32_KEY_SIZE);
-        //Util.arrayFillNonAtomic(authentikey_pubkey, (short)0, (short)(2*BIP32_KEY_SIZE+1), (byte)0x00);
+        // generate a fresh random authentikey TODO:remove
+        //randomData.generateData(recvBuffer, (short) 0, BIP32_KEY_SIZE);
+        //bip32_authentikey.setS(recvBuffer, (short) 0, BIP32_KEY_SIZE);
         
         // reset trusted pubkey (for secure import from SeedKeeper)
         if (is_trusted_pubkey) {
             is_trusted_pubkey = false;
-            Util.arrayFillNonAtomic(trusted_pubkey, (short) 0, (short) (PUBKEY_SIZE), (byte) 0x00);
+            Util.arrayFillNonAtomic(trusted_pubkey, (short) 0, PUBKEY_SIZE, (byte) 0x00);
         }
         return true;
     }
@@ -1167,7 +1168,7 @@ public class CardEdge extends javacard.framework.Applet {
         if (bytesLeft < 2)
                 ISOException.throwIt(SW_INVALID_PARAMETER);
         short blob_size = Util.getShort(buffer, dataOffset);
-        if (blob_size != 32) // only bitcoin
+        if (blob_size != BIP32_KEY_SIZE) // only bitcoin
             ISOException.throwIt(blob_size);
         dataOffset += (short) 2; 
         bytesLeft -= (short) 2;
@@ -1194,12 +1195,11 @@ public class CardEdge extends javacard.framework.Applet {
             tmpkey.setS(buffer, dataOffset, blob_size);
             // compute the corresponding partial public key...
             keyAgreement.init(tmpkey);
-            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form
-            Util.arrayCopy(tmpBuffer, (short)1, recvBuffer, (short)0, (short)32);
+            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65b)
             // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x10^key_nb)-padding)
-            Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)(0x10^key_nb));
-            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
-            if (Util.arrayCompare(buffer, (short)(dataOffset+blob_size), recvBuffer, (short)64, (short)20)!=0)
+            Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte)(0x10^key_nb));
+            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
+            if (Util.arrayCompare(buffer, (short)(dataOffset+blob_size), recvBuffer, (short)65, (short)20)!=0)
                 ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
         
@@ -1244,12 +1244,11 @@ public class CardEdge extends javacard.framework.Applet {
             
             // compute the corresponding partial public key...
             keyAgreement.init((ECPrivateKey)key);
-            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form
-            Util.arrayCopy(tmpBuffer, (short)1, recvBuffer, (short)0, (short)32);
+            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form (65b)
             // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x20^key_nb)-padding)
-            Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte) (0x20^key_nb));
-            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
-            if (Util.arrayCompare(buffer, ISO7816.OFFSET_CDATA, recvBuffer, (short)64, (short)20)!=0)
+            Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte) (0x20^key_nb));
+            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
+            if (Util.arrayCompare(buffer, ISO7816.OFFSET_CDATA, recvBuffer, (short)65, (short)20)!=0)
                 ISOException.throwIt(SW_SIGNATURE_INVALID);         
         }
         
@@ -1296,19 +1295,18 @@ public class CardEdge extends javacard.framework.Applet {
                 
         // compute the corresponding partial public key...
         keyAgreement.init((ECPrivateKey)key);
-        short coordx_size=(short)32;
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
-        Util.setShort(buffer, (short)0, coordx_size);
+        Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
         
         // sign fixed message
         sigECDSA.init(key, Signature.MODE_SIGN);
-        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
-        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
+        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2), buffer, (short)(BIP32_KEY_SIZE+4));
+        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+2), sign_size);
         
         // return x-coordinate of public key+signature
         // the client can recover full public-key from the signature or
         // by guessing the compression value () and verifying the signature... 
-        return (short)(2+coordx_size+2+sign_size);
+        return (short)(2+BIP32_KEY_SIZE+2+sign_size);
     }       
 
     /** 
@@ -1696,12 +1694,12 @@ public class CardEdge extends javacard.framework.Applet {
         bip32_masterkey.setKey(recvBuffer, (short)0); // data must be exactly 32 bytes long
         bip32_masterchaincode.setKey(recvBuffer, (short)32); // data must be exactly 32 bytes long
         
-        // derive 2 more keys from seed:
+        // derive 2 more keys from seed: TODO: remove
         // - AES encryption key for secure storage of extended keys in object
         // - ECC key for authentication of sensitive data returned by the applet (hash, pubkeys)
-        HmacSha512.computeHmacSha512(BITCOIN_SEED2, (short)0, (short)BITCOIN_SEED2.length, buffer, offset, (short)bip32_seedsize, recvBuffer, (short)64);
-        bip32_authentikey.setS(recvBuffer, (short)64, BIP32_KEY_SIZE);
-        bip32_encryptkey.setKey(recvBuffer, (short)96); // AES-128: 16-bytes key!!
+        //HmacSha512.computeHmacSha512(BITCOIN_SEED2, (short)0, (short)BITCOIN_SEED2.length, buffer, offset, (short)bip32_seedsize, recvBuffer, (short)64);
+        //bip32_authentikey.setS(recvBuffer, (short)64, BIP32_KEY_SIZE);
+        //bip32_encryptkey.setKey(recvBuffer, (short)96); // AES-128: 16-bytes key!! TODO: set random in constructor
         
         // bip32 is now seeded
         bip32_seeded= true;
@@ -1710,21 +1708,21 @@ public class CardEdge extends javacard.framework.Applet {
         Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)128, (byte)0);
         
         // compute the partial authentikey public key...
-        keyAgreement.init(bip32_authentikey);
-        short coordx_size= (short)32;
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, authentikey_pubkey, (short)0); //pubkey in uncompressed form
-        Util.setShort(buffer, (short)0, coordx_size);
-        Util.arrayCopyNonAtomic(authentikey_pubkey, (short)1, buffer, (short)2, coordx_size);
+        //keyAgreement.init(authentikey_private);
+        //keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, authentikey_pubkey, (short)0); //pubkey in uncompressed form
+        //Util.arrayCopyNonAtomic(authentikey_pubkey, (short)1, buffer, (short)2, BIP32_KEY_SIZE);
+        authentikey_public.getW(buffer, (short)1);
+        Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
         // self signed public key
-        sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
-        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
-        Util.setShort(buffer, (short)(2+coordx_size), sign_size);
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
+        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2), buffer, (short)(BIP32_KEY_SIZE+4));
+        Util.setShort(buffer, (short)(2+BIP32_KEY_SIZE), sign_size);
         
         // return x-coordinate of public key+signature
         // the client can recover full public-key from the signature or
         // by guessing the compression value () and verifying the signature... 
         // buffer= [coordx_size(2) | coordx | sigsize(2) | sig]
-        return (short)(2+coordx_size+2+sign_size);
+        return (short)(2+BIP32_KEY_SIZE+2+sign_size);
     }
     
     /**
@@ -1770,33 +1768,24 @@ public class CardEdge extends javacard.framework.Applet {
             if (bytesLeft < (short)20)
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
             
+//            // compute hmac(counter_2FA) and compare with value provided 
+//            // hmac of 64-bytes msg: ( authentikey-coordx(32b) | 32bytes 0xFF-padding)
+//            Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)64, (byte)0xFF);
+//            Util.arrayCopyNonAtomic(authentikey_pubkey, (short)0x01, recvBuffer, (short)0, BIP32_KEY_SIZE);
+//            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
+//            if (Util.arrayCompare(buffer, offset, recvBuffer, (short)64, (short)20)!=0)
+//                ISOException.throwIt(SW_SIGNATURE_INVALID);
+            
             // compute hmac(counter_2FA) and compare with value provided 
             // hmac of 64-bytes msg: ( authentikey-coordx(32b) | 32bytes 0xFF-padding)
-            Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)64, (byte)0xFF);
-            Util.arrayCopyNonAtomic(authentikey_pubkey, (short)0x01, recvBuffer, (short)0, BIP32_KEY_SIZE);
-            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
-            if (Util.arrayCompare(buffer, offset, recvBuffer, (short)64, (short)20)!=0)
+            authentikey_public.getW(recvBuffer, (short)0);
+            Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte)0xFF);
+            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
+            if (Util.arrayCompare(buffer, offset, recvBuffer, (short)65, (short)20)!=0)
                 ISOException.throwIt(SW_SIGNATURE_INVALID);
         }   
         
         resetSeed();
-//        // reset memory cache, bip32 flag and all data!
-//        bip32_om.reset();
-//        bip32_seeded= false;
-//        bip32_masterkey.clearKey(); 
-//        bip32_masterchaincode.clearKey();
-//        bip32_encryptkey.clearKey();
-//        
-//        // generate a fresh random authentikey
-//        randomData.generateData(recvBuffer, (short) 0, BIP32_KEY_SIZE);
-//        bip32_authentikey.setS(recvBuffer, (short) 0, BIP32_KEY_SIZE);
-//        //Util.arrayFillNonAtomic(authentikey_pubkey, (short)0, (short)(2*BIP32_KEY_SIZE+1), (byte)0x00);
-//        
-//        // reset trusted pubkey (for secure import from SeedKeeper)
-//        if (is_trusted_pubkey) {
-//            is_trusted_pubkey = false;
-//            Util.arrayFillNonAtomic(trusted_pubkey, (short) 0, (short) (PUBKEY_SIZE), (byte) 0x00);
-//        }
         
         LogOutAll();
         return (short)0;
@@ -1822,22 +1811,23 @@ public class CardEdge extends javacard.framework.Applet {
         if (!bip32_seeded)
             ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
         
-        // compute the partial authentikey public key...
-        keyAgreement.init(bip32_authentikey);        
-        short coordx_size= (short)32;
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
-        Util.setShort(buffer, (short)0, coordx_size);
-        // self signed public key
-        sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
-        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
-        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
+        return computeAuthentikey(buffer);
         
-        // return x-coordinate of public key+signature
-        // the client can recover full public-key from the signature or
-        // by guessing the compression value () and verifying the signature... 
-        // buffer= [coordx_size(2) | coordx | sigsize(2) | sig]
-        return (short)(coordx_size+sign_size+4);
-        //return exportAuthentikey(apdu, buffer);
+//        // compute the partial authentikey public key...
+//        keyAgreement.init(authentikey_private);        
+//        short coordx_size= (short)32;
+//        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
+//        Util.setShort(buffer, (short)0, coordx_size);
+//        // self signed public key
+//        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
+//        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
+//        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
+//        
+//        // return x-coordinate of public key+signature
+//        // the client can recover full public-key from the signature or
+//        // by guessing the compression value () and verifying the signature... 
+//        // buffer= [coordx_size(2) | coordx | sigsize(2) | sig]
+//        return (short)(coordx_size+sign_size+4);
     }
     
     /**
@@ -1856,26 +1846,49 @@ public class CardEdge extends javacard.framework.Applet {
      *  data: none
      *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
      */
-    private short exportAuthentikey(APDU apdu, byte[] buffer){
+    private short getAuthentikey(APDU apdu, byte[] buffer){
         // check that PIN[0] has been entered previously
         if (!pins[0].isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
+        return computeAuthentikey(buffer);
+//        // compute the partial authentikey public key...
+//        keyAgreement.init(authentikey_private);        
+//        short coordx_size= (short)32;
+//        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
+//        Util.setShort(buffer, (short)0, coordx_size);
+//        // self signed public key
+//        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
+//        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
+//        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
+//        
+//        // return x-coordinate of public key+signature
+//        // the client can recover full public-key from the signature or
+//        // by guessing the compression value () and verifying the signature... 
+//        // buffer= [coordx_size(2) | coordx | sigsize(2) | sig]
+//        return (short)(coordx_size+sign_size+4);
+    }
+    
+    private short computeAuthentikey(byte[] buffer){
         // compute the partial authentikey public key...
-        keyAgreement.init(bip32_authentikey);        
-        short coordx_size= (short)32;
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
-        Util.setShort(buffer, (short)0, coordx_size);
+//        keyAgreement.init(authentikey_private);        
+//        short coordx_size= (short)32;
+//        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
+//        Util.setShort(buffer, (short)0, coordx_size);
+        
+        // compute the partial authentikey public key...
+        authentikey_public.getW(buffer, (short)1);
+        Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
         // self signed public key
-        sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
-        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
-        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
+        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2), buffer, (short)(BIP32_KEY_SIZE+4));
+        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+2), sign_size);
         
         // return x-coordinate of public key+signature
         // the client can recover full public-key from the signature or
         // by guessing the compression value () and verifying the signature... 
         // buffer= [coordx_size(2) | coordx | sigsize(2) | sig]
-        return (short)(coordx_size+sign_size+4);
+        return (short)(BIP32_KEY_SIZE+sign_size+4);
     }
     
     /**
@@ -2064,24 +2077,23 @@ public class CardEdge extends javacard.framework.Applet {
                 
         // compute the corresponding partial public key...
         keyAgreement.init(bip32_extendedkey);
-        short coordx_size= (short)32;
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)33); //pubkey in uncompressed form
-        Util.setShort(buffer, BIP32_KEY_SIZE, (short)(coordx_size));
+        Util.setShort(buffer, BIP32_KEY_SIZE, BIP32_KEY_SIZE);
         
         // self-sign coordx
         sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
-        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2+coordx_size), buffer, (short)(BIP32_KEY_SIZE+coordx_size+4));
-        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+coordx_size+2), sign_size);
+        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2+BIP32_KEY_SIZE), buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+4));
+        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+2), sign_size);
         
         // coordx signed by authentikey
-        sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
-        short sign_size2= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+coordx_size+sign_size+4), buffer, (short)(BIP32_KEY_SIZE+coordx_size+sign_size+6));
-        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+coordx_size+sign_size+4), sign_size2);
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
+        short sign_size2= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+4), buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+6));
+        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+4), sign_size2);
         
         // return x-coordinate of public key+signatures
         // the client can recover full public-key by guessing the compression value () and verifying the signature... 
         // buffer=[chaincode(32) | coordx_size(2) | coordx | sign_size(2) | self-sign | sign_size(2) | auth_sign]
-        return (short)(BIP32_KEY_SIZE+coordx_size+sign_size+sign_size2+6);
+        return (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+sign_size2+6);
         
     }// end of getBip32ExtendedKey()    
     
@@ -2323,7 +2335,7 @@ public class CardEdge extends javacard.framework.Applet {
             short offset = (short)(2+hash_size+2);
             
             // hash signed by authentikey
-            sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
+            sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
             short sign_size= sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
             Util.setShort(buffer, offset, sign_size);
             offset+=(short)(2+sign_size); 
@@ -2730,7 +2742,7 @@ public class CardEdge extends javacard.framework.Applet {
         Util.arrayCopyNonAtomic(trusted_pubkey, (short) 0, buffer, buffer_offset, PUBKEY_SIZE);
         buffer_offset += PUBKEY_SIZE;
         // sign with authentikey
-        sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
         short sign_size = sigECDSA.sign(buffer, (short) 0, buffer_offset, buffer, (short) (buffer_offset + 2));
         Util.setShort(buffer, buffer_offset, sign_size);
         buffer_offset += (short) (2 + sign_size);
@@ -2788,7 +2800,7 @@ public class CardEdge extends javacard.framework.Applet {
         // compute shared static key
         if (bytes_left < SIZE_SC_IV)// IV
             ISOException.throwIt(SW_INVALID_PARAMETER);
-        keyAgreement.init(bip32_authentikey);
+        keyAgreement.init(authentikey_private);
         keyAgreement.generateSecret(trusted_pubkey, (short)0, (short)65, recvBuffer, (short)0); // pubkey in uncompressed form
         // derive secret_sessionkey & secret_mackey
         HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)0, (short)6, recvBuffer, (short)33);
@@ -2894,7 +2906,7 @@ public class CardEdge extends javacard.framework.Applet {
         // compute shared static key
         if (bytes_left < SIZE_SC_IV)// IV
             ISOException.throwIt(SW_INVALID_PARAMETER);
-        keyAgreement.init(bip32_authentikey);
+        keyAgreement.init(authentikey_private);
         keyAgreement.generateSecret(trusted_pubkey, (short)0, (short)65, recvBuffer, (short)0); // pubkey in uncompressed form
         // derive secret_sessionkey & secret_mackey
         HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)0, (short)6, recvBuffer, (short)33);
@@ -2985,12 +2997,11 @@ public class CardEdge extends javacard.framework.Applet {
         
         // compute the shared secret...
         keyAgreement.init(sc_ephemeralkey);        
-        short coordx_size= (short)32;
         keyAgreement.generateSecret(buffer, ISO7816.OFFSET_CDATA, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form
         // derive sc_sessionkey & sc_mackey
-        HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, CST_SC, (short)6, (short)6, recvBuffer, (short)33);
+        HmacSha160.computeHmacSha160(recvBuffer, (short)1, BIP32_KEY_SIZE, CST_SC, (short)6, (short)6, recvBuffer, (short)33);
         Util.arrayCopyNonAtomic(recvBuffer, (short)33, sc_buffer, OFFSET_SC_MACKEY, SIZE_SC_MACKEY);
-        HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, CST_SC, (short)0, (short)6, recvBuffer, (short)33);
+        HmacSha160.computeHmacSha160(recvBuffer, (short)1, BIP32_KEY_SIZE, CST_SC, (short)0, (short)6, recvBuffer, (short)33);
         sc_sessionkey.setKey(recvBuffer,(short)33); // AES-128: 16-bytes key!!       
 //      //alternatively: derive session_key (sha256 of coordx)
 //      sha256.reset();
@@ -3005,20 +3016,17 @@ public class CardEdge extends javacard.framework.Applet {
         
         // self signed ephemeral pubkey
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
-        Util.setShort(buffer, (short)0, coordx_size);
+        Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
         sigECDSA.init(sc_ephemeralkey, Signature.MODE_SIGN);
-        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(coordx_size+2), buffer, (short)(coordx_size+4));
-        Util.setShort(buffer, (short)(coordx_size+2), sign_size);
+        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2), buffer, (short)(BIP32_KEY_SIZE+4));
+        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+2), sign_size);
         
         // hash signed by authentikey
-        short offset= (short)(2+coordx_size+2+sign_size);
-        sigECDSA.init(bip32_authentikey, Signature.MODE_SIGN);
+        short offset= (short)(2+BIP32_KEY_SIZE+2+sign_size);
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
         short sign2_size= sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
         Util.setShort(buffer, offset, sign2_size);
         offset+=(short)(2+sign2_size); 
-        
-  
-                                   
         
         initialized_secure_channel= true;
         
@@ -3144,7 +3152,7 @@ public class CardEdge extends javacard.framework.Applet {
         if (!pins[0].isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
-        pki_ecpubkey.getW(buffer, (short)0); 
+        authentikey_public.getW(buffer, (short)0); 
         return (short)65;
     }
     
@@ -3168,7 +3176,7 @@ public class CardEdge extends javacard.framework.Applet {
         if (bytesLeft < (short)32)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         
-        sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
         short sign_size= sigECDSA.signPreComputedHash(buffer, ISO7816.OFFSET_CDATA, MessageDigest.LENGTH_SHA_256, buffer, (short)0);
         return sign_size;
     }
@@ -3333,13 +3341,13 @@ public class CardEdge extends javacard.framework.Applet {
         offset+=(short)32;
          
         //sign challenge
-        sigECDSA.init(pki_ecprivkey, Signature.MODE_SIGN);
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
         short sign_size= sigECDSA.sign(recvBuffer, (short)0, offset, buffer, (short)34);
         Util.setShort(buffer, (short)32, sign_size);
         Util.arrayCopyNonAtomic(recvBuffer, (short)PKI_CHALLENGE_MSG.length, buffer, (short)0, (short)32);
         
         // verify response
-        sigECDSA.init(pki_ecpubkey, Signature.MODE_VERIFY);
+        sigECDSA.init(authentikey_public, Signature.MODE_VERIFY);
         boolean is_valid= sigECDSA.verify(recvBuffer, (short)0, offset, buffer, (short)(34), sign_size);
         if (!is_valid)
             ISOException.throwIt(SW_SIGNATURE_INVALID);
