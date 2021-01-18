@@ -375,8 +375,8 @@ public class CardEdge extends javacard.framework.Applet {
     private ECPrivateKey authentikey_private;
     private ECPublicKey authentikey_public;
     private KeyPair authentikey_pair;
-    private short pki_certificate_size=0;
-    private byte[] pki_certificate;
+    private short authentikey_certificate_size=0;
+    private byte[] authentikey_certificate;
     
     /*********************************************
      *        Other data instances               *
@@ -3089,14 +3089,14 @@ public class CardEdge extends javacard.framework.Applet {
                 short new_certificate_size=Util.getShort(buffer, buffer_offset);
                 if (new_certificate_size < 0)
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                if (pki_certificate==null){
+                if (authentikey_certificate==null){
                     // create array
-                    pki_certificate= new byte[new_certificate_size];
-                    pki_certificate_size=new_certificate_size;
+                    authentikey_certificate= new byte[new_certificate_size];
+                    authentikey_certificate_size=new_certificate_size;
                 }else{
-                    if (new_certificate_size>pki_certificate.length)
+                    if (new_certificate_size>authentikey_certificate.length)
                         ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                    pki_certificate_size=new_certificate_size;
+                    authentikey_certificate_size=new_certificate_size;
                 }
                 break;
                 
@@ -3110,12 +3110,12 @@ public class CardEdge extends javacard.framework.Applet {
                 bytesLeft-=4;
                 if (bytesLeft < chunk_size)
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                if ((chunk_offset<0) || (chunk_offset>=pki_certificate_size))
+                if ((chunk_offset<0) || (chunk_offset>=authentikey_certificate_size))
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                if (((short)(chunk_offset+chunk_size))>pki_certificate_size)
+                if (((short)(chunk_offset+chunk_size))>authentikey_certificate_size)
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
                 
-                Util.arrayCopyNonAtomic(buffer, buffer_offset, pki_certificate, chunk_offset, chunk_size);
+                Util.arrayCopyNonAtomic(buffer, buffer_offset, authentikey_certificate, chunk_offset, chunk_size);
                 break;
                 
             default:
@@ -3143,7 +3143,7 @@ public class CardEdge extends javacard.framework.Applet {
         byte op = buffer[ISO7816.OFFSET_P2];
         switch(op){
             case OP_INIT:
-                Util.setShort(buffer, (short)0, pki_certificate_size);
+                Util.setShort(buffer, (short)0, authentikey_certificate_size);
                 return (short)2; 
                 
             case OP_PROCESS: 
@@ -3156,11 +3156,11 @@ public class CardEdge extends javacard.framework.Applet {
                 buffer_offset+=2;
                 short chunk_size= Util.getShort(buffer, buffer_offset);
                 
-                if ((chunk_offset<0) || (chunk_offset>=pki_certificate_size))
+                if ((chunk_offset<0) || (chunk_offset>=authentikey_certificate_size))
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                if (((short)(chunk_offset+chunk_size))>pki_certificate_size)
+                if (((short)(chunk_offset+chunk_size))>authentikey_certificate_size)
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                Util.arrayCopyNonAtomic(pki_certificate, chunk_offset, buffer, (short)0, chunk_size);
+                Util.arrayCopyNonAtomic(authentikey_certificate, chunk_offset, buffer, (short)0, chunk_size);
                 return chunk_size; 
                 
             default:
