@@ -1745,6 +1745,7 @@ public class CardEdge extends javacard.framework.Applet {
         
         resetSeed();
         
+        // after a reset, user is logged out!
         LogOutAll();
         return (short)0;
     }
