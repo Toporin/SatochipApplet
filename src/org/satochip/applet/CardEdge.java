@@ -61,7 +61,7 @@ import javacard.security.CryptoException;
 import javacard.security.Key;
 import javacard.security.KeyAgreement;
 import javacard.security.KeyBuilder;
-import javacard.security.KeyPair;
+//import javacard.security.KeyPair;
 import javacard.security.Signature;
 import javacard.security.MessageDigest;
 import javacard.security.RandomData;
@@ -374,7 +374,7 @@ public class CardEdge extends javacard.framework.Applet {
     private boolean personalizationDone=false;
     private ECPrivateKey authentikey_private;
     private ECPublicKey authentikey_public;
-    private KeyPair authentikey_pair;
+    //private KeyPair authentikey_pair;
     private short authentikey_certificate_size=0;
     private byte[] authentikey_certificate;
     
@@ -536,8 +536,8 @@ public class CardEdge extends javacard.framework.Applet {
         Secp256k1.setCommonCurveParameters(authentikey_private);
         authentikey_public= (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, LENGTH_EC_FP_256, false); 
         Secp256k1.setCommonCurveParameters(authentikey_private);
-        authentikey_pair= new KeyPair(authentikey_public, authentikey_private);
-        authentikey_pair.genKeyPair();
+        //authentikey_pair= new KeyPair(authentikey_public, authentikey_private);
+        //authentikey_pair.genKeyPair();
         
         // BIP32 material
         bip32_masterkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
