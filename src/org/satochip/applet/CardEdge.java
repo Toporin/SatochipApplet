@@ -537,7 +537,12 @@ public class CardEdge extends javacard.framework.Applet {
         authentikey_public= (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, LENGTH_EC_FP_256, false); 
         Secp256k1.setCommonCurveParameters(authentikey_private);
         //authentikey_pair= new KeyPair(authentikey_public, authentikey_private);
-        //authentikey_pair.genKeyPair();
+        //authentikey_pair.genKeyPair(); //=> cap file fails to load!
+        randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
+        authentikey_private.setS(recvBuffer, (short)0, BIP32_KEY_SIZE); //random value first
+        keyAgreement.init(authentikey_private);   
+        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form => silently fail after cap loaded
+        authentikey_public.setW(recvBuffer, (short)0, (short)65);
         
         // BIP32 material
         bip32_masterkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
