@@ -102,7 +102,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.12-0.2: 2FA can be disabled using reset2FAKey() without reseting the seed
     // 0.12-0.3: SeedKeeper support: label & labelsize no longer required 
     // 0.12-0.4: add reset to factory support
-    // 0.12-0.5: add support for personnalisation PKI
+    // 0.12-0.5: add support for personalisation PKI
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 12;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -535,7 +535,7 @@ public class CardEdge extends javacard.framework.Applet {
         authentikey_private= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
         Secp256k1.setCommonCurveParameters(authentikey_private);
         authentikey_public= (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, LENGTH_EC_FP_256, false); 
-        Secp256k1.setCommonCurveParameters(authentikey_private);
+        Secp256k1.setCommonCurveParameters(authentikey_public);
         //authentikey_pair= new KeyPair(authentikey_public, authentikey_private);
         //authentikey_pair.genKeyPair(); //=> cap file fails to load!
         randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
