@@ -41,7 +41,7 @@ Disadvantages:
 To support Bitcoin signatures, the javacard must support ALG_ECDSA_SHA_256, which in practice requires a javacard compliant with the JavaCard 3.0.1 specification. Note that this is a necessary but not sufficient condition since javacards typically implements only a subset of the specification.
 A detailed list of javacard and their supported features is available [here](http://www.fi.muni.cz/~xsvenda/jcsupport.html).
 
-An interesting guide to consult before shopping can be found [here](https://github.com/martinpaljak/GlobalPlatformPro/tree/master/docs/JavaCardBuyersGuide)
+An interesting guide to consult before shopping can be found [here](https://github.com/martinpaljak/GlobalPlatformPro/tree/master/docs/JavaCardBuyersGuide).
 
 ## Tested and working
 
@@ -86,11 +86,11 @@ To use the applet, you have to connect your client application to the smartcard 
 - Litecoin: the [Litecoin Electrum-Satochip](https://github.com/Toporin/electrum-satochip/releases) is a version of [Electrum for Litecoin](https://github.com/pooler/electrum-ltc/) that was slightly modified to integrate the Satochip hardware wallet.
 - Bitcoin Cash: the [Electron Cash-Satochip](https://github.com/Toporin/electrum-satochip/releases) is a version of [Electron Cash](https://github.com/Electron-Cash/Electron-Cash) that was slightly modified to integrate the Satochip hardware wallet.
 **Note:** Satochip is natively supported by Electron Cash, we strongly encourage you to download the client from the [official website](https://electroncash.org/).
-- eCash (XEC): Satochip is natively supported by Electrum ABC, we strongly encourage you to download the client from the [official website] (https://www.bitcoinabc.org/electrum/).
+- eCash (XEC): Satochip is natively supported by Electrum ABC, we strongly encourage you to download the client from the [official website](https://www.bitcoinabc.org/electrum/).
 
-- Metamask: you can use your Satochip hardware wallet with a forked version of Metamask called [Satomask] (https://github.com/Toporin/metamask-extension/releases). To allow the communication between the card and your web browser, you will need the [Satochip Bridge] (https://github.com/Toporin/Satochip-Bridge/releases).
+- Metamask: you can use your Satochip hardware wallet with a forked version of Metamask called [Satomask](https://github.com/Toporin/metamask-extension/releases). To allow the communication between the card and your web browser, you will need the [Satochip Bridge](https://github.com/Toporin/Satochip-Bridge/releases).
 
-- MyEtherWallet: you can use your Satochip hardware wallet with a forked version of MyEtherWallet called [MEW Satochip] (https://github.com/Toporin/MyEtherWallet/releases). To allow the communication between the card and your web browser, you will need the [Satochip Bridge] (https://github.com/Toporin/Satochip-Bridge/releases).
+- MyEtherWallet: you can use your Satochip hardware wallet with a forked version of MyEtherWallet called [MEW Satochip](https://github.com/Toporin/MyEtherWallet/releases). To allow the communication between the card and your web browser, you will need the [Satochip Bridge](https://github.com/Toporin/Satochip-Bridge/releases).
 
 ### Deprecated (use older releases for this)
 [SatoChipClient](https://github.com/Toporin/SatoChipClient) is a small java library that allows to easily interface the SatoChip applet to your application through a simple set of API. An example of application is the [BitcoinWallet](https://github.com/Toporin/BitcoinWallet) java application, that uses SatoChipClient through another Bitcoin library called [BitcoinCore](https://github.com/Toporin/BitcoinCore).  
