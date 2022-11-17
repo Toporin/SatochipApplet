@@ -105,5 +105,6 @@ To use the applet, you have to connect your client application to the smartcard 
 
 This application is distributed under the GNU Affero General Public License version 3.
 
-Some parts of the code may be licensed under a different (MIT-like) license. [Contact me](mailto:support@satochip.io) if you feel that some license combination is inappropriate.
+Some parts of the code may be licensed under a different (MIT-like) license. 
+[Contact us](mailto:support@satochip.io) if you feel that some license combination is inappropriate.
 
