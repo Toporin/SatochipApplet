@@ -1,4 +1,4 @@
-# SatoChipApplet
+# SatochipApplet
 Open source javacard applet implementing a crypto-currency hardware wallet with full BIP32/BIP39 support.
 
 # Demonstration 
@@ -71,14 +71,26 @@ Once you have a CAP file, you have to download it on the chip card. You can use 
 - Download the latest release from https://github.com/martinpaljak/GlobalPlatformPro/releases
 - (Put the CAP file in the same folder as the GPJ jar file for convenience)
 - To list the applets loaded on a smartcard: `gp.exe -l`
-- To load the SatoChip applet: `gp.exe -install .\SatoChip-2.2.2.cap`
-- To delete the SatoChip applet: `gp.exe -uninstall .\SatoChip-2.2.2.cap`
+- To load the SatoChip applet: `gp.exe -install .\SatoChip-0.12-05.cap`
+- To delete the SatoChip applet: `gp.exe -uninstall .\SatoChip-0.12-05.cap`
 
 A more detailed tutorial is available on the GlobalPlatformPro [repository](https://github.com/martinpaljak/GlobalPlatformPro).
 
 # Use
 
-To use the applet, you have to connect your client application to the smartcard and send command APDU. These commands will be processed by the smartcard who will then send a response APDU. The [Electrum-Satochip](https://github.com/Toporin/electrum) is a version of [electrum](https://github.com/spesmilo/electrum) that was slightly modified to integrate the Satochip hardware wallet.
+To use the applet, you have to connect your client application to the smartcard and send command APDU. These commands will be processed by the smartcard who will then send a response APDU. 
+
+### Supported software clients
+
+- Bitcoin: the [Bitcoin Electrum-Satochip](https://github.com/Toporin/electrum-satochip/releases) is a version of [Electrum](https://github.com/spesmilo/electrum) that was slightly modified to integrate the Satochip hardware wallet.
+- Litecoin: the [Litecoin Electrum-Satochip](https://github.com/Toporin/electrum-satochip/releases) is a version of [Electrum for Litecoin](https://github.com/pooler/electrum-ltc/) that was slightly modified to integrate the Satochip hardware wallet.
+- Bitcoin Cash: the [Electron Cash-Satochip](https://github.com/Toporin/electrum-satochip/releases) is a version of [Electron Cash](https://github.com/Electron-Cash/Electron-Cash) that was slightly modified to integrate the Satochip hardware wallet.
+**Note:** Satochip is natively supported by Electron Cash, we strongly encourage you to download the client from the [official website](https://electroncash.org/).
+- eCash (XEC): Satochip is natively supported by Electrum ABC, we strongly encourage you to download the client from the [official website] (https://www.bitcoinabc.org/electrum/).
+
+- Metamask: you can use your Satochip hardware wallet with a forked version of Metamask called [Satomask] (https://github.com/Toporin/metamask-extension/releases). To allow the communication between the card and your web browser, you will need the [Satochip Bridge] (https://github.com/Toporin/Satochip-Bridge/releases).
+
+- MyEtherWallet: you can use your Satochip hardware wallet with a forked version of MyEtherWallet called [MEW Satochip] (https://github.com/Toporin/MyEtherWallet/releases). To allow the communication between the card and your web browser, you will need the [Satochip Bridge] (https://github.com/Toporin/Satochip-Bridge/releases).
 
 ### Deprecated (use older releases for this)
 [SatoChipClient](https://github.com/Toporin/SatoChipClient) is a small java library that allows to easily interface the SatoChip applet to your application through a simple set of API. An example of application is the [BitcoinWallet](https://github.com/Toporin/BitcoinWallet) java application, that uses SatoChipClient through another Bitcoin library called [BitcoinCore](https://github.com/Toporin/BitcoinCore).  
@@ -93,5 +105,5 @@ To use the applet, you have to connect your client application to the smartcard 
 
 This application is distributed under the GNU Affero General Public License version 3.
 
-Some parts of the code may be licensed under a different (MIT-like) license. [Contact me](mailto:satochip.wallet@gmail.com) if you feel that some license combination is inappropriate.
+Some parts of the code may be licensed under a different (MIT-like) license. [Contact me](mailto:support@satochip.io) if you feel that some license combination is inappropriate.
 
