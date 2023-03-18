@@ -103,10 +103,11 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.12-0.3: SeedKeeper support: label & labelsize no longer required 
     // 0.12-0.4: add reset to factory support
     // 0.12-0.5: add support for personalisation PKI
+    // 0.14-0.1: add Schnorr signature support (beta)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
-    private final static byte PROTOCOL_MINOR_VERSION = (byte) 12;
+    private final static byte PROTOCOL_MINOR_VERSION = (byte) 14;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-    private final static byte APPLET_MINOR_VERSION = (byte) 5;
+    private final static byte APPLET_MINOR_VERSION = (byte) 1;
 
     // Maximum number of keys handled by the Cardlet
     private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -166,6 +167,7 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte INS_SET_2FA_KEY = (byte) 0x79;    
     private final static byte INS_RESET_2FA_KEY = (byte) 0x78;
     private final static byte INS_SIGN_TRANSACTION_HASH= (byte) 0x7A;
+    private final static byte INS_SIGN_SCHNORR_HASH= (byte) 0x7B;
     
     // secure channel
     private final static byte INS_INIT_SECURE_CHANNEL = (byte) 0x81;
@@ -368,6 +370,24 @@ public class CardEdge extends javacard.framework.Applet {
     private ECPrivateKey bip32_extendedkey; // object storing last extended key used
     
     /*********************************************
+     *             Schnorr signatures            *
+     *********************************************/
+    
+    // BIP0340/aux offset 0, length 11
+    // BIP0340/nonce offset 11, length 13
+    // BIP0340/challenge offset 24, length 17
+    public static byte[] tags = {'B','I','P','0','3','4','0','/','a','u','x',  'B','I','P','0','3','4','0','/','n','o','n','c','e',  'B','I','P','0','3','4','0','/','c','h','a','l','l','e','n','g','e'};
+    // buffer todo: optimize to reduce memory footprint?
+    byte[] m;
+    byte[] sk;
+    byte[] aux;
+    byte[] t;
+    byte[] rand;
+    byte[] e;
+    byte[] k;
+    byte[] d;
+    
+    /*********************************************
      *               PKI objects                 *
      *********************************************/
     private static final byte[] PKI_CHALLENGE_MSG = {'C','h','a','l','l','e','n','g','e',':'};
@@ -416,6 +436,7 @@ public class CardEdge extends javacard.framework.Applet {
      * - 2FA reset:   [ 20b 2FA_ID  | 44-bit 0xAA-padding ]  
      * - Msg signing: [ 32b SHA26(btcHeader+msg) | 32-bit 0xBB-padding ]
      * - Hash signing:[ 32b Hash | 32-bit 0xCC-padding ]
+     * - Schnorr hash:[ 32b Hash | 32-bit 0xDD-padding ]
      *  */ 
     
     // 2FA msg encryption
@@ -558,6 +579,18 @@ public class CardEdge extends javacard.framework.Applet {
         // Transaction signing
         Transaction.init();
         transactionData= new byte[OFFSET_TRANSACTION_SIZE];
+        
+        // Schnorr signatures
+        // initialize Biginteger static data (required for Schnorr signatures)
+        Biginteger.init();
+        sk = new byte[32];
+        m = new byte[32];
+        aux = new byte[32];
+        t = new byte[32];
+        rand = new byte[32];
+        e = new byte[32];
+        d = new byte[32];
+        k = new byte[32];
         
         // 2FA
         data2FA= new byte[OFFSET_2FA_SIZE];
@@ -763,6 +796,9 @@ public class CardEdge extends javacard.framework.Applet {
             break;
         case INS_SIGN_TRANSACTION_HASH:
             sizeout= SignTransactionHash(apdu, buffer);
+            break;
+        case INS_SIGN_SCHNORR_HASH:
+            sizeout= SignSchnorrHash(apdu, buffer);
             break;
         case INS_PARSE_TRANSACTION:
             sizeout= ParseTransaction(apdu, buffer);
@@ -2427,6 +2463,169 @@ public class CardEdge extends javacard.framework.Applet {
         return sign_size;
     }
     
+    /**
+     * This function signs a given hash with a std or the last extended key
+     * If 2FA is enabled, a HMAC must be provided as an additional security layer. 
+     * 
+     * ins: 0x7B
+     * p1: key number or 0xFF for the last derived Bip32 extended key  
+     * p2: 0x00
+     * data: [hash(32b) | option: 2FA-flag(2b)|hmac(20b)]
+     * 
+     * return: [sig]
+     * 
+     */
+    private short SignSchnorrHash(APDU apdu, byte[] buffer){
+        
+        // DEBUG
+        // check that PIN[0] has been entered previously
+//        if (!pins[0].isValidated())
+//            ISOException.throwIt(SW_UNAUTHORIZED);
+        
+        byte key_nb = buffer[ISO7816.OFFSET_P1];
+        if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
+            ISOException.throwIt(SW_INCORRECT_P1);
+        
+        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+        if (bytesLeft<MessageDigest.LENGTH_SHA_256)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        
+        // DEBUG
+        // check whether the seed is initialized
+//        if (key_nb==(byte)0xFF && !bip32_seeded)
+//            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
+        
+        // check 2FA if required
+        if(needs_2FA){
+            // check data length
+            if (bytesLeft<MessageDigest.LENGTH_SHA_256+MessageDigest.LENGTH_SHA+(short)2)
+                ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+            // check flag for 2fa_hmac_chalresp
+            short hmac_flags= Util.getShort(buffer, (short)(ISO7816.OFFSET_CDATA+32));
+            if (hmac_flags!=HMAC_CHALRESP_2FA)
+                ISOException.throwIt(SW_INCORRECT_ALG);
+            // hmac of 64-bytes msg: ( 32bytes tx_hash | 32bytes 0xDD-padding)
+            Util.arrayCopyNonAtomic(buffer, (short)ISO7816.OFFSET_CDATA, recvBuffer, (short)0, (short)32);
+            Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0xDD); // 0xDD for Schnorr sig
+            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
+            if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20)!=0)
+                ISOException.throwIt(SW_SIGNATURE_INVALID);
+        }
+        
+        // get privkey
+        ECPrivateKey privkey;
+        if (key_nb==(byte)0xFF)
+            //sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
+            privkey = bip32_extendedkey;
+        else{
+            privkey= (ECPrivateKey) eckeys[key_nb];
+            // check type and size
+            if ((privkey == null) || !privkey.isInitialized())
+                ISOException.throwIt(SW_INCORRECT_P1);
+            if (privkey.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
+                ISOException.throwIt(SW_INCORRECT_ALG);     
+            if (privkey.getSize()!= LENGTH_EC_FP_256)
+                ISOException.throwIt(SW_INCORRECT_ALG);
+            //sigECDSA.init(key, Signature.MODE_SIGN);
+        }
+        // generate randomness
+        randomData.generateData(aux, (short)0, (short)32);
+        
+        // DEBUG using test vector 0 from bip0340
+        //public static byte[] sk0= {}; //0000000000000000000000000000000000000000000000000000000000000003
+        //public static byte[] m0= {}; //0000000000000000000000000000000000000000000000000000000000000000
+        //public static byte[] aux= {}; //0000000000000000000000000000000000000000000000000000000000000000
+        Util.arrayFillNonAtomic(sk, (short)0, (short)32, (byte)0);
+        sk[(short)31]= (byte)0x03;
+        privkey.setS(sk, (short)0, (short)32);
+        Util.arrayFillNonAtomic(aux, (short)0, (short)32, (byte)0);
+        // ENDBUG
+        
+        // copy message hash to buffer (todo: optimise)
+        Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, m, (short)0, (short)32);
+        // compute the corresponding partial public key...
+        keyAgreement.init((ECPrivateKey)privkey);
+        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)31); //pubkey in uncompressed form (65bytes) 
+        // we leave 32 bytes before coordx for reuse in next steps
+        // check evenness
+        if (buffer[31+64]%2 == 0){
+            // d= sk
+            //Util.arrayCopyNonAtomic(sk, (short)0, d, (short)0, (short)32);
+            privkey.getS(d, (short)0);
+        } else {
+            // d= n-sk
+            privkey.getS(sk, (short)0);
+            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, d, (short)0, (short)32);
+            Biginteger.subtract(d, (short)0, sk, (short)0, (short)32);
+        }
+        // t = bytes(d) ^ hashBIP0340/aux(a)
+        schnorr_hash_tag(tags, (short)0, (short)11, aux, (short)0, (short)32, t, (short)0);
+        short i;
+        for (i = (short)0; i < (short)32; i++){
+            t[i] = (byte) (t[i] ^ d[i]);
+        }
+        // Let rand = hashBIP0340/nonce(t || bytes(P) || m)
+        short offset = 0;
+        Util.arrayCopyNonAtomic(t, (short)0, buffer, offset, (short)32);
+        offset+=32;
+        offset+=32; // bytes(P) is alread there from previous steps
+        Util.arrayCopyNonAtomic(m, (short)0, buffer, offset, (short)32);
+        schnorr_hash_tag(tags, (short)11, (short)13, buffer, (short)0, (short)96, t, (short)0); // reuse t to store rand
+        // k', k
+        if (Biginteger.equalZero(t, (short)0, (short)32)){
+            ISOException.throwIt((short)0x7778);
+        }
+        // todo: rand = rand % n
+        privkey.setS(t, (short)0, (short)32);
+        keyAgreement.init((ECPrivateKey)privkey);
+        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form (65bytes) 
+        // check evenness
+        if (tmpBuffer[64]%2 == 0){
+            // k = rand
+            Util.arrayCopyNonAtomic(t, (short)0, k, (short)0, (short)32);
+        } else {
+            // k = n-rand
+            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, k, (short)0, (short)32);
+            Biginteger.subtract(k, (short)0, t, (short)0, (short)32);
+        }
+        // e = int(hashBIP0340/challenge(bytes(R) || bytes(P) || m)) mod n
+        Util.arrayCopyNonAtomic(tmpBuffer, (short)1, buffer, (short)0, (short)32); // copy R coordx to buffer
+        schnorr_hash_tag(tags, (short)24, (short)17, buffer, (short)0, (short)96, e, (short)0); 
+        // todo: e = e mod n
+        
+        //compute (k+e*d) mod n
+        //e*d => buffer2
+        short sizez = Biginteger.mult_rsa_trick(e, (short)0, d, (short)0, (short)32, Biginteger.buffer2, (short)0); 
+        
+        // (e*d +k) => buffer1
+        Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
+        Util.arrayCopyNonAtomic(k, (short)0, Biginteger.buffer1, (short)(Biginteger.buffer1.length-k.length), (short)k.length); // copy 32bytes k to 96bytes buffer 
+        boolean carry = Biginteger.add_carry(Biginteger.buffer1, (short)0, Biginteger.buffer2, (short)0, (short)Biginteger.buffer1.length);
+        
+        // (e*d + k) mod n => buffer1
+        sizez= Biginteger.mod(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
+        
+        // return bytes(R) || e*d + k mod n
+        // bytes(R) is already in buffer[0..<32]
+        Util.arrayCopyNonAtomic(Biginteger.buffer1, (short)64, buffer, (short)32, (short)32);
+       
+        //short sign_size= sigECDSA.signPreComputedHash(buffer, ISO7816.OFFSET_CDATA, MessageDigest.LENGTH_SHA_256, buffer, (short)0);
+        return (short)64;
+    }
+    
+    // BIP0340 hashtag function for Schnorr signatures
+    public short schnorr_hash_tag(
+            byte[] tag, short tag_offset, short tag_length,
+            byte[] msg, short msg_offset, short msg_length, 
+            byte[] dst, short dst_offset){
+        sha256.reset(); 
+        sha256.doFinal(tag, tag_offset, tag_length, tmpBuffer, (short)0);
+        Util.arrayCopyNonAtomic(tmpBuffer, (short)0, tmpBuffer, (short)32, (short)32);
+        Util.arrayCopyNonAtomic(msg, msg_offset, tmpBuffer, (short)64, msg_length);
+        sha256.reset(); 
+        sha256.doFinal(tmpBuffer, (short)0, (short)(64+msg_length), dst, dst_offset);
+        return (short)32;
+    }
     
     /**
      * This function allows to set the 2FA key and enable 2FA.
