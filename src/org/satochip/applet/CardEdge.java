@@ -376,16 +376,16 @@ public class CardEdge extends javacard.framework.Applet {
     // BIP0340/aux offset 0, length 11
     // BIP0340/nonce offset 11, length 13
     // BIP0340/challenge offset 24, length 17
-    public static byte[] tags = {'B','I','P','0','3','4','0','/','a','u','x',  'B','I','P','0','3','4','0','/','n','o','n','c','e',  'B','I','P','0','3','4','0','/','c','h','a','l','l','e','n','g','e'};
-    // buffer todo: optimize to reduce memory footprint?
-    byte[] m;
-    byte[] sk;
-    byte[] aux;
-    byte[] t;
-    byte[] rand;
-    byte[] e;
-    byte[] k;
-    byte[] d;
+    public static final byte[] tags = {'B','I','P','0','3','4','0','/','a','u','x',  'B','I','P','0','3','4','0','/','n','o','n','c','e',  'B','I','P','0','3','4','0','/','c','h','a','l','l','e','n','g','e'};
+    // recvBuffer offset values to store intermediate values
+    public static final short OFFSET_BIP340_sk= (short)0;
+    public static final short OFFSET_BIP340_m= (short)32;
+    public static final short OFFSET_BIP340_aux= (short)64;
+    public static final short OFFSET_BIP340_t= (short)96;
+    public static final short OFFSET_BIP340_rand= (short)128;
+    public static final short OFFSET_BIP340_e= (short)160;
+    public static final short OFFSET_BIP340_d= (short) 192;
+    public static final short OFFSET_BIP340_k= (short) 224;
     
     /*********************************************
      *               PKI objects                 *
@@ -583,14 +583,6 @@ public class CardEdge extends javacard.framework.Applet {
         // Schnorr signatures
         // initialize Biginteger static data (required for Schnorr signatures)
         Biginteger.init();
-        sk = new byte[32];
-        m = new byte[32];
-        aux = new byte[32];
-        t = new byte[32];
-        rand = new byte[32];
-        e = new byte[32];
-        d = new byte[32];
-        k = new byte[32];
         
         // 2FA
         data2FA= new byte[OFFSET_2FA_SIZE];
@@ -2529,20 +2521,20 @@ public class CardEdge extends javacard.framework.Applet {
             //sigECDSA.init(key, Signature.MODE_SIGN);
         }
         // generate randomness
-        randomData.generateData(aux, (short)0, (short)32);
+        randomData.generateData(recvBuffer, OFFSET_BIP340_aux, (short)32);
         
         // DEBUG using test vector 0 from bip0340
         //public static byte[] sk0= {}; //0000000000000000000000000000000000000000000000000000000000000003
         //public static byte[] m0= {}; //0000000000000000000000000000000000000000000000000000000000000000
         //public static byte[] aux= {}; //0000000000000000000000000000000000000000000000000000000000000000
-        Util.arrayFillNonAtomic(sk, (short)0, (short)32, (byte)0);
-        sk[(short)31]= (byte)0x03;
-        privkey.setS(sk, (short)0, (short)32);
-        Util.arrayFillNonAtomic(aux, (short)0, (short)32, (byte)0);
+        Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP340_sk, (short)32, (byte)0);
+        recvBuffer[(short)(OFFSET_BIP340_sk + 31)]= (byte)0x03;
+        privkey.setS(recvBuffer, OFFSET_BIP340_sk, (short)32);
+        Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP340_aux, (short)32, (byte)0);
         // ENDBUG
         
         // copy message hash to buffer (todo: optimise)
-        Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, m, (short)0, (short)32);
+        Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, recvBuffer, OFFSET_BIP340_m, (short)32);
         // compute the corresponding partial public key...
         keyAgreement.init((ECPrivateKey)privkey);
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)31); //pubkey in uncompressed form (65bytes) 
@@ -2551,55 +2543,55 @@ public class CardEdge extends javacard.framework.Applet {
         if (buffer[31+64]%2 == 0){
             // d= sk
             //Util.arrayCopyNonAtomic(sk, (short)0, d, (short)0, (short)32);
-            privkey.getS(d, (short)0);
+            privkey.getS(recvBuffer, OFFSET_BIP340_d);
         } else {
             // d= n-sk
-            privkey.getS(sk, (short)0);
-            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, d, (short)0, (short)32);
-            Biginteger.subtract(d, (short)0, sk, (short)0, (short)32);
+            privkey.getS(recvBuffer, OFFSET_BIP340_sk);
+            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, OFFSET_BIP340_d, (short)32);
+            Biginteger.subtract(recvBuffer, OFFSET_BIP340_d, recvBuffer, OFFSET_BIP340_sk, (short)32);
         }
         // t = bytes(d) ^ hashBIP0340/aux(a)
-        schnorr_hash_tag(tags, (short)0, (short)11, aux, (short)0, (short)32, t, (short)0);
+        schnorr_hash_tag(tags, (short)0, (short)11, recvBuffer, OFFSET_BIP340_aux, (short)32, recvBuffer, OFFSET_BIP340_t);
         short i;
         for (i = (short)0; i < (short)32; i++){
-            t[i] = (byte) (t[i] ^ d[i]);
+            recvBuffer[(short)(OFFSET_BIP340_t+i)] = (byte) (recvBuffer[(short)(OFFSET_BIP340_t+i)] ^ recvBuffer[(short)(OFFSET_BIP340_d+i)]);
         }
         // Let rand = hashBIP0340/nonce(t || bytes(P) || m)
         short offset = 0;
-        Util.arrayCopyNonAtomic(t, (short)0, buffer, offset, (short)32);
+        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_t, buffer, offset, (short)32);
         offset+=32;
         offset+=32; // bytes(P) is alread there from previous steps
-        Util.arrayCopyNonAtomic(m, (short)0, buffer, offset, (short)32);
-        schnorr_hash_tag(tags, (short)11, (short)13, buffer, (short)0, (short)96, t, (short)0); // reuse t to store rand
+        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_m, buffer, offset, (short)32);
+        schnorr_hash_tag(tags, (short)11, (short)13, buffer, (short)0, (short)96, recvBuffer, OFFSET_BIP340_t); // reuse t to store rand
         // k', k
-        if (Biginteger.equalZero(t, (short)0, (short)32)){
+        if (Biginteger.equalZero(recvBuffer, OFFSET_BIP340_t, (short)32)){
             ISOException.throwIt((short)0x7778);
         }
         // todo: rand = rand % n
-        privkey.setS(t, (short)0, (short)32);
+        privkey.setS(recvBuffer, OFFSET_BIP340_t, (short)32);
         keyAgreement.init((ECPrivateKey)privkey);
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form (65bytes) 
         // check evenness
         if (tmpBuffer[64]%2 == 0){
             // k = rand
-            Util.arrayCopyNonAtomic(t, (short)0, k, (short)0, (short)32);
+            Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_t, recvBuffer, OFFSET_BIP340_k, (short)32);
         } else {
             // k = n-rand
-            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, k, (short)0, (short)32);
-            Biginteger.subtract(k, (short)0, t, (short)0, (short)32);
+            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, OFFSET_BIP340_k, (short)32);
+            Biginteger.subtract(recvBuffer, OFFSET_BIP340_k, recvBuffer, OFFSET_BIP340_t, (short)32);
         }
         // e = int(hashBIP0340/challenge(bytes(R) || bytes(P) || m)) mod n
         Util.arrayCopyNonAtomic(tmpBuffer, (short)1, buffer, (short)0, (short)32); // copy R coordx to buffer
-        schnorr_hash_tag(tags, (short)24, (short)17, buffer, (short)0, (short)96, e, (short)0); 
+        schnorr_hash_tag(tags, (short)24, (short)17, buffer, (short)0, (short)96, recvBuffer, OFFSET_BIP340_e); 
         // todo: e = e mod n
         
         //compute (k+e*d) mod n
         //e*d => buffer2
-        short sizez = Biginteger.mult_rsa_trick(e, (short)0, d, (short)0, (short)32, Biginteger.buffer2, (short)0); 
+        short sizez = Biginteger.mult_rsa_trick(recvBuffer, OFFSET_BIP340_e, recvBuffer, OFFSET_BIP340_d, (short)32, Biginteger.buffer2, (short)0); 
         
         // (e*d +k) => buffer1
         Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
-        Util.arrayCopyNonAtomic(k, (short)0, Biginteger.buffer1, (short)(Biginteger.buffer1.length-k.length), (short)k.length); // copy 32bytes k to 96bytes buffer 
+        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_k, Biginteger.buffer1, (short)(Biginteger.buffer1.length-32), (short)32); // copy 32bytes k to 96bytes buffer 
         boolean carry = Biginteger.add_carry(Biginteger.buffer1, (short)0, Biginteger.buffer2, (short)0, (short)Biginteger.buffer1.length);
         
         // (e*d + k) mod n => buffer1
@@ -2609,6 +2601,13 @@ public class CardEdge extends javacard.framework.Applet {
         // bytes(R) is already in buffer[0..<32]
         Util.arrayCopyNonAtomic(Biginteger.buffer1, (short)64, buffer, (short)32, (short)32);
        
+        // clean buffers like a good boy
+        Util.arrayFillNonAtomic(buffer, (short)64, (short)32, (byte)0);
+        Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)256, (byte)0);
+        Util.arrayFillNonAtomic(tmpBuffer, (short)0, (short)65, (byte)0);
+        Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
+        Util.arrayFillNonAtomic(Biginteger.buffer2, (short)0, (short)Biginteger.buffer2.length, (byte)0);
+        
         //short sign_size= sigECDSA.signPreComputedHash(buffer, ISO7816.OFFSET_CDATA, MessageDigest.LENGTH_SHA_256, buffer, (short)0);
         return (short)64;
     }
