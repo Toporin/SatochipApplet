@@ -2469,10 +2469,9 @@ public class CardEdge extends javacard.framework.Applet {
      */
     private short SignSchnorrHash(APDU apdu, byte[] buffer){
         
-        // DEBUG
         // check that PIN[0] has been entered previously
-//        if (!pins[0].isValidated())
-//            ISOException.throwIt(SW_UNAUTHORIZED);
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
         
         byte key_nb = buffer[ISO7816.OFFSET_P1];
         if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
@@ -2482,10 +2481,9 @@ public class CardEdge extends javacard.framework.Applet {
         if (bytesLeft<MessageDigest.LENGTH_SHA_256)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         
-        // DEBUG
         // check whether the seed is initialized
-//        if (key_nb==(byte)0xFF && !bip32_seeded)
-//            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
+        if (key_nb==(byte)0xFF && !bip32_seeded)
+            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
         
         // check 2FA if required
         if(needs_2FA){
@@ -2507,7 +2505,6 @@ public class CardEdge extends javacard.framework.Applet {
         // get privkey
         ECPrivateKey privkey;
         if (key_nb==(byte)0xFF)
-            //sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
             privkey = bip32_extendedkey;
         else{
             privkey= (ECPrivateKey) eckeys[key_nb];
@@ -2518,7 +2515,6 @@ public class CardEdge extends javacard.framework.Applet {
                 ISOException.throwIt(SW_INCORRECT_ALG);     
             if (privkey.getSize()!= LENGTH_EC_FP_256)
                 ISOException.throwIt(SW_INCORRECT_ALG);
-            //sigECDSA.init(key, Signature.MODE_SIGN);
         }
         // generate randomness
         randomData.generateData(recvBuffer, OFFSET_BIP340_aux, (short)32);
@@ -2527,13 +2523,13 @@ public class CardEdge extends javacard.framework.Applet {
         //public static byte[] sk0= {}; //0000000000000000000000000000000000000000000000000000000000000003
         //public static byte[] m0= {}; //0000000000000000000000000000000000000000000000000000000000000000
         //public static byte[] aux= {}; //0000000000000000000000000000000000000000000000000000000000000000
-        Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP340_sk, (short)32, (byte)0);
-        recvBuffer[(short)(OFFSET_BIP340_sk + 31)]= (byte)0x03;
-        privkey.setS(recvBuffer, OFFSET_BIP340_sk, (short)32);
-        Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP340_aux, (short)32, (byte)0);
+//        Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP340_sk, (short)32, (byte)0);
+//        recvBuffer[(short)(OFFSET_BIP340_sk + 31)]= (byte)0x03;
+//        privkey.setS(recvBuffer, OFFSET_BIP340_sk, (short)32);
+//        Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP340_aux, (short)32, (byte)0);
         // ENDBUG
         
-        // copy message hash to buffer (todo: optimise)
+        // copy message hash to buffer
         Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, recvBuffer, OFFSET_BIP340_m, (short)32);
         // compute the corresponding partial public key...
         keyAgreement.init((ECPrivateKey)privkey);
