@@ -366,23 +366,9 @@ public class Biginteger {
         // x+y => buffer1
         Util.arrayFillNonAtomic(buffer1, (short) 0, (short) buffer1.length, (byte) 0);
         
-//        // debug return empty buffer... => SW9000
-//        if (true){
-//            Util.arrayCopyNonAtomic(buffer1, (short)0, z, offsetz, (short)buffer1.length);
-//            return (short)buffer1.length;
-//        }
-//        //endbug
-        
         // copy x (retains MSBF order)
         short offsetb1= (short)(buffer1.length-size);
         Util.arrayCopyNonAtomic(x, offsetx, buffer1, offsetb1, size);
-        
-//        // debug return x => SW9000
-//        if (true){
-//            Util.arrayCopyNonAtomic(buffer1, (short)0, z, offsetz, (short)buffer1.length);
-//            return (short)buffer1.length;
-//        }
-//        //endbug
         
         // copy y
         short offsetb2= (short)(buffer2.length-size);
@@ -393,33 +379,8 @@ public class Biginteger {
         boolean carry= add_carry(buffer1, (short)0, buffer2, (short)0, (short)buffer1.length);
         // should be no carry since buffer are sufficiently large
         
-//        // debug return x+y => sw9000
-//        if (true){
-//            Util.arrayCopyNonAtomic(buffer1, (short)0, z, offsetz, (short)buffer1.length);
-//            return (short)buffer1.length;
-//        }
-//        //endbug
-        
-        // debug check FLAG_FAST_MULT_VIA_RSA => return 01 01 01 01 IF MULT
-//        if (FLAG_FAST_MULT_VIA_RSA == true ){
-//            Util.arrayFillNonAtomic(z, (short)0, (short)buffer1.length, (byte)1);
-//            return (short)buffer1.length;
-//        } 
-//        if (FLAG_FAST_MULT_VIA_RSA == false ) {
-//            Util.arrayFillNonAtomic(z, (short)0, (short)buffer1.length, (byte)0xf);
-//            return (short)buffer1.length;
-//        }
-        //endbug
-        
         // ((x+y)^2) => buffer1
         rsa_cipher.doFinal(buffer1, (byte) 0, (short) buffer1.length, buffer1, (short) 0);
-
-//        // debug return (x+y)^2 => SW9000, calcul ok
-//        if (true){
-//          Util.arrayCopyNonAtomic(buffer1, (short)0, z, offsetz, (short)buffer1.length);
-//          return (short)buffer1.length;
-//        }
-//        //endbug
         
         // y^2 => buffer2
         // y is already present in buffer2
@@ -432,7 +393,6 @@ public class Biginteger {
         carry= subtract(buffer1, (short)0, buffer2, (short)0, (short)buffer1.length);
         // todo: carry should be false
         
-        
         // x^2 => buffer2
         // todo: support x^2 precomputation if reused multiple times
         Util.arrayFillNonAtomic(buffer2, (short) 0, (short) buffer2.length, (byte) 0);
@@ -443,13 +403,6 @@ public class Biginteger {
         // ((x+y)^2) - y^2 - x^2 => buffer1
         carry= subtract(buffer1, (short)0, buffer2, (short)0, (short)buffer1.length);
         // todo: carry should be false
-        
-//        // debug return (x+y)^2 - y^2 - x^2 => OK!
-//        if (true){
-//            Util.arrayCopyNonAtomic(buffer1, (short)0, z, offsetz, (short)buffer1.length);
-//            return (short)buffer1.length;
-//        }
-//        //endbug
         
         // we now have 2xy in buffer1, divide it by 2 => shift by one bit and fill back into z
         short res = 0;
@@ -466,7 +419,6 @@ public class Biginteger {
         z[offsetz]= (byte)res;
         return (short)buffer1.length;
         
-        // return SW90000 and calcul correct!
         // todo: optimization: for 32bytes mult, bytes 0 to 31 (out of 96) should be 0 => skip computations?
     }    
     
