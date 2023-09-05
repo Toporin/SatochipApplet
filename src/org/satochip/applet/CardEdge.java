@@ -377,6 +377,7 @@ public class CardEdge extends javacard.framework.Applet {
      *             Schnorr signatures            *
      *********************************************/
     
+    private ECPrivateKey taproot_tweakedkey; // object storing last tweaked key used
     // BIP0340/aux offset 0, length 11
     // BIP0340/nonce offset 11, length 13
     // BIP0340/challenge offset 24, length 17
@@ -573,10 +574,11 @@ public class CardEdge extends javacard.framework.Applet {
         // BIP32 material
         bip32_masterkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
         bip32_masterchaincode= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
-        bip32_extendedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
         bip32_encryptkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
         randomData.generateData(recvBuffer, (short) 0, (short)16);
         bip32_encryptkey.setKey(recvBuffer, (short)0);
+        bip32_extendedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+        //Secp256k1.setCommonCurveParameters(bip32_extendedkey); => done in setup() as it must be performed after each reset_to_factory!
         
         // private key array
         eckeys = new Key[MAX_NUM_KEYS];
@@ -586,6 +588,8 @@ public class CardEdge extends javacard.framework.Applet {
         transactionData= new byte[OFFSET_TRANSACTION_SIZE];
         
         // Schnorr signatures
+        taproot_tweakedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+        //Secp256k1.setCommonCurveParameters(taproot_tweakedkey); => done in setup() as it must be performed after each reset_to_factory!
         // initialize Biginteger static data (required for Schnorr signatures)
         Biginteger.init();
         
@@ -998,16 +1002,10 @@ public class CardEdge extends javacard.framework.Applet {
             
         // bip32 material
         bip32_seeded= false;
-        bip32_master_compbyte=0x04;
-//        bip32_masterkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
-//        bip32_masterchaincode= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
-//        bip32_encryptkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
-//        // object containing the current extended key
-//        bip32_extendedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);        
+        bip32_master_compbyte=0x04;     
         Secp256k1.setCommonCurveParameters(bip32_extendedkey);
-        // key used to recover public key from private TODO: remove?
-        //bip32_pubkey= (ECPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, LENGTH_EC_FP_256, false);
-        //Secp256k1.setCommonCurveParameters(bip32_pubkey);
+        // taproot tweaked privkey
+        Secp256k1.setCommonCurveParameters(taproot_tweakedkey);
                 
         // parse options
         option_flags=0;
@@ -1089,9 +1087,12 @@ public class CardEdge extends javacard.framework.Applet {
         key_2FA.clearKey();
         Util.arrayFillNonAtomic(data2FA, (short)0,(short)data2FA.length, (byte)0);
         
-        //seed
+        //seed & BIP32 data
         resetSeed();
         
+        //taproot
+        taproot_tweakedkey.clearKey();
+
         // private keys
         if (tmpkey != null){tmpkey.clearKey();}    
         for (byte nb_key=0; nb_key<MAX_NUM_KEYS; nb_key++){
@@ -1118,7 +1119,9 @@ public class CardEdge extends javacard.framework.Applet {
         bip32_seeded= false;
         bip32_masterkey.clearKey(); 
         bip32_masterchaincode.clearKey();
-        
+        bip32_extendedkey.clearKey();
+
+
         // reset trusted pubkey (for secure import from SeedKeeper)
         if (is_trusted_pubkey) {
             is_trusted_pubkey = false;
@@ -2475,6 +2478,8 @@ public class CardEdge extends javacard.framework.Applet {
      * The tweaked key is then stored in the same keyslot and available next for signing.
      * The function returns the corresponding public key coordx, self-signed
      * 
+     * TODO: allows to bypass tweaking by providing empty tweak?
+     * 
      * ins: 0x7C
      * p1: key number or 0xFF for the last derived Bip32 extended key  
      * p2: 0x00 
@@ -2488,10 +2493,9 @@ public class CardEdge extends javacard.framework.Applet {
         if (!pins[0].isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
-        // currently, we only supports BIP keys, not single private keys
-        // todo!
+        // P1 defines which privkey is used to derive Taproot tweaked privkey 
         byte key_nb = buffer[ISO7816.OFFSET_P1];
-        if ( (key_nb!=(byte)0xFF))
+        if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
             ISOException.throwIt(SW_INCORRECT_P1);
 
         // check whether the seed is initialized
@@ -2505,9 +2509,20 @@ public class CardEdge extends javacard.framework.Applet {
         if (buffer[ISO7816.OFFSET_CDATA] != (byte)32)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 
-        // 
+        // get privkey from either bip32 derivation or single privkey
         ECPrivateKey privkey;
-        privkey = bip32_extendedkey; 
+        if (key_nb==(byte)0xFF)
+            privkey = bip32_extendedkey;
+        else{
+            privkey= (ECPrivateKey) eckeys[key_nb];
+            // check type and size
+            if ((privkey == null) || !privkey.isInitialized())
+                ISOException.throwIt(SW_INCORRECT_P1);
+            if (privkey.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
+                ISOException.throwIt(SW_INCORRECT_ALG);     
+            if (privkey.getSize()!= LENGTH_EC_FP_256)
+                ISOException.throwIt(SW_INCORRECT_ALG);
+        } 
 
         // compute pubkey corresponding to private key
         keyAgreement.init((ECPrivateKey)privkey);
@@ -2528,13 +2543,6 @@ public class CardEdge extends javacard.framework.Applet {
         if(!Biginteger.lessThan(recvBuffer, (short)65, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32)){
             ISOException.throwIt(SW_TAPROOT_TWEAK_ERROR);
         }
-
-        /*
-        // debug: print pubkey+taggedHash
-        Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)0, (short)97);
-        return (short)97;
-        //endbug
-        */
 
         //seckey = seckey0 if has_even_y(P) else SECP256K1_ORDER - seckey0
         short seckeyOffset = (short) 97;
@@ -2560,16 +2568,16 @@ public class CardEdge extends javacard.framework.Applet {
         }
 
         // save tweaked secret key 
-        // todo: use a different variable to avoid mixing ECDSA and Schnorr signatures?
-        privkey.setS(recvBuffer, seckeyOffset, (short)32);
+        // we use a different ECPrivateKey 'taproot_tweakedkey' to avoid mixing ECDSA and Schnorr signatures
+        taproot_tweakedkey.setS(recvBuffer, seckeyOffset, (short)32);
         // clear privkey from buffer
         Util.arrayFillNonAtomic(recvBuffer, seckeyOffset, (short)64, (byte)0x00);
 
-        // return pubkey with signature
-        // https://bitcoin.stackexchange.com/questions/107924/are-there-risks-to-using-the-same-private-key-for-both-ecdsa-and-schnorr-signatu
+        // return tweaked pubkey with authentikey signature
         // As a precaution, we should avoid to use ECDSA signature with tweakedkey...
+        // https://bitcoin.stackexchange.com/questions/107924/are-there-risks-to-using-the-same-private-key-for-both-ecdsa-and-schnorr-signatu
         // format: [pubkey_size(2b) | uncompressed_pubkey(65b) |  sig_size(2b) | sig_authentikey]
-        keyAgreement.init((ECPrivateKey)privkey);
+        keyAgreement.init(taproot_tweakedkey);
         short pubkey_size = keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)2); //pubkey in uncompressed form (65bytes)
         buffer_offset = (short) 0;
         Util.setShort(buffer, buffer_offset, pubkey_size);
@@ -2584,11 +2592,14 @@ public class CardEdge extends javacard.framework.Applet {
     }
 
     /**
-     * This function signs a given hash with a std or the last extended key
+     * This function signs a given hash with a std or the last Taproot tweaked key
      * If 2FA is enabled, a HMAC must be provided as an additional security layer. 
      * 
+     * Before using this method to sign a tx hash, a tweaked privkey must be derived 
+     * from a (BIP32 or simple) privkey using TaprootTweakPrivateKey().
+     * 
      * ins: 0x7B
-     * p1: key number or 0xFF for the last derived Bip32 extended key  
+     * p1: 0x00  
      * p2: 0x00
      * data: [hash(32b) | option: 2FA-flag(2b)|hmac(20b)]
      * 
@@ -2601,17 +2612,9 @@ public class CardEdge extends javacard.framework.Applet {
         if (!pins[0].isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
-        byte key_nb = buffer[ISO7816.OFFSET_P1];
-        if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
-            ISOException.throwIt(SW_INCORRECT_P1);
-        
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         if (bytesLeft<MessageDigest.LENGTH_SHA_256)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        
-        // check whether the seed is initialized
-        if (key_nb==(byte)0xFF && !bip32_seeded)
-            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
         
         // check 2FA if required
         if(needs_2FA){
@@ -2629,21 +2632,7 @@ public class CardEdge extends javacard.framework.Applet {
             if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20)!=0)
                 ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
-        
-        // get privkey
-        ECPrivateKey privkey;
-        if (key_nb==(byte)0xFF)
-            privkey = bip32_extendedkey;
-        else{
-            privkey= (ECPrivateKey) eckeys[key_nb];
-            // check type and size
-            if ((privkey == null) || !privkey.isInitialized())
-                ISOException.throwIt(SW_INCORRECT_P1);
-            if (privkey.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
-                ISOException.throwIt(SW_INCORRECT_ALG);     
-            if (privkey.getSize()!= LENGTH_EC_FP_256)
-                ISOException.throwIt(SW_INCORRECT_ALG);
-        }
+
         // generate randomness
         randomData.generateData(recvBuffer, OFFSET_BIP340_aux, (short)32);
         
@@ -2651,26 +2640,26 @@ public class CardEdge extends javacard.framework.Applet {
         //public static byte[] sk0= {}; //0000000000000000000000000000000000000000000000000000000000000003
         //public static byte[] m0= {}; //0000000000000000000000000000000000000000000000000000000000000000
         //public static byte[] aux= {}; //0000000000000000000000000000000000000000000000000000000000000000
-//        Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP340_sk, (short)32, (byte)0);
-//        recvBuffer[(short)(OFFSET_BIP340_sk + 31)]= (byte)0x03;
-//        privkey.setS(recvBuffer, OFFSET_BIP340_sk, (short)32);
-//        Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP340_aux, (short)32, (byte)0);
+        //Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP340_sk, (short)32, (byte)0);
+        //recvBuffer[(short)(OFFSET_BIP340_sk + 31)]= (byte)0x03;
+        //taproot_tweakedkey.setS(recvBuffer, OFFSET_BIP340_sk, (short)32);
+        //Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP340_aux, (short)32, (byte)0);
         // ENDBUG
         
         // copy message hash to buffer
         Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, recvBuffer, OFFSET_BIP340_m, (short)32);
         // compute the corresponding partial public key...
-        keyAgreement.init((ECPrivateKey)privkey);
+        keyAgreement.init(taproot_tweakedkey);
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)31); //pubkey in uncompressed form (65bytes) 
         // we leave 32 bytes before coordx for reuse in next steps
         // check evenness
         if (buffer[31+64]%2 == 0){
             // d= sk
             //Util.arrayCopyNonAtomic(sk, (short)0, d, (short)0, (short)32);
-            privkey.getS(recvBuffer, OFFSET_BIP340_d);
+            taproot_tweakedkey.getS(recvBuffer, OFFSET_BIP340_d);
         } else {
             // d= n-sk
-            privkey.getS(recvBuffer, OFFSET_BIP340_sk);
+            taproot_tweakedkey.getS(recvBuffer, OFFSET_BIP340_sk);
             Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, OFFSET_BIP340_d, (short)32);
             Biginteger.subtract(recvBuffer, OFFSET_BIP340_d, recvBuffer, OFFSET_BIP340_sk, (short)32);
         }
@@ -2692,8 +2681,8 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt((short)0x7778);
         }
         // todo: rand = rand % n
-        privkey.setS(recvBuffer, OFFSET_BIP340_t, (short)32);
-        keyAgreement.init((ECPrivateKey)privkey);
+        taproot_tweakedkey.setS(recvBuffer, OFFSET_BIP340_t, (short)32);
+        keyAgreement.init(taproot_tweakedkey);
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form (65bytes) 
         // check evenness
         if (tmpBuffer[64]%2 == 0){
@@ -2725,7 +2714,7 @@ public class CardEdge extends javacard.framework.Applet {
         // bytes(R) is already in buffer[0..<32]
         Util.arrayCopyNonAtomic(Biginteger.buffer1, (short)64, buffer, (short)32, (short)32);
        
-        // clean buffers like a good boy
+        // clean buffers
         Util.arrayFillNonAtomic(buffer, (short)64, (short)32, (byte)0);
         Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)256, (byte)0);
         Util.arrayFillNonAtomic(tmpBuffer, (short)0, (short)65, (byte)0);
