@@ -206,6 +206,7 @@ public class Biginteger {
     public static boolean lessThan(byte[] x, short offsetx, byte[] y, short offsety, short size) {
         
         short xs, ys;
+        //TODO: make it time-constant!
         for(short i = offsetx, j=offsety; i < (short)(offsetx+size); i++, j++) {
             xs= (short)(x[i] & digit_mask);
             ys= (short)(y[j] & digit_mask);
