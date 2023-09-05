@@ -235,7 +235,7 @@ public class Biginteger {
     * returns true if x is equal to 0, false otherwise
     */
     public static boolean equalZero(byte[] x, short offsetx, short size) {
-        
+        // todo: make it time constant!
         for(short i = offsetx; i < (short)(offsetx+size); i++) {
             if(x[i] != 0) return false;
         }
@@ -275,6 +275,7 @@ public class Biginteger {
      * For a Biginteger bi of given size stored in a given byte array at given offset, 
      * the function returns the least significant byte lsb if (bi==lsb) or Ox00ff otherwise*/
     public static short getLSB(byte[] x, short offsetx, short size) {
+        // todo: make it time constant!
         for (short i= offsetx; i<(short)(offsetx+size-1); i++){
             if (x[i]!=0)
                 return (short)0xff;
@@ -293,7 +294,7 @@ public class Biginteger {
     // VarInt
     /* Encode a short into Bitcoin's VarInt format and return number of byte set */
     public static short encodeShortToVarInt(short value, byte[] buffer, short offset) {
-        
+        // todo: make it time constant?
         //if (value<((short)253)) { // signed comparison!!
         if (Biginteger.isStrictlyLessThanUnsigned(value,(short)253)){
             buffer[offset]=(byte)(value & 0xFF);
@@ -308,6 +309,7 @@ public class Biginteger {
     
     /* Encode a 4-byte int into Bitcoin's VarInt format and return number of byte set */
     public static short encodeVarInt(byte[] src, short src_offset, byte[] dst, short dst_offset) {
+        // todo: make it time constant?
         if (src[src_offset]!=0 | 
             src[(short)(src_offset+1)]!=0){ // 4-bytes integer
             dst[dst_offset]= (byte)0xfe;
@@ -672,6 +674,7 @@ public class Biginteger {
      *         {@link #double_digit_len} for {@code x == 0}.
      */
     private static short highest_bit(short x) {
+        // todo: make it time constant!
         for (short i = 0; i < double_digit_len; i++) {
             if (x < 0) {
                 return i;
@@ -728,21 +731,22 @@ public class Biginteger {
          return high;
      }
     
-     /**
-      * Return the number of leading zeroes (if any) from Biginteger value 
-      */
-     public static short shrink(byte[] x, short offsetx, short sizex) {
-         short i = 0;
-         for (i = 0; i < sizex; i++) { // Find first non-zero byte
-             if (x[(short)(offsetx+i)] != (byte)0) {
-                 break;
-             }
-         }
+    /**
+     * Return the number of leading zeroes (if any) from Biginteger value 
+     */
+    public static short shrink(byte[] x, short offsetx, short sizex) {
+        // todo: make it time constant!
+        short i = 0;
+        for (i = 0; i < sizex; i++) { // Find first non-zero byte
+            if (x[(short)(offsetx+i)] != (byte)0) {
+                break;
+            }
+        }
 
-         // return number of zero elements that can be skipped
-         // new_offset will be offset+i, new_size is size-i
-         return i; 
-     }
+        // return number of zero elements that can be skipped
+        // new_offset will be offset+i, new_size is size-i
+        return i; 
+    }
      
     /**
      * Scaled comparison. Compares this number with {@code other * 2^(}
