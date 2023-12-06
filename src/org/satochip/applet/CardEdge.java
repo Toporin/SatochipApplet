@@ -103,10 +103,11 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.12-0.3: SeedKeeper support: label & labelsize no longer required 
     // 0.12-0.4: add reset to factory support
     // 0.12-0.5: add support for personalisation PKI
+    // 0.12-0.6: patch spurious select issue
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 12;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-    private final static byte APPLET_MINOR_VERSION = (byte) 5;
+    private final static byte APPLET_MINOR_VERSION = (byte) 6;
 
     // Maximum number of keys handled by the Cardlet
     private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -613,7 +614,8 @@ public class CardEdge extends javacard.framework.Applet {
         byte[] buffer = apdu.getBuffer();
         // check SELECT APDU command
         if ((buffer[ISO7816.OFFSET_CLA] == 0) && (buffer[ISO7816.OFFSET_INS] == (byte) 0xA4))
-            return;
+            ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND); // spurious select (see https://github.com/Toporin/SatochipApplet/issues/11)
+
         // verify the rest of commands have the
         // correct CLA byte, which specifies the
         // command structure
