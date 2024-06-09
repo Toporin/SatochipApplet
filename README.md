@@ -62,9 +62,42 @@ Available for purchase [here](https://www.motechno.com/product/j3d081-dual-inter
 
 You can build the javacard CAP files or use the lastest [built version](https://github.com/Toporin/SatochipApplet/releases).
 
-To generate the CAP file from the sources, you can use the Eclipse IDE with the [ant-javacard](https://github.com/martinpaljak/ant-javacard) Ant task (see the instruction on the ant-javacard github repository).
+To generate the CAP file from the sources, you can use the [ant-javacard](https://github.com/martinpaljak/ant-javacard) Ant task (see the instruction on the ant-javacard github repository).
 
-# Install
+
+## Building on Ubuntu
+
+* Clone Satochip applet repository:
+```
+git clone https://github.com/Toporin/SatochipApplet.git
+```
+
+* Download Ant-Javacard [latest release](https://github.com/martinpaljak/ant-javacard) in the `lib` folder:
+```
+https://github.com/martinpaljak/ant-javacard/releases/latest/download/ant-javacard.jar
+```
+
+* Install [Apache Ant](https://ant.apache.org/srcdownload.cgi):
+```
+sudo apt install ant
+```
+
+* Use/install [recommended](https://github.com/martinpaljak/ant-javacard/wiki/JavaCard-SDK-and-JDK-version-compatibility) java JDK 8 or 17
+```
+sudo update-alternatives --config java
+```
+
+* Download javacard SDK into satochip project in `sdks` folder:
+```
+git submodule add https://github.com/martinpaljak/oracle_javacard_sdks sdks
+```
+
+* run ant:
+```ant```
+
+The .cap file should build in the SatochipApplet folder.
+
+# load applet into card
 
 Once you have a CAP file, you have to download it on the chip card. You can use [GlobalPlatformPro](https://github.com/martinpaljak/GlobalPlatformPro) to do this:
 
@@ -73,6 +106,7 @@ Once you have a CAP file, you have to download it on the chip card. You can use 
 - To list the applets loaded on a smartcard: `gp.exe -l`
 - To load the SatoChip applet: `gp.exe -install .\SatoChip-0.12-05.cap`
 - To delete the SatoChip applet: `gp.exe -uninstall .\SatoChip-0.12-05.cap`
+- You can also use the gp.jar library: `java -jar gp.jar -install .\SatoChip-0.12-05.cap`
 
 A more detailed tutorial is available on the GlobalPlatformPro [repository](https://github.com/martinpaljak/GlobalPlatformPro).
 
