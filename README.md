@@ -82,7 +82,7 @@ https://github.com/martinpaljak/ant-javacard/releases/latest/download/ant-javaca
 sudo apt install ant
 ```
 
-* Use/install [recommended](https://github.com/martinpaljak/ant-javacard/wiki/JavaCard-SDK-and-JDK-version-compatibility) java JDK 8 or 17
+* Use/install [recommended](https://github.com/martinpaljak/ant-javacard/wiki/JavaCard-SDK-and-JDK-version-compatibility) java JDK 8 or 11
 ```
 sudo update-alternatives --config java
 ```
