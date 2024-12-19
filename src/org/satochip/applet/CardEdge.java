@@ -104,10 +104,11 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.12-0.4: add reset to factory support
     // 0.12-0.5: add support for personalisation PKI
     // 0.14-0.1: add Schnorr signature support (beta)
+    // 0.14-0.2: Schnorr signature - add option to bypass key tweaking (beta)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 14;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-    private final static byte APPLET_MINOR_VERSION = (byte) 1;
+    private final static byte APPLET_MINOR_VERSION = (byte) 2;
 
     // Maximum number of keys handled by the Cardlet
     private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -2475,14 +2476,14 @@ public class CardEdge extends javacard.framework.Applet {
      * A private key must first be available, either from a keyslot or 
      * derived from a BIP32 seed using getBIP32ExtendedKey().
      * 
-     * The tweaked key is then stored in the same keyslot and available next for signing.
+     * The tweaked key is then stored in a dedicated keyslot and available next for schnorr signing.
      * The function returns the corresponding public key coordx, self-signed
      * 
-     * TODO: allows to bypass tweaking by providing empty tweak?
+     * If P2 parameter is not 0x00, the tweaking is bypassed.
      * 
      * ins: 0x7C
      * p1: key number or 0xFF for the last derived Bip32 extended key  
-     * p2: 0x00 
+     * p2: 0x00 for key tweak, 0x01 to bypass tweak
      * data: [tweak_size (1b) | tweak data (32b)]
      * 
      * return: [coordx_size(2b) | coordx | sig_size(2b) | authentikey_sig]
@@ -2498,16 +2499,12 @@ public class CardEdge extends javacard.framework.Applet {
         if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
             ISOException.throwIt(SW_INCORRECT_P1);
 
+        // P2 can be used to bypass tweaking and copy private as is
+        byte p2 = buffer[ISO7816.OFFSET_P2];
+
         // check whether the seed is initialized
         if (key_nb==(byte)0xFF && !bip32_seeded)
             ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
-
-        // tweak vector should be exactly 32bytes, thus 33 bytes in total
-        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-        if (bytesLeft< (byte)33)
-            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        if (buffer[ISO7816.OFFSET_CDATA] != (byte)32)
-            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 
         // get privkey from either bip32 derivation or single privkey
         ECPrivateKey privkey;
@@ -2524,47 +2521,65 @@ public class CardEdge extends javacard.framework.Applet {
                 ISOException.throwIt(SW_INCORRECT_ALG);
         } 
 
-        // compute pubkey corresponding to private key
-        keyAgreement.init((ECPrivateKey)privkey);
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65bytes)
+        short seckeyOffset;
+        short buffer_offset;
+        if (p2==(byte)0x00){ 
 
-        // xor pubkey coordx with tweak vector
-        short recvBuffer_offset = (short)0x1;
-        short buffer_offset = (short)(ISO7816.OFFSET_CDATA+1);
-        short i;
-        for (i = (short)0; i < (short)32; i++){
-            recvBuffer[(short)(recvBuffer_offset+i)] = (byte) (recvBuffer[(short)(recvBuffer_offset+i)] ^ buffer[(short)(buffer_offset+i)]);
-        }
+            // tweak vector should be exactly 32bytes, thus 33 bytes in total
+            short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+            if (bytesLeft< (byte)33)
+                ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+            if (buffer[ISO7816.OFFSET_CDATA] != (byte)32)
+                ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 
-        // compute tagged hash
-        // t = int_from_bytes(tagged_hash("TapTweak", bytes_from_int(x(P)) + h))
-        schnorr_hash_tag(tags, (short)41, (short)8, recvBuffer, recvBuffer_offset, (short)32, recvBuffer, (short)65);
-        // fails if t >= SECP256K1_ORDER (low probability)
-        if(!Biginteger.lessThan(recvBuffer, (short)65, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32)){
-            ISOException.throwIt(SW_TAPROOT_TWEAK_ERROR);
-        }
 
-        //seckey = seckey0 if has_even_y(P) else SECP256K1_ORDER - seckey0
-        short seckeyOffset = (short) 97;
-        if ( (recvBuffer[(byte)64] % 0x02) == 0x00) {
-            privkey.getS(recvBuffer, seckeyOffset);
-        } else {
-            privkey.getS(recvBuffer, (short)129);
-            // copy SECP256K1_ORDER
-            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, seckeyOffset, (short)32);
-            // SECP256K1_ORDER - seckey0
-            Biginteger.subtract(recvBuffer, seckeyOffset, recvBuffer, (short)129, (short) 32);
-        }
+            // compute pubkey corresponding to private key
+            keyAgreement.init((ECPrivateKey)privkey);
+            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65bytes)
 
-        // compute ((seckey + t) % SECP256K1_ORDER)
-        if (Biginteger.add_carry(recvBuffer, seckeyOffset, recvBuffer, (short)65, (short) 32)){
-            // in case of final carry, we must substract SECP256K1_R
-            Biginteger.subtract(recvBuffer, seckeyOffset, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32); 
-        } else {
-            // in the unlikely case where SECP256K1_R <= (seckey + t) <2^256
-            if(!Biginteger.lessThan(recvBuffer, seckeyOffset, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32)){
-                Biginteger.subtract(recvBuffer, seckeyOffset, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
+            // xor pubkey coordx with tweak vector
+            short recvBuffer_offset = (short)0x1;
+            buffer_offset = (short)(ISO7816.OFFSET_CDATA+1);
+            short i;
+            for (i = (short)0; i < (short)32; i++){
+                recvBuffer[(short)(recvBuffer_offset+i)] = (byte) (recvBuffer[(short)(recvBuffer_offset+i)] ^ buffer[(short)(buffer_offset+i)]);
             }
+
+            // compute tagged hash
+            // t = int_from_bytes(tagged_hash("TapTweak", bytes_from_int(x(P)) + h))
+            schnorr_hash_tag(tags, (short)41, (short)8, recvBuffer, recvBuffer_offset, (short)32, recvBuffer, (short)65);
+            // fails if t >= SECP256K1_ORDER (low probability)
+            if(!Biginteger.lessThan(recvBuffer, (short)65, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32)){
+                ISOException.throwIt(SW_TAPROOT_TWEAK_ERROR);
+            }
+
+            //seckey = seckey0 if has_even_y(P) else SECP256K1_ORDER - seckey0
+            seckeyOffset = (short) 97;
+            if ( (recvBuffer[(byte)64] % 0x02) == 0x00) {
+                privkey.getS(recvBuffer, seckeyOffset);
+            } else {
+                privkey.getS(recvBuffer, (short)129);
+                // copy SECP256K1_ORDER
+                Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, seckeyOffset, (short)32);
+                // SECP256K1_ORDER - seckey0
+                Biginteger.subtract(recvBuffer, seckeyOffset, recvBuffer, (short)129, (short) 32);
+            }
+
+            // compute ((seckey + t) % SECP256K1_ORDER)
+            if (Biginteger.add_carry(recvBuffer, seckeyOffset, recvBuffer, (short)65, (short) 32)){
+                // in case of final carry, we must substract SECP256K1_R
+                Biginteger.subtract(recvBuffer, seckeyOffset, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32); 
+            } else {
+                // in the unlikely case where SECP256K1_R <= (seckey + t) <2^256
+                if(!Biginteger.lessThan(recvBuffer, seckeyOffset, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32)){
+                    Biginteger.subtract(recvBuffer, seckeyOffset, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
+                }
+            } 
+
+        } else {
+            // just copy privkey as is
+            seckeyOffset = (short) 97;
+            privkey.getS(recvBuffer, seckeyOffset);
         }
 
         // save tweaked secret key 
