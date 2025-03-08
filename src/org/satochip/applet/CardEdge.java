@@ -105,10 +105,11 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.12-0.5: add support for personalisation PKI
     // 0.14-0.1: add Schnorr signature support (beta)
     // 0.14-0.2: Schnorr signature - add option to bypass key tweaking (beta)
+    // 0.14-0.3: (wip) add Liquid-Bitcoin support
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 14;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-    private final static byte APPLET_MINOR_VERSION = (byte) 2;
+    private final static byte APPLET_MINOR_VERSION = (byte) 3;
 
     // Maximum number of keys handled by the Cardlet
     private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -170,7 +171,10 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte INS_SIGN_TRANSACTION_HASH= (byte) 0x7A;
     private final static byte INS_TAPROOT_TWEAK_PRIVKEY= (byte) 0x7C;
     private final static byte INS_SIGN_SCHNORR_HASH= (byte) 0x7B;
-    
+
+    // Bitcoin-Liquid support for confidential transactions
+    private final static byte INS_BIP32_GET_LIQUID_MASTER_BLINDING_KEY = (byte) 0x7D;
+
     // secure channel
     private final static byte INS_INIT_SECURE_CHANNEL = (byte) 0x81;
     private final static byte INS_PROCESS_SECURE_CHANNEL = (byte) 0x82;
@@ -343,7 +347,12 @@ public class CardEdge extends javacard.framework.Applet {
     // seed derivation
     private static final byte[] BITCOIN_SEED = {'B','i','t','c','o','i','n',' ','s','e','e','d'};
     private static final byte MAX_BIP32_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
-    
+
+    // Liquid-Bitcoin Master Blinding Key derivation constant
+    private static final byte[] SLIP21_DOMAIN = {'S','y','m','m','e','t','r','i','c',' ','k','e','y',' ','s','e','e','d'};
+    private static final byte[] SLIP77_LABEL = {0x00,'S','L','I','P','-','0','0','7','7'};
+    private byte[] liquid_master_blinding_key;
+
     // BIP32_object= [ hash(address) (4b) | extended_key (32b) | chain_code (32b) | compression_byte(1b)]
     // recvBuffer=[ parent_chain_code (32b) | 0x00 | parent_key (32b) | hash(address) (32b) | current_extended_key(32b) | current_chain_code(32b) ]
     // hash(address)= [ index(4b) | unused (28-4b) | ANTICOLLISIONHASH(4b)]
@@ -580,7 +589,10 @@ public class CardEdge extends javacard.framework.Applet {
         bip32_encryptkey.setKey(recvBuffer, (short)0);
         bip32_extendedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
         //Secp256k1.setCommonCurveParameters(bip32_extendedkey); => done in setup() as it must be performed after each reset_to_factory!
-        
+
+        // Liquid-Bitcoin Master Binding Key from slip77
+        liquid_master_blinding_key = new byte[(short)32];
+
         // private key array
         eckeys = new Key[MAX_NUM_KEYS];
         
@@ -785,6 +797,9 @@ public class CardEdge extends javacard.framework.Applet {
             break;
         case INS_BIP32_SET_EXTENDED_PUBKEY:
             sizeout= setBIP32ExtendedPubkey(apdu, buffer);
+            break;
+        case INS_BIP32_GET_LIQUID_MASTER_BLINDING_KEY:
+            sizeout= getBIP32LiquidMasterBlindingKey(apdu, buffer);
             break;
         case INS_SIGN_MESSAGE:  
             sizeout= signMessage(apdu, buffer);
@@ -1122,6 +1137,8 @@ public class CardEdge extends javacard.framework.Applet {
         bip32_masterchaincode.clearKey();
         bip32_extendedkey.clearKey();
 
+        // reset Liquid-Bitcoin Master Blinding Key (as it is derived from the seed)
+        Util.arrayFillNonAtomic(liquid_master_blinding_key, (short)0, (short)32, (byte)0x00);
 
         // reset trusted pubkey (for secure import from SeedKeeper)
         if (is_trusted_pubkey) {
@@ -1714,7 +1731,12 @@ public class CardEdge extends javacard.framework.Applet {
         HmacSha512.computeHmacSha512(BITCOIN_SEED, (short)0, (short)BITCOIN_SEED.length, buffer, offset, (short)bip32_seedsize, recvBuffer, (short)0);
         bip32_masterkey.setKey(recvBuffer, (short)0); // data must be exactly 32 bytes long
         bip32_masterchaincode.setKey(recvBuffer, (short)32); // data must be exactly 32 bytes long
-        
+
+        // derive liquid-bitcoin Master Blinding Key using SLIP-77
+        HmacSha512.computeHmacSha512(SLIP21_DOMAIN, (short)0, (short)SLIP21_DOMAIN.length, buffer, offset, (short)bip32_seedsize, recvBuffer, (short)0);
+        HmacSha512.computeHmacSha512(recvBuffer, (short)0, (short)32, SLIP77_LABEL, (short)0, (short)SLIP77_LABEL.length, recvBuffer, (short)0);
+        Util.arrayCopyNonAtomic(recvBuffer, (short)32, liquid_master_blinding_key, (short)0, (short)32);
+
         // bip32 is now seeded
         bip32_seeded= true;
         
@@ -1739,6 +1761,7 @@ public class CardEdge extends javacard.framework.Applet {
     /**
      * This function resets the Bip32 seed and all derived keys: the master key, chain code, authentikey 
      * and the 32-bit AES key that is used to encrypt/decrypt Bip32 object stored in secure memory.
+     * The Liquid-Bitcoin Master Blinding Key is also reset.
      * If 2FA is enabled, then a hmac code must be provided, based on the 4-byte counter-2FA.
      *  
      *  ins: 0x77
@@ -2091,7 +2114,45 @@ public class CardEdge extends javacard.framework.Applet {
         pos += (short) 2;
         return pos;
     }// end of setBIP32ExtendedPubkey
-    
+
+    /**
+     * This function returns the Master Blinding Key used in Liquid-Bitcoin for confidential transactions
+     *
+     * The master blinding key is derived from the seed, and is itself used to derive deterministic blinding keys for each address derivation path.
+     * For each blinded output, the wallet must know the corresponding blinding key/s in order to unblind the asset type and amount.
+     *
+     * Master Blinding Key derivation is based on https://github.com/satoshilabs/slips/blob/master/slip-0077.md
+     *
+     * ins: 0x7D
+     * p1: RFU
+     * p2: RFU
+     * data: []
+     *
+     * returns: [blinding_key_size(2b) | blinding_key | sig_size(2b) | authentikey_sig]
+     */
+    private short getBIP32LiquidMasterBlindingKey(APDU apdu, byte[] buffer){
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+
+        // check whether the seed is seed is initialized
+        if (!bip32_seeded)
+            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
+
+        // copy precomputed Liquid Master Blinding Key
+        short buffer_offset = (short) 0;
+        Util.setShort(buffer, buffer_offset, (short)32);
+        buffer_offset += (short) 2;
+        Util.arrayCopyNonAtomic(liquid_master_blinding_key, (short) 0, buffer, (short) 2, (short) 32);
+        buffer_offset += (short) 32;
+        // sign with authentikey
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
+        short sign_size = sigECDSA.sign(buffer, (short) 0, buffer_offset, buffer, (short) (buffer_offset + 2));
+        Util.setShort(buffer, buffer_offset, sign_size);
+        buffer_offset += (short) (2 + sign_size);
+        return buffer_offset;
+    }
+
     /**
      * This function signs Bitcoin message using std or Bip32 extended key
      *
@@ -3007,102 +3068,102 @@ public class CardEdge extends javacard.framework.Applet {
      * data: [ header(12b - without label & labelsize) | IV(16b) | encrypted_secret_size(2b) | encrypted_secret | hmac_size(1b) | hmac(20b)] 
      * return: (see importBip32Seed() )
      */
-    private short importBIP32EncryptedSeed(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
-        // if already seeded, must call resetBIP32Seed first!
-        if (bip32_seeded)
-            ISOException.throwIt(SW_BIP32_INITIALIZED_SEED);
-        if (!is_trusted_pubkey)
-            ISOException.throwIt(SW_SECURE_IMPORT_NO_TRUSTEDPUBKEY);
-
-        short bytes_left = Util.makeShort((byte) 0x00,
-                buffer[ISO7816.OFFSET_LC]);
-        short buffer_offset = ISO7816.OFFSET_CDATA;
-        short data_size = (short) 0;
-        short dec_size = (short) 0;
-
-        if (bytes_left < SECRET_HEADER_SIZE)
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-
-        byte type = buffer[buffer_offset];
-        if (type != 0x10)
-            ISOException.throwIt(SW_INVALID_PARAMETER);// can only import a masterseed (16-64bytes random)
-        buffer_offset += SECRET_HEADER_SIZE;
-        bytes_left -= SECRET_HEADER_SIZE;
-//        short label_size = Util.makeShort((byte) 0x00, buffer[buffer_offset]);
-//        if (label_size > MAX_LABEL_SIZE)
+//    private short importBIP32EncryptedSeed(APDU apdu, byte[] buffer) {
+//        // check that PIN[0] has been entered previously
+//        if (!pins[0].isValidated())
+//            ISOException.throwIt(SW_UNAUTHORIZED);
+//        // if already seeded, must call resetBIP32Seed first!
+//        if (bip32_seeded)
+//            ISOException.throwIt(SW_BIP32_INITIALIZED_SEED);
+//        if (!is_trusted_pubkey)
+//            ISOException.throwIt(SW_SECURE_IMPORT_NO_TRUSTEDPUBKEY);
+//
+//        short bytes_left = Util.makeShort((byte) 0x00,
+//                buffer[ISO7816.OFFSET_LC]);
+//        short buffer_offset = ISO7816.OFFSET_CDATA;
+//        short data_size = (short) 0;
+//        short dec_size = (short) 0;
+//
+//        if (bytes_left < SECRET_HEADER_SIZE)
 //            ISOException.throwIt(SW_INVALID_PARAMETER);
-//        buffer_offset++;
+//
+//        byte type = buffer[buffer_offset];
+//        if (type != 0x10)
+//            ISOException.throwIt(SW_INVALID_PARAMETER);// can only import a masterseed (16-64bytes random)
+//        buffer_offset += SECRET_HEADER_SIZE;
 //        bytes_left -= SECRET_HEADER_SIZE;
-//        if (bytes_left < label_size)
+////        short label_size = Util.makeShort((byte) 0x00, buffer[buffer_offset]);
+////        if (label_size > MAX_LABEL_SIZE)
+////            ISOException.throwIt(SW_INVALID_PARAMETER);
+////        buffer_offset++;
+////        bytes_left -= SECRET_HEADER_SIZE;
+////        if (bytes_left < label_size)
+////            ISOException.throwIt(SW_INVALID_PARAMETER);
+////        buffer_offset += label_size;
+////        bytes_left -= label_size;
+//
+//        // hash header for mac
+//        sha256.reset();
+//        sha256.update(buffer, ISO7816.OFFSET_CDATA, (short) (SECRET_HEADER_SIZE));
+//
+//        // compute shared static key
+//        if (bytes_left < SIZE_SC_IV)// IV
 //            ISOException.throwIt(SW_INVALID_PARAMETER);
-//        buffer_offset += label_size;
-//        bytes_left -= label_size;
-
-        // hash header for mac
-        sha256.reset();
-        sha256.update(buffer, ISO7816.OFFSET_CDATA, (short) (SECRET_HEADER_SIZE));
-
-        // compute shared static key
-        if (bytes_left < SIZE_SC_IV)// IV
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        keyAgreement.init(authentikey_private);
-        keyAgreement.generateSecret(trusted_pubkey, (short)0, (short)65, recvBuffer, (short)0); // pubkey in uncompressed form
-        // derive secret_sessionkey & secret_mackey
-        HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)0, (short)6, recvBuffer, (short)33);
-        secret_sc_sessionkey.setKey(recvBuffer, (short)33); // AES-128:
-        // 16-bytes key!!
-        HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)6, (short)6, recvBuffer, (short)33);
-        sc_aes128_cbc.init(secret_sc_sessionkey, Cipher.MODE_DECRYPT, buffer, buffer_offset, SIZE_SC_IV);
-        buffer_offset += SIZE_SC_IV;
-        bytes_left -= SIZE_SC_IV;
-
-        // load the new (sensitive) data
-        data_size = Util.getShort(buffer, buffer_offset);
-        buffer_offset += 2;
-        bytes_left -= 2;
-        if (bytes_left < data_size) {
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        }
-
-        // hash the ciphertext to check hmac
-        sha256.doFinal(buffer, buffer_offset, data_size, recvBuffer, (short) (53));
-        short hmac_offset = (short) (buffer_offset + data_size);
-        bytes_left -= data_size;
-        if (bytes_left < 1)
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        short hmac_size = buffer[hmac_offset];
-        hmac_offset++;
-        bytes_left--;
-        if (hmac_size != (short) 20 || bytes_left < hmac_size) {
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        }
-        short sign_size = HmacSha160.computeHmacSha160(recvBuffer, (short)33, SIZE_SC_MACKEY, recvBuffer, (short)53, (short)32, recvBuffer, (short)85);
-        if (Util.arrayCompare(buffer, hmac_offset, recvBuffer, (short)(85), (short)20) != (byte)0)
-            ISOException.throwIt(SW_SECURE_IMPORT_WRONG_MAC);
-
-        // decrypt secret
-        dec_size = sc_aes128_cbc.update(buffer, buffer_offset, data_size, buffer, buffer_offset);
-        // padding
-        short padsize = buffer[ (short)(buffer_offset+dec_size-1) ];
-        data_size = (short)(dec_size-padsize);
-        // hash for fingerprinting
-        sha256.reset();
-        sha256.doFinal(buffer, buffer_offset, data_size, recvBuffer, (short)0);
-        // compare with fingerprint in header
-        if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA + SECRET_OFFSET_FINGERPRINT), recvBuffer, (short)0, SECRET_FINGERPRINT_SIZE) != (byte)0) {
-            ISOException.throwIt(SW_SECURE_IMPORT_WRONG_FINGERPRINT);
-        }
-
-        // rewrite buffer and call the standard method
-        byte bip32_seedsize = buffer[buffer_offset];
-        buffer[ISO7816.OFFSET_LC] = bip32_seedsize;
-        buffer[ISO7816.OFFSET_P1] = bip32_seedsize;
-        Util.arrayCopyNonAtomic(buffer, (short)(buffer_offset+1), buffer, ISO7816.OFFSET_CDATA, bip32_seedsize);
-        return importBIP32Seed(apdu, buffer);
-    }
+//        keyAgreement.init(authentikey_private);
+//        keyAgreement.generateSecret(trusted_pubkey, (short)0, (short)65, recvBuffer, (short)0); // pubkey in uncompressed form
+//        // derive secret_sessionkey & secret_mackey
+//        HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)0, (short)6, recvBuffer, (short)33);
+//        secret_sc_sessionkey.setKey(recvBuffer, (short)33); // AES-128:
+//        // 16-bytes key!!
+//        HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)6, (short)6, recvBuffer, (short)33);
+//        sc_aes128_cbc.init(secret_sc_sessionkey, Cipher.MODE_DECRYPT, buffer, buffer_offset, SIZE_SC_IV);
+//        buffer_offset += SIZE_SC_IV;
+//        bytes_left -= SIZE_SC_IV;
+//
+//        // load the new (sensitive) data
+//        data_size = Util.getShort(buffer, buffer_offset);
+//        buffer_offset += 2;
+//        bytes_left -= 2;
+//        if (bytes_left < data_size) {
+//            ISOException.throwIt(SW_INVALID_PARAMETER);
+//        }
+//
+//        // hash the ciphertext to check hmac
+//        sha256.doFinal(buffer, buffer_offset, data_size, recvBuffer, (short) (53));
+//        short hmac_offset = (short) (buffer_offset + data_size);
+//        bytes_left -= data_size;
+//        if (bytes_left < 1)
+//            ISOException.throwIt(SW_INVALID_PARAMETER);
+//        short hmac_size = buffer[hmac_offset];
+//        hmac_offset++;
+//        bytes_left--;
+//        if (hmac_size != (short) 20 || bytes_left < hmac_size) {
+//            ISOException.throwIt(SW_INVALID_PARAMETER);
+//        }
+//        short sign_size = HmacSha160.computeHmacSha160(recvBuffer, (short)33, SIZE_SC_MACKEY, recvBuffer, (short)53, (short)32, recvBuffer, (short)85);
+//        if (Util.arrayCompare(buffer, hmac_offset, recvBuffer, (short)(85), (short)20) != (byte)0)
+//            ISOException.throwIt(SW_SECURE_IMPORT_WRONG_MAC);
+//
+//        // decrypt secret
+//        dec_size = sc_aes128_cbc.update(buffer, buffer_offset, data_size, buffer, buffer_offset);
+//        // padding
+//        short padsize = buffer[ (short)(buffer_offset+dec_size-1) ];
+//        data_size = (short)(dec_size-padsize);
+//        // hash for fingerprinting
+//        sha256.reset();
+//        sha256.doFinal(buffer, buffer_offset, data_size, recvBuffer, (short)0);
+//        // compare with fingerprint in header
+//        if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA + SECRET_OFFSET_FINGERPRINT), recvBuffer, (short)0, SECRET_FINGERPRINT_SIZE) != (byte)0) {
+//            ISOException.throwIt(SW_SECURE_IMPORT_WRONG_FINGERPRINT);
+//        }
+//
+//        // rewrite buffer and call the standard method
+//        byte bip32_seedsize = buffer[buffer_offset];
+//        buffer[ISO7816.OFFSET_LC] = bip32_seedsize;
+//        buffer[ISO7816.OFFSET_P1] = bip32_seedsize;
+//        Util.arrayCopyNonAtomic(buffer, (short)(buffer_offset+1), buffer, ISO7816.OFFSET_CDATA, bip32_seedsize);
+//        return importBIP32Seed(apdu, buffer);
+//    }
 
     /**
      * This function imports a secret in encrypted form from a SeedKeeper device.
