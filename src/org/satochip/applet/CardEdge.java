@@ -105,11 +105,12 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.12-0.5: add support for personalisation PKI
     // 0.14-0.1: add Schnorr signature support (beta)
     // 0.14-0.2: Schnorr signature - add option to bypass key tweaking (beta)
-    // 0.14-0.3: (wip) add Liquid-Bitcoin support
+    // 0.14-0.3: add Liquid-Bitcoin support
+    // 0.14-0.4: add NFC policy
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 14;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-    private final static byte APPLET_MINOR_VERSION = (byte) 3;
+    private final static byte APPLET_MINOR_VERSION = (byte) 4;
 
     // Maximum number of keys handled by the Cardlet
     private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -153,6 +154,7 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte INS_LIST_PINS = (byte) 0x48;
     private final static byte INS_GET_STATUS = (byte) 0x3C;
     private final static byte INS_CARD_LABEL = (byte) 0x3D;
+    private final static byte INS_SET_NFC_POLICY = (byte) 0x3E;
     
     // HD wallet
     private final static byte INS_BIP32_IMPORT_SEED= (byte) 0x6C;
@@ -278,6 +280,11 @@ public class CardEdge extends javacard.framework.Applet {
     
     /** PKI perso error */
     private final static short SW_PKI_ALREADY_LOCKED = (short) 0x9C40;
+
+    /** NFC interface disabled **/
+    private final static short SW_NFC_DISABLED = (short) 0x9C48;
+    private final static short SW_NFC_BLOCKED = (short) 0x9C49;
+
     /** CARD HAS BEEN RESET TO FACTORY */
     private final static short SW_RESET_TO_FACTORY = (short) 0xFF00;
     /** For instructions that have been deprecated*/
@@ -499,6 +506,12 @@ public class CardEdge extends javacard.framework.Applet {
     private byte[] reset_array;
     private final static byte MAX_RESET_COUNTER= (byte)5;
     private byte reset_counter=MAX_RESET_COUNTER;
+
+    // NFC
+    private static final byte NFC_ENABLED=0;
+    private static final byte NFC_DISABLED=1; // can be re-enabled at any time
+    private static final byte NFC_BLOCKED=2; // warning: cannot be re-enabled except with reset factory!
+    private byte nfc_policy = NFC_ENABLED; // NFC is enabled by default, can be modified with INS_SET_NFC_POLICY
     
     /****************************************
      * Methods                              *
@@ -617,7 +630,7 @@ public class CardEdge extends javacard.framework.Applet {
         // import from SeedKeeper
         trusted_pubkey = new byte[PUBKEY_SIZE];
         secret_sc_sessionkey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
-        
+
         // debug
         register();
     } // end of constructor
@@ -634,7 +647,16 @@ public class CardEdge extends javacard.framework.Applet {
         
         //todo: clear secure channel values?
         initialized_secure_channel=false;
-        
+
+        // check nfc policy
+        if (nfc_policy == NFC_DISABLED || nfc_policy == NFC_BLOCKED){
+            // check that the contact interface is used
+            byte protocol = (byte) (APDU.getProtocol() & APDU.PROTOCOL_MEDIA_MASK);
+            if (protocol != APDU.PROTOCOL_MEDIA_USB && protocol != APDU.PROTOCOL_MEDIA_DEFAULT) {
+                ISOException.throwIt(SW_NFC_DISABLED);
+            }
+        }
+
         return true;
     }
 
@@ -778,6 +800,9 @@ public class CardEdge extends javacard.framework.Applet {
             break;
         case INS_CARD_LABEL:
             sizeout = cardLabel(apdu, buffer);
+            break;
+        case INS_SET_NFC_POLICY:
+            sizeout= setNfcPolicy(apdu, buffer);
             break;
         // BIP32
         case INS_BIP32_IMPORT_SEED:
@@ -1116,11 +1141,14 @@ public class CardEdge extends javacard.framework.Applet {
                 eckeys[nb_key].clearKey();
         }
         eckeys_flag=(short)0;
-        
+
+        // reset NFC policy to enabled
+        nfc_policy = NFC_ENABLED;
+
         // reset card label
         card_label_size=0;
         Util.arrayFillNonAtomic(card_label, (short)0, (short)card_label.length, (byte)0);
-        
+
         // setup
         pins[0].update(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length);
         setupDone=false;
@@ -1590,7 +1618,7 @@ public class CardEdge extends javacard.framework.Applet {
      *  p1: 0x00 
      *  p2: 0x00 
      *  data: none
-     *  return: [versions(4b) | PIN0-PUK0-PIN1-PUK1 tries (4b) | needs2FA (1b) | is_seeded(1b) | setupDone(1b) | needs_secure_channel(1b)]
+     *  return: [versions(4b) | PIN0-PUK0-PIN1-PUK1 tries (4b) | needs2FA (1b) | is_seeded(1b) | setupDone(1b) | needs_secure_channel(1b) | nfc_policy(1b)]
      */
     private short GetStatus(APDU apdu, byte[] buffer) {
         // check that PIN[0] has been entered previously
@@ -1603,6 +1631,7 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(SW_INCORRECT_P2);
         
         short pos = (short) 0;
+        // applet version
         buffer[pos++] = (byte) PROTOCOL_MAJOR_VERSION; // Major Card Edge Protocol version n.
         buffer[pos++] = (byte) PROTOCOL_MINOR_VERSION; // Minor Card Edge Protocol version n.
         buffer[pos++] = (byte) APPLET_MAJOR_VERSION; // Major Applet version n.
@@ -1619,23 +1648,29 @@ public class CardEdge extends javacard.framework.Applet {
             buffer[pos++] = (byte) 0;
             buffer[pos++] = (byte) 0;
         }
+        // 2FA status
         if (needs_2FA)
             buffer[pos++] = (byte)0x01;
         else
             buffer[pos++] = (byte)0x00;
+        // card is seeded?
         if (bip32_seeded)
             buffer[pos++] = (byte)0x01;
         else
             buffer[pos++] = (byte)0x00;
+        // setup status
         if (setupDone)
             buffer[pos++] = (byte)0x01;
         else
             buffer[pos++] = (byte)0x00;
+        // secure channel
         if (needs_secure_channel)
             buffer[pos++] = (byte)0x01;
         else
             buffer[pos++] = (byte)0x00;
-        
+        // NFC policy
+        buffer[pos++] = nfc_policy;
+
         return pos;
     }
     
@@ -1690,7 +1725,51 @@ public class CardEdge extends javacard.framework.Applet {
         return (short) 0;
     }
 
-    
+    /**
+     * This function enables of disables the NFC interface.
+     * By default, NFC interface is enabled.
+     * NFC access can only be changed through the contact interface.
+     * PIN must be validated to use this function.
+     * NFC access policy is defined with 1 byte:
+     *  - NFC_ENABLED: NFC enabled
+     *  - NFC_DISABLED: NFC disabled but can be reenabled
+     *  - NFC_BLOCKED: NFC disabled and can only be reenable by factory reset!
+     *
+     *
+     *  ins: 0x3E
+     *  p1: NFC access policy
+     *  p2: RFU (set specific permission policies for NFC interface)
+     *  data: (none)
+     *  return: (none)
+     */
+    private short setNfcPolicy(APDU apdu, byte[] buffer){
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+
+        // check that the contact interface is used
+        byte protocol = (byte) (APDU.getProtocol() & APDU.PROTOCOL_MEDIA_MASK);
+        if (protocol != APDU.PROTOCOL_MEDIA_USB && protocol != APDU.PROTOCOL_MEDIA_DEFAULT) {
+            ISOException.throwIt(SW_NFC_DISABLED);
+        }
+
+        // check if status change is allowed
+        // if NFC is blocked, it is not allowed to unblock it, except via factory reset!
+        if (nfc_policy == NFC_BLOCKED)
+            ISOException.throwIt(SW_NFC_BLOCKED);
+
+        // get new NFC status from P1
+        byte nfc_policy_new = buffer[ISO7816.OFFSET_P1];
+        if (nfc_policy_new<0 || nfc_policy_new>2)
+            ISOException.throwIt(SW_INCORRECT_P1);
+
+        // update NFC access policy
+        nfc_policy = nfc_policy_new;
+
+        return (short)0;
+    }
+
+
     /**
      * This function imports a Bip32 seed to the applet and derives the master key and chain code.
      * It also derives a second ECC that uniquely authenticates the HDwallet: the authentikey.
