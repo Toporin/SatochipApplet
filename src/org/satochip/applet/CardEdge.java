@@ -107,10 +107,11 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.2: Schnorr signature - add option to bypass key tweaking (beta)
     // 0.14-0.3: add Liquid-Bitcoin support
     // 0.14-0.4: add NFC policy
+    // 0.14-0.5: add policy to enable/disable various optional features
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 14;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-    private final static byte APPLET_MINOR_VERSION = (byte) 4;
+    private final static byte APPLET_MINOR_VERSION = (byte) 5;
 
     // Maximum number of keys handled by the Cardlet
     private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -155,6 +156,7 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte INS_GET_STATUS = (byte) 0x3C;
     private final static byte INS_CARD_LABEL = (byte) 0x3D;
     private final static byte INS_SET_NFC_POLICY = (byte) 0x3E;
+    private final static byte INS_SET_FEATURE_POLICY = (byte) 0x3A;
     
     // HD wallet
     private final static byte INS_BIP32_IMPORT_SEED= (byte) 0x6C;
@@ -284,6 +286,9 @@ public class CardEdge extends javacard.framework.Applet {
     /** NFC interface disabled **/
     private final static short SW_NFC_DISABLED = (short) 0x9C48;
     private final static short SW_NFC_BLOCKED = (short) 0x9C49;
+    /** Optional functionality disabled **/
+    private final static short SW_FEATURE_DISABLED = (short) 0x9C4A;
+    private final static short SW_FEATURE_BLOCKED = (short) 0x9C4B;
 
     /** CARD HAS BEEN RESET TO FACTORY */
     private final static short SW_RESET_TO_FACTORY = (short) 0xFF00;
@@ -507,12 +512,22 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte MAX_RESET_COUNTER= (byte)5;
     private byte reset_counter=MAX_RESET_COUNTER;
 
-    // NFC
+    // NFC policy
     private static final byte NFC_ENABLED=0;
     private static final byte NFC_DISABLED=1; // can be re-enabled at any time
     private static final byte NFC_BLOCKED=2; // warning: cannot be re-enabled except with reset factory!
     private byte nfc_policy = NFC_ENABLED; // NFC is enabled by default, can be modified with INS_SET_NFC_POLICY
-    
+    // Feature policy
+    private static final byte FEATURE_ENABLED=0;
+    private static final byte FEATURE_DISABLED=1; // can be re-enabled at any time
+    private static final byte FEATURE_BLOCKED=2; // warning: cannot be re-enabled except with reset factory!
+    private static final byte FEATURE_ID_SCHNORR=0;
+    private static final byte FEATURE_ID_NOSTR=1;
+    private static final byte FEATURE_ID_LIQUID=2;
+    private byte feature_schnorr_policy = FEATURE_ENABLED; // schnorr signature
+    private byte feature_nostr_policy = FEATURE_ENABLED; // nostr event signing
+    private byte feature_liquid_policy = FEATURE_ENABLED; // Liquid-Bitcoin
+
     /****************************************
      * Methods                              *
      ****************************************/
@@ -803,6 +818,9 @@ public class CardEdge extends javacard.framework.Applet {
             break;
         case INS_SET_NFC_POLICY:
             sizeout= setNfcPolicy(apdu, buffer);
+            break;
+        case INS_SET_FEATURE_POLICY:
+            sizeout= setFeaturePolicy(apdu, buffer);
             break;
         // BIP32
         case INS_BIP32_IMPORT_SEED:
@@ -1144,6 +1162,11 @@ public class CardEdge extends javacard.framework.Applet {
 
         // reset NFC policy to enabled
         nfc_policy = NFC_ENABLED;
+
+        // reset optional features to default
+        feature_schnorr_policy = FEATURE_ENABLED;
+        feature_nostr_policy = FEATURE_ENABLED;
+        feature_liquid_policy = FEATURE_ENABLED;
 
         // reset card label
         card_label_size=0;
@@ -1618,7 +1641,9 @@ public class CardEdge extends javacard.framework.Applet {
      *  p1: 0x00 
      *  p2: 0x00 
      *  data: none
-     *  return: [versions(4b) | PIN0-PUK0-PIN1-PUK1 tries (4b) | needs2FA (1b) | is_seeded(1b) | setupDone(1b) | needs_secure_channel(1b) | nfc_policy(1b)]
+     *  return: [versions(4b) | PIN0-PUK0-PIN1-PUK1 tries (4b) |
+     *           needs2FA (1b) | is_seeded(1b) | setupDone(1b) | needs_secure_channel(1b) |
+     *           nfc_policy(1b) | taproot_policy(1b) | nostr_policy(1b) | liquid_policy(1b)]
      */
     private short GetStatus(APDU apdu, byte[] buffer) {
         // check that PIN[0] has been entered previously
@@ -1648,28 +1673,32 @@ public class CardEdge extends javacard.framework.Applet {
             buffer[pos++] = (byte) 0;
             buffer[pos++] = (byte) 0;
         }
-        // 2FA status
+        // 2FA status (offset 8)
         if (needs_2FA)
             buffer[pos++] = (byte)0x01;
         else
             buffer[pos++] = (byte)0x00;
-        // card is seeded?
+        // card is seeded? (offset 9)
         if (bip32_seeded)
             buffer[pos++] = (byte)0x01;
         else
             buffer[pos++] = (byte)0x00;
-        // setup status
+        // setup status (offset 10)
         if (setupDone)
             buffer[pos++] = (byte)0x01;
         else
             buffer[pos++] = (byte)0x00;
-        // secure channel
+        // secure channel  (offset 11)
         if (needs_secure_channel)
             buffer[pos++] = (byte)0x01;
         else
             buffer[pos++] = (byte)0x00;
-        // NFC policy
+        // NFC policy (offset 12)
         buffer[pos++] = nfc_policy;
+        // Optional features policy (offset 13-15)
+        buffer[pos++] = feature_schnorr_policy;
+        buffer[pos++] = feature_nostr_policy;
+        buffer[pos++] = feature_liquid_policy;
 
         return pos;
     }
@@ -1726,7 +1755,7 @@ public class CardEdge extends javacard.framework.Applet {
     }
 
     /**
-     * This function enables of disables the NFC interface.
+     * This function enables or disables the NFC interface.
      * By default, NFC interface is enabled.
      * NFC access can only be changed through the contact interface.
      * PIN must be validated to use this function.
@@ -1769,6 +1798,55 @@ public class CardEdge extends javacard.framework.Applet {
         return (short)0;
     }
 
+    /**
+     * This function enables or disables optional features.
+     * PIN must be validated to use this function.
+     * For each optional feature, policy is defined with 1 byte:
+     *  - FEATURE_ENABLED: feature is enabled
+     *  - FEATURE_DISABLED: feature is disabled but can be reenabled
+     *  - FEATURE_BLOCKED: feature is disabled and can only be reenable by factory reset!
+     *
+     *  ins: 0x3A
+     *  p1: id of the specific feature targeted
+     *  p2: feature access policy
+     *  data: (none)
+     *  return: (none)
+     */
+    private short setFeaturePolicy(APDU apdu, byte[] buffer){
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+
+        // get the feature id from P1
+        byte feature_id = buffer[ISO7816.OFFSET_P1];
+        // get the feature new policy from P2
+        byte feature_policy = buffer[ISO7816.OFFSET_P2];
+        if (feature_policy<FEATURE_ENABLED || feature_policy>FEATURE_BLOCKED)
+            ISOException.throwIt(SW_INCORRECT_P2);
+
+        switch (feature_id) {
+            case FEATURE_ID_SCHNORR:
+                // check if status change is allowed
+                // if feature is blocked, it is not allowed to unblock it, except via factory reset!
+                if (feature_schnorr_policy == FEATURE_BLOCKED)
+                    ISOException.throwIt(SW_FEATURE_BLOCKED);
+                // update policy
+                feature_schnorr_policy = feature_policy;
+                break;
+            case FEATURE_ID_NOSTR:
+                if (feature_nostr_policy == FEATURE_BLOCKED)
+                    ISOException.throwIt(SW_FEATURE_BLOCKED);
+                feature_nostr_policy = feature_policy;
+                break;
+            case FEATURE_ID_LIQUID:
+                if (feature_liquid_policy == FEATURE_BLOCKED)
+                    ISOException.throwIt(SW_FEATURE_BLOCKED);
+                feature_liquid_policy = feature_policy;
+                break;
+        }// end switch
+
+        return (short)0;
+    }
 
     /**
      * This function imports a Bip32 seed to the applet and derives the master key and chain code.
@@ -2217,6 +2295,10 @@ public class CardEdge extends javacard.framework.Applet {
         // check whether the seed is seed is initialized
         if (!bip32_seeded)
             ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
+
+        // check that feature is enabled
+        if (feature_liquid_policy != FEATURE_ENABLED)
+            ISOException.throwIt(SW_FEATURE_DISABLED);
 
         // copy precomputed Liquid Master Blinding Key
         short buffer_offset = (short) 0;
@@ -2717,6 +2799,10 @@ public class CardEdge extends javacard.framework.Applet {
             } 
 
         } else {
+            // check that feature is enabled
+            if (feature_nostr_policy != FEATURE_ENABLED)
+                ISOException.throwIt(SW_FEATURE_DISABLED);
+
             // just copy privkey as is
             seckeyOffset = (short) 97;
             privkey.getS(recvBuffer, seckeyOffset);
@@ -2766,7 +2852,11 @@ public class CardEdge extends javacard.framework.Applet {
         // check that PIN[0] has been entered previously
         if (!pins[0].isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
-        
+
+        // check that feature is enabled
+        if (feature_schnorr_policy != FEATURE_ENABLED)
+            ISOException.throwIt(SW_FEATURE_DISABLED);
+
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         if (bytesLeft<MessageDigest.LENGTH_SHA_256)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);

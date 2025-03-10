@@ -8,6 +8,14 @@ Satochip applet full versions follows this format: vX.Y-Z.W where:
 * X.Y refers to the PROTOCOL VERSION: changes that impact compatibility with the client side (e.g new functionalities, major patch...)
 * Z.W refers to changes with no impact on compatibility of the client (e.g minor patches, optimizations...)
 
+## [0.14-0.5]
+
+* Add policy to enable/disable various optional features
+  * Features can be enabled, disabled or blocked through apdu command (INS 0x3A)
+  * Current features: Schnorr signatures, Nostr event signing (bypass key tweak required by Taproot), Liquid-Bitcoin support through Master Blinding Key export
+  * Principle is roughly the same as for NFC policy: a feature can be enabled, disabled or blocked
+  * If a feature is blocked, it can be reenabled only by a factory reset
+
 ## [0.14-0.4]
 
 * Add support for NFC policy:
