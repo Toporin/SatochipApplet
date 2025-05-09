@@ -1,6 +1,6 @@
 /*
  * SatoChip Bitcoin Hardware Wallet based on javacard
- * (c) 2015-2019 by Toporin - 16DMCk4WUaHofchAhpMaQS4UPm4urcy2dN
+ * (c) 2015-2025 by Toporin - 16DMCk4WUaHofchAhpMaQS4UPm4urcy2dN
  * Sources available on https://github.com/Toporin                   
  * Changes include: -Bip32 support
  *                  -simple Bitcoin transaction signatures 
@@ -108,10 +108,11 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.3: add Liquid-Bitcoin support
     // 0.14-0.4: add NFC policy
     // 0.14-0.5: add policy to enable/disable various optional features
+    // 0.15-0.0: add MuSig2 support (beta dev)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
-    private final static byte PROTOCOL_MINOR_VERSION = (byte) 14;
+    private final static byte PROTOCOL_MINOR_VERSION = (byte) 15;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-    private final static byte APPLET_MINOR_VERSION = (byte) 5;
+    private final static byte APPLET_MINOR_VERSION = (byte) 0;
 
     // Maximum number of keys handled by the Cardlet
     private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -165,6 +166,8 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte INS_BIP32_SET_AUTHENTIKEY_PUBKEY= (byte)0x75;
     private final static byte INS_BIP32_GET_EXTENDED_KEY= (byte) 0x6D;
     private final static byte INS_BIP32_SET_EXTENDED_PUBKEY= (byte) 0x74;
+
+    // signatures
     private final static byte INS_SIGN_MESSAGE= (byte) 0x6E;
     private final static byte INS_SIGN_SHORT_MESSAGE= (byte) 0x72;
     private final static byte INS_SIGN_TRANSACTION= (byte) 0x6F;
@@ -175,6 +178,10 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte INS_SIGN_TRANSACTION_HASH= (byte) 0x7A;
     private final static byte INS_TAPROOT_TWEAK_PRIVKEY= (byte) 0x7C;
     private final static byte INS_SIGN_SCHNORR_HASH= (byte) 0x7B;
+
+    private final static byte INS_MUSIG2_GENERATE_NONCE= (byte) 0x7E; // todo
+    private final static byte INS_MUSIG2_SIGN_HASH= (byte) 0x7F;
+
 
     // Bitcoin-Liquid support for confidential transactions
     private final static byte INS_BIP32_GET_LIQUID_MASTER_BLINDING_KEY = (byte) 0x7D;
@@ -320,7 +327,6 @@ public class CardEdge extends javacard.framework.Applet {
     
     // Key objects (allocated on demand)
     private Key[] eckeys;
-    private ECPrivateKey tmpkey;
     short eckeys_flag=0x0000; //flag bit set to 1 when corresponding key is initialised 
     
     // PIN and PUK objects, allocated on demand
@@ -405,6 +411,7 @@ public class CardEdge extends javacard.framework.Applet {
     // BIP0340/challenge offset 24, length 17
     // 'TapTweak' offset 41, length 8
     public static final byte[] tags = {'B','I','P','0','3','4','0','/','a','u','x',  'B','I','P','0','3','4','0','/','n','o','n','c','e',  'B','I','P','0','3','4','0','/','c','h','a','l','l','e','n','g','e', 'T','a','p','T','w','e','a','k'};
+
     // recvBuffer offset values to store intermediate values
     public static final short OFFSET_BIP340_sk= (short)0;
     public static final short OFFSET_BIP340_m= (short)32;
@@ -414,7 +421,20 @@ public class CardEdge extends javacard.framework.Applet {
     public static final short OFFSET_BIP340_e= (short)160;
     public static final short OFFSET_BIP340_d= (short) 192;
     public static final short OFFSET_BIP340_k= (short) 224;
-    
+
+    /*********************************************
+     *              MuSig2 signatures            *
+     *********************************************/
+    // MuSig/aux offset 0, length 9
+    // MuSig/nonce offset 9, length 11
+    public static final byte[] TAGS_MUSIG2 = {'M','u','S','i','g','/','a','u','x',  'M','u','S','i','g','/','n','o','n','c','e'};
+
+    // recvBuffer offset values to store intermediate values
+    public static final short OFFSET_BIP327_RAND_HASH= (short)32;
+    public static final short OFFSET_BIP327_PK= (short)33;
+    public static final short OFFSET_BIP327_K1= (short)177; // bytes 0->176 are used to store the nonce to hash
+    public static final short OFFSET_BIP327_K2= (short)209;
+
     /*********************************************
      *               PKI objects                 *
      *********************************************/
@@ -475,9 +495,10 @@ public class CardEdge extends javacard.framework.Applet {
     
     // secure channel
     private static final byte[] CST_SC = {'s','c','_','k','e','y', 's','c','_','m','a','c'};
-    private boolean needs_secure_channel= true;
-    private boolean initialized_secure_channel= false;
-    private ECPrivateKey sc_ephemeralkey; 
+    private boolean needs_secure_channel = true;
+    private boolean initialized_secure_channel = false;
+    private ECPrivateKey ephemeral_privkey;
+    private boolean ephemeral_privkey_transient = false;
     private AESKey sc_sessionkey;
     private Cipher sc_aes128_cbc;
     private byte[] sc_buffer;
@@ -529,7 +550,7 @@ public class CardEdge extends javacard.framework.Applet {
     private byte feature_liquid_policy = FEATURE_ENABLED; // Liquid-Bitcoin
 
     /****************************************
-     * Methods                              *
+     *                Methods               *
      ****************************************/
 
     private CardEdge(byte[] bArray, short bOffset, byte bLength) {
@@ -593,9 +614,25 @@ public class CardEdge extends javacard.framework.Applet {
         
         // secure channel
         sc_sessionkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false); // todo: make transient?
-        sc_ephemeralkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
-        sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false); 
-                
+        //ephemeral_privkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false); // todo: make transient
+        sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
+
+        try {
+            // save RAM
+            ephemeral_privkey = (ECPrivateKey)KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE_TRANSIENT_DESELECT, LENGTH_EC_FP_256, false);
+            ephemeral_privkey_transient = true;
+        } catch(CryptoException e) {
+            try {
+                // save a bit less RAM
+                ephemeral_privkey = (ECPrivateKey)KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE_TRANSIENT_RESET, LENGTH_EC_FP_256, false);
+                ephemeral_privkey_transient = true;
+            } catch(CryptoException e1) {
+                // let's test the flash wear leveling \o/
+                ephemeral_privkey = (ECPrivateKey)KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+                Secp256k1.setCommonCurveParameters(ephemeral_privkey);
+            }
+        }
+
         // perso PKI: generate public/private keypair
         authentikey_private= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
         Secp256k1.setCommonCurveParameters(authentikey_private);
@@ -844,6 +881,7 @@ public class CardEdge extends javacard.framework.Applet {
         case INS_BIP32_GET_LIQUID_MASTER_BLINDING_KEY:
             sizeout= getBIP32LiquidMasterBlindingKey(apdu, buffer);
             break;
+        // Signatures
         case INS_SIGN_MESSAGE:  
             sizeout= signMessage(apdu, buffer);
             break;
@@ -865,6 +903,13 @@ public class CardEdge extends javacard.framework.Applet {
             break;
         case INS_PARSE_TRANSACTION:
             sizeout= ParseTransaction(apdu, buffer);
+            break;
+        // MuSig2
+        case INS_MUSIG2_GENERATE_NONCE:
+            sizeout= Musig2GenerateNonce(apdu, buffer);
+            break;
+        case INS_MUSIG2_SIGN_HASH:
+            sizeout= Musig2SignHash(apdu, buffer);
             break;
         // 2FA
         case INS_SET_2FA_KEY:
@@ -1153,7 +1198,6 @@ public class CardEdge extends javacard.framework.Applet {
         taproot_tweakedkey.clearKey();
 
         // private keys
-        if (tmpkey != null){tmpkey.clearKey();}    
         for (byte nb_key=0; nb_key<MAX_NUM_KEYS; nb_key++){
             if (eckeys[nb_key] != null)
                 eckeys[nb_key].clearKey();
@@ -1200,8 +1244,8 @@ public class CardEdge extends javacard.framework.Applet {
     }
     
     /****************************************
-     * APDU handlers *
-     ****************************************/  
+     *              APDU handlers           *
+     ****************************************/
     
     /** 
      * This function allows the import of a private ECkey into the card.
@@ -1277,13 +1321,14 @@ public class CardEdge extends javacard.framework.Applet {
         if(needs_2FA){
             if (bytesLeft<(short)(blob_size+20))
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-            // we may have to create the tmpkey
-            if (tmpkey == null)
-                tmpkey = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+            // use ephemeral key to check key
+            if (ephemeral_privkey_transient) {
+                Secp256k1.setCommonCurveParameters(ephemeral_privkey); // should have been done during secure channel initialization
+            }
             // set from secret value
-            tmpkey.setS(buffer, dataOffset, blob_size);
+            ephemeral_privkey.setS(buffer, dataOffset, blob_size);
             // compute the corresponding partial public key...
-            keyAgreement.init(tmpkey);
+            keyAgreement.init(ephemeral_privkey);
             keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65b)
             // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x10^key_nb)-padding)
             Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte)(0x10^key_nb));
@@ -2688,7 +2733,10 @@ public class CardEdge extends javacard.framework.Applet {
         short sign_size= sigECDSA.signPreComputedHash(buffer, ISO7816.OFFSET_CDATA, MessageDigest.LENGTH_SHA_256, buffer, (short)0);
         return sign_size;
     }
-    
+
+    /****************************************
+     *            Schnorr signatures        *
+     ****************************************/
 
     /**
      * This function generates a tweaked private keys, as used in Bitcoin taproot (TapTweak). 
@@ -2971,6 +3019,7 @@ public class CardEdge extends javacard.framework.Applet {
     }
     
     // BIP0340 hashtag function for Schnorr signatures
+    // This function uses tmpBuffer for intermediate results, hence it should not be used for msg buffer.
     public short schnorr_hash_tag(
             byte[] tag, short tag_offset, short tag_length,
             byte[] msg, short msg_offset, short msg_length, 
@@ -2983,7 +3032,261 @@ public class CardEdge extends javacard.framework.Applet {
         sha256.doFinal(tmpBuffer, (short)0, (short)(64+msg_length), dst, dst_offset);
         return (short)32;
     }
-    
+
+    /****************************************
+     *               MuSig2 support         *
+     ****************************************/
+
+    /**
+     * This function generates a secure nonce as used in MuSig2.
+     * See https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki
+     *
+     * A private key must first be available, either from a keyslot or
+     * derived from a BIP32 seed using getBIP32ExtendedKey().
+     *
+     * The function returns the corresponding public nonce (pubnonce).
+     * The secret nonce secnonce is stored for use in the signing phase.
+     *
+
+     *
+     * ins: 0x7E
+     * p1: key number or 0xFF for the last derived Bip32 extended key
+     * p2: RFU
+     * data: [aggpk_size(1b) | aggpk | msg_size (1b) | msg | extra_size(1b) | extra_bytes]
+     *
+     * return: [pubnonce_size(2b) | pubnonce1 | pubnonce_size(2b) | pubnonce2 | sig_size(2b) | authentikey_sig]
+     */
+    private short Musig2GenerateNonce(APDU apdu, byte[] buffer) {
+
+        // test vector
+        // https://github.com/bitcoin/bips/blob/master/bip-0327/vectors/nonce_gen_vectors.json
+//        "rand_": "0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F",
+//        "sk": "0202020202020202020202020202020202020202020202020202020202020202",
+//        "pk": "024D4B6CD1361032CA9BD2AEB9D900AA4D45D9EAD80AC9423374C451A7254D0766",
+//        "aggpk": "0707070707070707070707070707070707070707070707070707070707070707",
+//        "msg": "0101010101010101010101010101010101010101010101010101010101010101",
+//        "extra_in": "0808080808080808080808080808080808080808080808080808080808080808",
+//        "expected_secnonce": "B114E502BEAA4E301DD08A50264172C84E41650E6CB726B410C0694D59EFFB6495B5CAF28D045B973D63E3C99A44B807BDE375FD6CB39E46DC4A511708D0E9D2024D4B6CD1361032CA9BD2AEB9D900AA4D45D9EAD80AC9423374C451A7254D0766",
+//        "expected_pubnonce": "02F7BE7089E8376EB355272368766B17E88E7DB72047D05E56AA881EA52B3B35DF02C29C8046FDD0DED4C7E55869137200FBDBFE2EB654267B6D7013602CAED3115A"
+
+/*        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+
+        // P1 defines which privkey is used
+        byte key_nb = buffer[ISO7816.OFFSET_P1];
+        if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
+            ISOException.throwIt(SW_INCORRECT_P1);
+
+        // check whether the seed is initialized
+        if (key_nb==(byte)0xFF && !bip32_seeded)
+            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
+
+        // get privkey from either bip32 derivation or single privkey
+        ECPrivateKey privkey;
+        if (key_nb==(byte)0xFF)
+            privkey = bip32_extendedkey;
+        else{
+            privkey= (ECPrivateKey) eckeys[key_nb];
+            // check type and size
+            if ((privkey == null) || !privkey.isInitialized())
+                ISOException.throwIt(SW_INCORRECT_P1);
+            if (privkey.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
+                ISOException.throwIt(SW_INCORRECT_ALG);
+            if (privkey.getSize()!= LENGTH_EC_FP_256)
+                ISOException.throwIt(SW_INCORRECT_ALG);
+        }*/
+
+        // generate 32-byte randomness (rand')
+        randomData.generateData(recvBuffer,(short)0, (short)32);
+        // DEBUG: using test vector "rand_": "0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F"
+        Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)32, (byte)0x0F);
+
+        // hash randomness
+        schnorr_hash_tag(TAGS_MUSIG2, (short)0, (short)9, recvBuffer, (short)0, (short)32, recvBuffer, OFFSET_BIP327_RAND_HASH);
+
+        // copy privkey (sk) in buffer
+        //privkey.getS(recvBuffer,(short)0);
+
+        // DEBUG HARDCODED privkey "sk": "0202020202020202020202020202020202020202020202020202020202020202",
+        Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)32, (byte)0x02);
+        if (ephemeral_privkey_transient) {
+            Secp256k1.setCommonCurveParameters(ephemeral_privkey);
+        }
+        ephemeral_privkey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE);
+        ECPrivateKey privkey = ephemeral_privkey;
+        // ENDBUG
+
+        // xor privkey with randomness
+        // rand = sk ^ hash_MuSig/aux(rand')
+        short i;
+        for (i = (short)0; i < (short)32; i++){
+            recvBuffer[i] = (byte)(recvBuffer[i] ^ recvBuffer[(short)(OFFSET_BIP327_RAND_HASH+i)]);
+        }
+
+        // compute pubkey pk and append to buffer
+        short recvOffset = 32;
+        recvBuffer[recvOffset++] = (byte)33; // size_pk
+        keyAgreement.init(privkey);
+        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, OFFSET_BIP327_PK); //pubkey in uncompressed form (65bytes)
+        // compute compression byte
+        if (recvBuffer[(short)(OFFSET_BIP327_PK+64)]%2 == 0){
+            recvBuffer[OFFSET_BIP327_PK] = (byte)0x02;
+        } else {
+            recvBuffer[OFFSET_BIP327_PK] = (byte)0x03;
+        }
+        recvOffset+=33;
+
+        // get data from incoming apdu
+        short buffer_offset = ISO7816.OFFSET_CDATA;
+        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+
+        // parse aggpk
+        if (bytesLeft<1)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        byte aggpk_size = buffer[buffer_offset++];
+        bytesLeft--;
+        if (aggpk_size!=0 && aggpk_size!=32)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        if (bytesLeft<aggpk_size)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        recvBuffer[recvOffset++] = aggpk_size;
+        Util.arrayCopyNonAtomic(buffer, buffer_offset, recvBuffer, recvOffset, (short)aggpk_size);
+        recvOffset+=aggpk_size;
+        buffer_offset+=aggpk_size;
+        bytesLeft-=aggpk_size;
+
+        // parse m
+        if (bytesLeft<1)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        byte m_size = buffer[buffer_offset++];
+        bytesLeft--;
+        if (bytesLeft<m_size)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        if (m_size<0x00) {
+            // 0xff is interpreted as "no message provided", which is not the same as a message of size 0
+            recvBuffer[recvOffset++] = 0x00;
+        } else if (m_size==0x00){
+            recvBuffer[recvOffset++] = 0x01;
+            Util.arrayFillNonAtomic(recvBuffer, recvOffset, (short)8, (byte)0x00);
+            recvOffset+=8;
+        } else if (m_size>0){
+            // note: we suppose message is max 32 bytes...
+            if (m_size>32)
+                ISOException.throwIt(SW_INVALID_PARAMETER);
+            recvBuffer[recvOffset++] = 0x01;
+            Util.arrayFillNonAtomic(recvBuffer, recvOffset, (short)7, (byte)0x00);
+            recvOffset+=7;
+            recvBuffer[recvOffset++] = m_size; // most significant byte first
+            Util.arrayCopyNonAtomic(buffer, buffer_offset, recvBuffer, recvOffset, (short)m_size);
+            recvOffset+=m_size;
+            buffer_offset+=m_size;
+            bytesLeft-=m_size;
+        }
+
+        // param extra_in
+        if (bytesLeft<1)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        byte extra_size = buffer[buffer_offset++];
+        bytesLeft--;
+        if (bytesLeft<extra_size)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        // note: we suppose extra_in is max 32 bytes...
+        if (extra_size<0 || extra_size>32)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        Util.arrayFillNonAtomic(recvBuffer, recvOffset, (short)3, (byte)0x00);
+        recvOffset+=3;
+        recvBuffer[recvOffset++] = extra_size; // most significant byte first
+        Util.arrayCopyNonAtomic(buffer, buffer_offset, recvBuffer, recvOffset, (short)extra_size);
+        recvOffset+=extra_size;
+        buffer_offset+=extra_size;
+        bytesLeft-=extra_size;
+
+        // compute k1
+        recvBuffer[recvOffset] = (byte) 0x00;
+
+        // DEBUG: return buffer before hashing:
+//        recvOffset++;
+//        Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)0, recvOffset);
+//        return recvOffset;
+
+        schnorr_hash_tag(TAGS_MUSIG2, (short)9, (short)11, recvBuffer, (short)0, (short)(recvOffset+1), recvBuffer, OFFSET_BIP327_K1);
+        // compute k2
+        recvBuffer[recvOffset] = (byte) 0x01;
+        schnorr_hash_tag(TAGS_MUSIG2, (short)9, (short)11, recvBuffer, (short)0, (short)(recvOffset+1), recvBuffer, OFFSET_BIP327_K2);
+        // todo: check not null (very low probability?)
+
+        // DEBUG: return buffer after hashing:
+//        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_K1, buffer, (short)0, (short)64);
+//        return 64;
+
+        // compute R1
+        buffer_offset = 0x00;
+        if (ephemeral_privkey_transient) {
+            Secp256k1.setCommonCurveParameters(ephemeral_privkey);
+        }
+        ephemeral_privkey.setS(recvBuffer, OFFSET_BIP327_K1, BIP32_KEY_SIZE);
+        keyAgreement.init(ephemeral_privkey);
+        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)0); //pubkey in uncompressed form (65bytes)
+        // compute compression byte
+        if (buffer[64]%2 == 0){
+            buffer[0] = (byte)0x02;
+        } else {
+            buffer[0] = (byte)0x03;
+        }
+
+        // compute R2
+        buffer_offset = (short)33;
+        ephemeral_privkey.setS(recvBuffer, OFFSET_BIP327_K2, BIP32_KEY_SIZE);
+        keyAgreement.init(ephemeral_privkey);
+        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, buffer_offset); //pubkey in uncompressed form (65bytes)
+        // compute compression byte
+        if (buffer[(short)(buffer_offset+64)]%2 == 0){
+            buffer[buffer_offset] = (byte)0x02;
+        } else {
+            buffer[buffer_offset] = (byte)0x03;
+        }
+        buffer_offset+=33;
+
+        // compute pk (again)
+
+        // DEBUG HARDCODED privkey "sk": "0202020202020202020202020202020202020202020202020202020202020202",
+        Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)32, (byte)0x02);
+        if (ephemeral_privkey_transient) {
+            Secp256k1.setCommonCurveParameters(ephemeral_privkey);
+        }
+        ephemeral_privkey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE);
+        privkey = ephemeral_privkey;
+        // ENDBUG
+
+        keyAgreement.init(privkey);
+        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, buffer_offset); //pubkey in uncompressed form (65bytes)
+        // compute compression byte
+        if (buffer[(short)(buffer_offset+64)]%2 == 0){
+            buffer[buffer_offset] = (byte)0x02;
+        } else {
+            buffer[buffer_offset] = (byte)0x03;
+        }
+        buffer_offset+=33;
+
+        // copy 64-byte secnonce [k1 | k2]
+        // TODO: encrypt [pk | k1 | k2] using a key only known to the applet
+        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_K1, buffer, buffer_offset, (short)64);
+        buffer_offset+=64;
+
+        return buffer_offset;
+    }
+
+    private short Musig2SignHash(APDU apdu, byte[] buffer) {
+        return 0;
+    }
+
+
+
+    /****************************************
+     *               2FA support            *
+     ****************************************/
+
     /**
      * This function allows to set the 2FA key and enable 2FA.
      * Once activated, 2FA can only be deactivated when the seed is reset.
@@ -3149,9 +3452,13 @@ public class CardEdge extends javacard.framework.Applet {
                 ISOException.throwIt(SW_INCORRECT_P2);    
         } 
         return (short)0;
-    }    
-    
-/**
+    }
+
+    /****************************************
+     *       SeedKeeper secret import       *
+     ****************************************/
+
+    /**
      * This function imports a trusted pubkey corresponding to a SeedKeeper
      * authentikey. When importing an encrypted masterseed from a SeedKeeper,
      * the secret is encrypted using a shared key derived with ECCH using the
@@ -3226,113 +3533,6 @@ public class CardEdge extends javacard.framework.Applet {
         buffer_offset += (short) (2 + sign_size);
         return buffer_offset;
     }
-
-    /**
-     * Deprecated: use importEncryptedSecret() instead.
-     * This function imports a secret in encrypted form from a SeedKeeper device.
-     * 
-     * ins: 0xAC
-     * p1: 0x0 (secure import) 
-     * p2: 0x00 
-     * data: [ header(12b - without label & labelsize) | IV(16b) | encrypted_secret_size(2b) | encrypted_secret | hmac_size(1b) | hmac(20b)] 
-     * return: (see importBip32Seed() )
-     */
-//    private short importBIP32EncryptedSeed(APDU apdu, byte[] buffer) {
-//        // check that PIN[0] has been entered previously
-//        if (!pins[0].isValidated())
-//            ISOException.throwIt(SW_UNAUTHORIZED);
-//        // if already seeded, must call resetBIP32Seed first!
-//        if (bip32_seeded)
-//            ISOException.throwIt(SW_BIP32_INITIALIZED_SEED);
-//        if (!is_trusted_pubkey)
-//            ISOException.throwIt(SW_SECURE_IMPORT_NO_TRUSTEDPUBKEY);
-//
-//        short bytes_left = Util.makeShort((byte) 0x00,
-//                buffer[ISO7816.OFFSET_LC]);
-//        short buffer_offset = ISO7816.OFFSET_CDATA;
-//        short data_size = (short) 0;
-//        short dec_size = (short) 0;
-//
-//        if (bytes_left < SECRET_HEADER_SIZE)
-//            ISOException.throwIt(SW_INVALID_PARAMETER);
-//
-//        byte type = buffer[buffer_offset];
-//        if (type != 0x10)
-//            ISOException.throwIt(SW_INVALID_PARAMETER);// can only import a masterseed (16-64bytes random)
-//        buffer_offset += SECRET_HEADER_SIZE;
-//        bytes_left -= SECRET_HEADER_SIZE;
-////        short label_size = Util.makeShort((byte) 0x00, buffer[buffer_offset]);
-////        if (label_size > MAX_LABEL_SIZE)
-////            ISOException.throwIt(SW_INVALID_PARAMETER);
-////        buffer_offset++;
-////        bytes_left -= SECRET_HEADER_SIZE;
-////        if (bytes_left < label_size)
-////            ISOException.throwIt(SW_INVALID_PARAMETER);
-////        buffer_offset += label_size;
-////        bytes_left -= label_size;
-//
-//        // hash header for mac
-//        sha256.reset();
-//        sha256.update(buffer, ISO7816.OFFSET_CDATA, (short) (SECRET_HEADER_SIZE));
-//
-//        // compute shared static key
-//        if (bytes_left < SIZE_SC_IV)// IV
-//            ISOException.throwIt(SW_INVALID_PARAMETER);
-//        keyAgreement.init(authentikey_private);
-//        keyAgreement.generateSecret(trusted_pubkey, (short)0, (short)65, recvBuffer, (short)0); // pubkey in uncompressed form
-//        // derive secret_sessionkey & secret_mackey
-//        HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)0, (short)6, recvBuffer, (short)33);
-//        secret_sc_sessionkey.setKey(recvBuffer, (short)33); // AES-128:
-//        // 16-bytes key!!
-//        HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)6, (short)6, recvBuffer, (short)33);
-//        sc_aes128_cbc.init(secret_sc_sessionkey, Cipher.MODE_DECRYPT, buffer, buffer_offset, SIZE_SC_IV);
-//        buffer_offset += SIZE_SC_IV;
-//        bytes_left -= SIZE_SC_IV;
-//
-//        // load the new (sensitive) data
-//        data_size = Util.getShort(buffer, buffer_offset);
-//        buffer_offset += 2;
-//        bytes_left -= 2;
-//        if (bytes_left < data_size) {
-//            ISOException.throwIt(SW_INVALID_PARAMETER);
-//        }
-//
-//        // hash the ciphertext to check hmac
-//        sha256.doFinal(buffer, buffer_offset, data_size, recvBuffer, (short) (53));
-//        short hmac_offset = (short) (buffer_offset + data_size);
-//        bytes_left -= data_size;
-//        if (bytes_left < 1)
-//            ISOException.throwIt(SW_INVALID_PARAMETER);
-//        short hmac_size = buffer[hmac_offset];
-//        hmac_offset++;
-//        bytes_left--;
-//        if (hmac_size != (short) 20 || bytes_left < hmac_size) {
-//            ISOException.throwIt(SW_INVALID_PARAMETER);
-//        }
-//        short sign_size = HmacSha160.computeHmacSha160(recvBuffer, (short)33, SIZE_SC_MACKEY, recvBuffer, (short)53, (short)32, recvBuffer, (short)85);
-//        if (Util.arrayCompare(buffer, hmac_offset, recvBuffer, (short)(85), (short)20) != (byte)0)
-//            ISOException.throwIt(SW_SECURE_IMPORT_WRONG_MAC);
-//
-//        // decrypt secret
-//        dec_size = sc_aes128_cbc.update(buffer, buffer_offset, data_size, buffer, buffer_offset);
-//        // padding
-//        short padsize = buffer[ (short)(buffer_offset+dec_size-1) ];
-//        data_size = (short)(dec_size-padsize);
-//        // hash for fingerprinting
-//        sha256.reset();
-//        sha256.doFinal(buffer, buffer_offset, data_size, recvBuffer, (short)0);
-//        // compare with fingerprint in header
-//        if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA + SECRET_OFFSET_FINGERPRINT), recvBuffer, (short)0, SECRET_FINGERPRINT_SIZE) != (byte)0) {
-//            ISOException.throwIt(SW_SECURE_IMPORT_WRONG_FINGERPRINT);
-//        }
-//
-//        // rewrite buffer and call the standard method
-//        byte bip32_seedsize = buffer[buffer_offset];
-//        buffer[ISO7816.OFFSET_LC] = bip32_seedsize;
-//        buffer[ISO7816.OFFSET_P1] = bip32_seedsize;
-//        Util.arrayCopyNonAtomic(buffer, (short)(buffer_offset+1), buffer, ISO7816.OFFSET_CDATA, bip32_seedsize);
-//        return importBIP32Seed(apdu, buffer);
-//    }
 
     /**
      * This function imports a secret in encrypted form from a SeedKeeper device.
@@ -3448,7 +3648,11 @@ public class CardEdge extends javacard.framework.Applet {
         }
         return (short)0;
     }
-    
+
+    /****************************************
+     *               Secure Channel         *
+     ****************************************/
+
     /**
      * This function allows to initiate a Secure Channel
      *  
@@ -3468,13 +3672,16 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(SW_INVALID_PARAMETER);
             
         // generate a new ephemeral key
-        sc_ephemeralkey.clearKey(); //todo: simply generate new random S param instead?
-        Secp256k1.setCommonCurveParameters(sc_ephemeralkey);// keep public params!
+        if (ephemeral_privkey_transient) {
+            Secp256k1.setCommonCurveParameters(ephemeral_privkey);
+        }
+        //ephemeral_privkey.clearKey(); //todo: simply generate new random S param instead?
+        //Secp256k1.setCommonCurveParameters(ephemeral_privkey);// keep public params!
         randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
-        sc_ephemeralkey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE); //random value first
+        ephemeral_privkey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE); //random value first
         
         // compute the shared secret...
-        keyAgreement.init(sc_ephemeralkey);        
+        keyAgreement.init(ephemeral_privkey);
         keyAgreement.generateSecret(buffer, ISO7816.OFFSET_CDATA, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form
         // derive sc_sessionkey & sc_mackey
         HmacSha160.computeHmacSha160(recvBuffer, (short)1, BIP32_KEY_SIZE, CST_SC, (short)6, (short)6, recvBuffer, (short)33);
@@ -3495,7 +3702,7 @@ public class CardEdge extends javacard.framework.Applet {
         // self signed ephemeral pubkey
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
         Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
-        sigECDSA.init(sc_ephemeralkey, Signature.MODE_SIGN);
+        sigECDSA.init(ephemeral_privkey, Signature.MODE_SIGN);
         short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2), buffer, (short)(BIP32_KEY_SIZE+4));
         Util.setShort(buffer, (short)(BIP32_KEY_SIZE+2), sign_size);
         
