@@ -3070,18 +3070,7 @@ public class CardEdge extends javacard.framework.Applet {
      */
     private short Musig2GenerateNonce(APDU apdu, byte[] buffer) {
 
-        // test vector
-        // https://github.com/bitcoin/bips/blob/master/bip-0327/vectors/nonce_gen_vectors.json
-//        "rand_": "0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F",
-//        "sk": "0202020202020202020202020202020202020202020202020202020202020202",
-//        "pk": "024D4B6CD1361032CA9BD2AEB9D900AA4D45D9EAD80AC9423374C451A7254D0766",
-//        "aggpk": "0707070707070707070707070707070707070707070707070707070707070707",
-//        "msg": "0101010101010101010101010101010101010101010101010101010101010101",
-//        "extra_in": "0808080808080808080808080808080808080808080808080808080808080808",
-//        "expected_secnonce": "B114E502BEAA4E301DD08A50264172C84E41650E6CB726B410C0694D59EFFB6495B5CAF28D045B973D63E3C99A44B807BDE375FD6CB39E46DC4A511708D0E9D2024D4B6CD1361032CA9BD2AEB9D900AA4D45D9EAD80AC9423374C451A7254D0766",
-//        "expected_pubnonce": "02F7BE7089E8376EB355272368766B17E88E7DB72047D05E56AA881EA52B3B35DF02C29C8046FDD0DED4C7E55869137200FBDBFE2EB654267B6D7013602CAED3115A"
-
-/*        // check that PIN[0] has been entered previously
+        // check that PIN[0] has been entered previously
         if (!pins[0].isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
@@ -3107,7 +3096,7 @@ public class CardEdge extends javacard.framework.Applet {
                 ISOException.throwIt(SW_INCORRECT_ALG);
             if (privkey.getSize()!= LENGTH_EC_FP_256)
                 ISOException.throwIt(SW_INCORRECT_ALG);
-        }*/
+        }
 
         // generate 32-byte randomness (rand')
         randomData.generateData(recvBuffer,(short)0, (short)32);
@@ -3118,16 +3107,7 @@ public class CardEdge extends javacard.framework.Applet {
         schnorr_hash_tag(TAGS_MUSIG2, (short)0, (short)9, recvBuffer, (short)0, (short)32, recvBuffer, OFFSET_BIP327_RAND_HASH);
 
         // copy privkey (sk) in buffer
-        //privkey.getS(recvBuffer,(short)0);
-
-        // DEBUG HARDCODED privkey "sk": "0202020202020202020202020202020202020202020202020202020202020202",
-        Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)32, (byte)0x02);
-        if (ephemeral_privkey_transient) {
-            Secp256k1.setCommonCurveParameters(ephemeral_privkey);
-        }
-        ephemeral_privkey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE);
-        ECPrivateKey privkey = ephemeral_privkey;
-        // ENDBUG
+        privkey.getS(recvBuffer,(short)0);
 
         // xor privkey with randomness
         // rand = sk ^ hash_MuSig/aux(rand')
@@ -3232,7 +3212,7 @@ public class CardEdge extends javacard.framework.Applet {
 //        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_K1, buffer, (short)0, (short)64);
 //        return 64;
 
-        // pubnonce
+        // save pubnonce in returned buffer
         // compute R1
         buffer_offset = 0x00;
         if (ephemeral_privkey_transient) {
@@ -3261,17 +3241,11 @@ public class CardEdge extends javacard.framework.Applet {
         }
         buffer_offset+=33;
 
+        // copy 64-byte secnonce [k1 | k2]
+        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_K1, buffer, buffer_offset, (short)64);
+        buffer_offset+=64;
+
         // compute pk (again)
-
-        // DEBUG HARDCODED privkey "sk": "0202020202020202020202020202020202020202020202020202020202020202",
-        Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)32, (byte)0x02);
-        if (ephemeral_privkey_transient) {
-            Secp256k1.setCommonCurveParameters(ephemeral_privkey);
-        }
-        ephemeral_privkey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE);
-        privkey = ephemeral_privkey;
-        // ENDBUG
-
         keyAgreement.init(privkey);
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, buffer_offset); //pubkey in uncompressed form (65bytes)
         // compute compression byte
@@ -3282,10 +3256,7 @@ public class CardEdge extends javacard.framework.Applet {
         }
         buffer_offset+=33;
 
-        // copy 64-byte secnonce [k1 | k2]
-        // TODO: encrypt [pk | k1 | k2] using a key only known to the applet
-        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_K1, buffer, buffer_offset, (short)64);
-        buffer_offset+=64;
+        // TODO: encrypt [ k1 | k2 | pk ] using a key only known to the applet
 
         return buffer_offset;
     }
