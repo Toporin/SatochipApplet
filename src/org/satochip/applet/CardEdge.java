@@ -435,6 +435,16 @@ public class CardEdge extends javacard.framework.Applet {
     public static final short OFFSET_BIP327_K1= (short)177; // bytes 0->176 are used to store the nonce to hash
     public static final short OFFSET_BIP327_K2= (short)209;
 
+    // buffer offset for input value to Musig2SignHash()
+    // buffer = [cla, ins, p1, p2, lc] + [b(32b) | ea(32b) | r_has_even_y(1b) | ggacc_is_1(1b) | k1(32b) | k2(32b) | pk(33b)]
+    public static final short OFFSET_BIP327_SIGN_B = ISO7816.OFFSET_CDATA;
+    public static final short OFFSET_BIP327_SIGN_EA = (short)(ISO7816.OFFSET_CDATA+32);
+    public static final short OFFSET_BIP327_SIGN_R_EVENNESS = (short)(ISO7816.OFFSET_CDATA + 64);
+    public static final short OFFSET_BIP327_SIGN_GGAC = (short)(ISO7816.OFFSET_CDATA + 65);
+    public static final short OFFSET_BIP327_SIGN_K1_ = (short)(ISO7816.OFFSET_CDATA + 66);
+    public static final short OFFSET_BIP327_SIGN_K2_ = (short)(ISO7816.OFFSET_CDATA + 98);
+    public static final short OFFSET_BIP327_SIGN_PK = (short)(ISO7816.OFFSET_CDATA + 130);
+
     /*********************************************
      *               PKI objects                 *
      *********************************************/
@@ -3054,7 +3064,9 @@ public class CardEdge extends javacard.framework.Applet {
      * p2: RFU
      * data: [aggpk_size(1b) | aggpk | msg_size (1b) | msg | extra_size(1b) | extra_bytes]
      *
-     * return: [pubnonce_size(2b) | pubnonce1 | pubnonce_size(2b) | pubnonce2 | sig_size(2b) | authentikey_sig]
+     * return: [pubnonce(66b) | secnonce(97b)]
+     * TODO: encrypt secnonce!
+     *
      */
     private short Musig2GenerateNonce(APDU apdu, byte[] buffer) {
 
@@ -3220,6 +3232,7 @@ public class CardEdge extends javacard.framework.Applet {
 //        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_K1, buffer, (short)0, (short)64);
 //        return 64;
 
+        // pubnonce
         // compute R1
         buffer_offset = 0x00;
         if (ephemeral_privkey_transient) {
@@ -3277,10 +3290,192 @@ public class CardEdge extends javacard.framework.Applet {
         return buffer_offset;
     }
 
-    private short Musig2SignHash(APDU apdu, byte[] buffer) {
-        return 0;
-    }
 
+    /**
+     * This function performs partial signature as specified in MuSig2.
+     * See https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki
+     *
+     * A private key must first be available, either from a keyslot or
+     * derived from a BIP32 seed using getBIP32ExtendedKey().
+     *
+     * The function returns the partial psig signature for corresponding key and given secnonce & session context.
+     * The secret nonce secnonce must be generated from the Musig2GenerateNonce().
+     *
+     *
+     * ins: 0x7F
+     * p1: key number or 0xFF for the last derived Bip32 extended key
+     * p2: Init-Finalize
+     *
+     * data (init): [secnonce(128b)]
+     * data (finalize): [b(32b) | e*a(32b) | has_even_y(R) (1b) | g*gacc (1b)]
+     * TODO: use encrypted nonce (and decrypt it)
+     *
+     * return (init): []
+     * return (finalize): [psig(32b)]
+     */
+    private short Musig2SignHash(APDU apdu, byte[] buffer) {
+
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+
+        // get data from incoming apdu
+        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
+
+        byte p2 = buffer[ISO7816.OFFSET_P2];
+        if (p2 == OP_INIT){
+
+            if (bytesLeft<128){
+                ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+            }
+
+            // copy secnonce to recvBuffer for later processing
+            Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, recvBuffer, (short)0, (short)128);
+            // we will validate secnonce in OP_FINALIZE to ensure integrity
+
+            return (short)0;
+        }
+
+        // at this point p2 != OP_INIT, we perform the bulk of signature processing
+        if (bytesLeft<66){
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
+
+        // todo: decrypt secnonce and vaidate integrity
+
+        // append decrypted secnonce to buffer
+        Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, OFFSET_BIP327_SIGN_K1_, (short)97);
+        // at this point, buffer = [cla, ins, p1, p2, lc] + [b(32b) | ea(32b) | r_has_even_y(1b) | ggacc_is_1(1b) | k1(32b) | k2(32b) | pk(33b)]
+
+        // P1 defines which privkey is used
+        byte key_nb = buffer[ISO7816.OFFSET_P1];
+        if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
+            ISOException.throwIt(SW_INCORRECT_P1);
+
+        // check whether the seed is initialized
+        if (key_nb==(byte)0xFF && !bip32_seeded)
+            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
+
+        // get privkey from either bip32 derivation or single privkey
+        ECPrivateKey privkey;
+        if (key_nb==(byte)0xFF)
+            privkey = bip32_extendedkey;
+        else{
+            privkey= (ECPrivateKey) eckeys[key_nb];
+            // check type and size
+            if ((privkey == null) || !privkey.isInitialized())
+                ISOException.throwIt(SW_INCORRECT_P1);
+            if (privkey.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
+                ISOException.throwIt(SW_INCORRECT_ALG);
+            if (privkey.getSize()!= LENGTH_EC_FP_256)
+                ISOException.throwIt(SW_INCORRECT_ALG);
+        }
+
+        // compute pubkey pk from sk
+        keyAgreement.init(privkey);
+        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65bytes)
+        // compute compression byte
+        if (recvBuffer[(short)(64)]%2 == 0){
+            recvBuffer[(short)0] = (byte)0x02;
+        } else {
+            recvBuffer[(short)0] = (byte)0x03;
+        }
+
+        // check pubkey from secnonce match pubkey derived from sk
+        if (0 != Util.arrayCompare(buffer, OFFSET_BIP327_SIGN_PK, recvBuffer, (short)0, (short)33)) {
+            // todo clean up the buffers we used.
+            ISOException.throwIt(ISO7816.SW_WRONG_DATA); // todo: use specific error code
+
+            // DEBUG
+//            Util.arrayCopyNonAtomic(buffer, OFFSET_BIP327_SIGN_PK, buffer, (short)0, (short)33);
+//            Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)33, (short)33);
+//            return (short) 66;
+
+        }
+        // we don't need pk from recvBuffer anymore
+
+        // recover has_even_y(R)
+        boolean r_has_even_y = (buffer[OFFSET_BIP327_SIGN_R_EVENNESS] == 0x00); // even if bit is set to 0, odd otherwise
+
+        // compute k1, k2 from secnonce k1_, k2_
+        if (!r_has_even_y){
+            // R y-coordinate is odd
+            // k1 = n-k1_
+            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, (short)0, (short)32);
+            Biginteger.subtract(recvBuffer, (short)0, buffer, OFFSET_BIP327_SIGN_K1_, (short)32);
+
+            // k2 = n-k2_
+            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, (short)32, (short)32);
+            Biginteger.subtract(recvBuffer, (short)32, buffer, OFFSET_BIP327_SIGN_K2_, (short)32);
+
+            // overwrite k1_, k2_ with k1, k2
+            Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, OFFSET_BIP327_SIGN_K1_, (short)64);
+        }
+
+        // DEBUG return k1,K2
+//        Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)0, (short)64);
+//        return (short)64;
+
+        // compute d = ggacc * d' mod n (negation of the private key according to g*gacc)
+        boolean ggacc_equal_1 = ( buffer[OFFSET_BIP327_SIGN_GGAC]== 0x01);
+        if (!ggacc_equal_1){
+            // g*gacc = -1 => we must negate the private key
+            // sk = n - sk
+            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, (short)0, (short)32);
+            privkey.getS(recvBuffer, (short)32);
+            Biginteger.subtract(recvBuffer, (short)0, recvBuffer, (short)32, (short)32);
+            // todo: erase old sk
+        } else {
+            // copy privkey as is in recvBuffer
+            privkey.getS(recvBuffer, (short)0);
+        }
+
+        // compute (e*a)*d => buffer2
+        short size = Biginteger.mult_rsa_trick(buffer, OFFSET_BIP327_SIGN_EA, recvBuffer, (short)0, (short)32, Biginteger.buffer2, (short)0);
+
+//        // DEBUG return ea * d
+//        Util.arrayCopyNonAtomic(Biginteger.buffer2, (short)0, buffer, (short)0, (short)Biginteger.buffer2.length);
+//        return (short)Biginteger.buffer2.length;
+
+        // (e*a)*d + k1 => buffer1
+        Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
+        Util.arrayCopyNonAtomic(buffer, OFFSET_BIP327_SIGN_K1_, Biginteger.buffer1, (short)(Biginteger.buffer1.length-32), (short)32); // copy 32bytes k to 96bytes buffer
+        boolean carry = Biginteger.add_carry(Biginteger.buffer1, (short)0, Biginteger.buffer2, (short)0, (short)Biginteger.buffer1.length);
+
+        // copy to recvBuffer as Biginteger.buffer1 can be overwritten by biginteger operations.
+        Util.arrayCopyNonAtomic(Biginteger.buffer1, (short)0, recvBuffer, (short)0, (short)Biginteger.buffer1.length);
+
+//        // DEBUG return (e*a)*d + k1
+//        Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)0, (short)Biginteger.buffer1.length);
+//        return (short)Biginteger.buffer1.length;
+
+//        // (e*a)*d + k1 mod n => buffer1
+//        //size= Biginteger.mod(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
+//
+        // compute b*k2 => buffer 2
+        size = Biginteger.mult_rsa_trick(buffer, OFFSET_BIP327_SIGN_B , buffer, OFFSET_BIP327_SIGN_K2_, (short)32, Biginteger.buffer2, (short)0);
+
+//        // DEBUG return b*k2
+//        Util.arrayCopyNonAtomic(Biginteger.buffer2, (short)0, buffer, (short)0, (short)Biginteger.buffer2.length);
+//        return (short)Biginteger.buffer2.length;
+
+        // compute [(e*a)*d + k1] + b*k2 => buffer1
+        carry = Biginteger.add_carry(recvBuffer, (short)0, Biginteger.buffer2, (short)0, (short)Biginteger.buffer2.length);
+
+//        // DEBUG return [(e*a)*d + k1] + b*k2
+//        Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)0, (short)Biginteger.buffer2.length);
+//        return (short)Biginteger.buffer2.length;
+
+        // compute (e*a)*d + k1 + b*k2  mod n=> buffer1
+        size= Biginteger.mod(recvBuffer, (short)0, (short)Biginteger.buffer2.length, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
+
+        // copy to output buffer
+        Util.arrayCopyNonAtomic(recvBuffer, (short)64, buffer, (short)(0), (short)32);
+
+        // todo: sign with authentikey?
+
+        return (short)96;
+    }
 
 
     /****************************************
@@ -3724,6 +3919,7 @@ public class CardEdge extends javacard.framework.Applet {
     
     /**
      * This function allows to decrypt a secure channel message
+     * Note: given the buffer size limitations, the max size for a plaintext command apdu is 154 bytes.
      *  
      *  ins: 0x82
      *  
@@ -3754,8 +3950,9 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(SW_SECURE_CHANNEL_WRONG_MAC);
         if (bytesLeft<(short)(SIZE_SC_IV+2+sizein+2+sizemac))
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        HmacSha160.computeHmacSha160(sc_buffer, OFFSET_SC_MACKEY, SIZE_SC_MACKEY, buffer, offset, (short)(SIZE_SC_IV+2+sizein), recvBuffer, (short)0);
-        if ( Util.arrayCompare(recvBuffer, (short)0, buffer, (short)(offset+SIZE_SC_IV+2+sizein+2), (short)20) != (byte)0 )
+        // we compute the hmac on the very end of the recvBuffer, so that first bytes can be used as temporary storage between 2 commands.
+        HmacSha160.computeHmacSha160(sc_buffer, OFFSET_SC_MACKEY, SIZE_SC_MACKEY, buffer, offset, (short)(SIZE_SC_IV+2+sizein), recvBuffer, (short)248);
+        if ( Util.arrayCompare(recvBuffer, (short)248, buffer, (short)(offset+SIZE_SC_IV+2+sizein+2), (short)20) != (byte)0 )
             ISOException.throwIt(SW_SECURE_CHANNEL_WRONG_MAC);
         
         // process IV
