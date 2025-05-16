@@ -567,9 +567,11 @@ public class CardEdge extends javacard.framework.Applet {
     private static final byte FEATURE_ID_SCHNORR=0;
     private static final byte FEATURE_ID_NOSTR=1;
     private static final byte FEATURE_ID_LIQUID=2;
+    private static final byte FEATURE_ID_MUSIG2=3;
     private byte feature_schnorr_policy = FEATURE_ENABLED; // schnorr signature
     private byte feature_nostr_policy = FEATURE_ENABLED; // nostr event signing
     private byte feature_liquid_policy = FEATURE_ENABLED; // Liquid-Bitcoin
+    private byte feature_musig2_policy = FEATURE_ENABLED; // Liquid-Bitcoin
 
     /****************************************
      *                Methods               *
@@ -1243,6 +1245,7 @@ public class CardEdge extends javacard.framework.Applet {
         feature_schnorr_policy = FEATURE_ENABLED;
         feature_nostr_policy = FEATURE_ENABLED;
         feature_liquid_policy = FEATURE_ENABLED;
+        feature_musig2_policy = FEATURE_ENABLED;
 
         // reset card label
         card_label_size=0;
@@ -1776,6 +1779,7 @@ public class CardEdge extends javacard.framework.Applet {
         buffer[pos++] = feature_schnorr_policy;
         buffer[pos++] = feature_nostr_policy;
         buffer[pos++] = feature_liquid_policy;
+        buffer[pos++] = feature_musig2_policy;
 
         return pos;
     }
@@ -1919,6 +1923,11 @@ public class CardEdge extends javacard.framework.Applet {
                 if (feature_liquid_policy == FEATURE_BLOCKED)
                     ISOException.throwIt(SW_FEATURE_BLOCKED);
                 feature_liquid_policy = feature_policy;
+                break;
+            case FEATURE_ID_MUSIG2:
+                if (feature_musig2_policy == FEATURE_BLOCKED)
+                    ISOException.throwIt(SW_FEATURE_BLOCKED);
+                feature_musig2_policy = feature_policy;
                 break;
         }// end switch
 
@@ -3097,6 +3106,10 @@ public class CardEdge extends javacard.framework.Applet {
         if (!pins[0].isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
+        // check that feature is enabled
+        if (feature_musig2_policy != FEATURE_ENABLED)
+            ISOException.throwIt(SW_FEATURE_DISABLED);
+
         // P2 defines the operation state (init or finalize)
         byte p2 = buffer[ISO7816.OFFSET_P2];
         if (p2 == OP_FINALIZE) {
@@ -3349,6 +3362,10 @@ public class CardEdge extends javacard.framework.Applet {
         if (!pins[0].isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
+        // check that feature is enabled
+        if (feature_musig2_policy != FEATURE_ENABLED)
+            ISOException.throwIt(SW_FEATURE_DISABLED);
+        
         // get data from incoming apdu
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
 
