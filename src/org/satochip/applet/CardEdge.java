@@ -307,6 +307,10 @@ public class CardEdge extends javacard.framework.Applet {
     /** Taproot very low probability error*/
     private final static short SW_TAPROOT_TWEAK_ERROR = (short) 0x9C43;
 
+    /** MuSig2 errors **/
+    private final static short SW_BIP327_WRONG_SECNONCE = (short) 0x9C44;
+    private final static short SW_BIP327_PUBKEY_MISMATCH= (short) 0x9C45;
+
     // KeyBlob Encoding in Key Blobs
     private final static byte BLOB_ENC_PLAIN = (byte) 0x00;
 
@@ -320,7 +324,7 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte ALG_EC_SVDP_DH_PLAIN= (byte) 3; //https://javacard.kenai.com/javadocs/connected/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN
     private final static byte ALG_EC_SVDP_DH_PLAIN_XY= (byte) 6; //https://docs.oracle.com/javacard/3.0.5/api/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN_XY
     private final static short LENGTH_EC_FP_256= (short) 256;
-        
+
     /****************************************
      *    Instance variables declaration    *
      ****************************************/
@@ -354,8 +358,9 @@ public class CardEdge extends javacard.framework.Applet {
     private RandomData randomData;
     private KeyAgreement keyAgreement;
     private Signature sigECDSA;
+    private Signature sigAESMAC;
     private Cipher aes128;
-    
+
     /*********************************************
      *  BIP32 Hierarchical Deterministic Wallet  *
      *********************************************/
@@ -429,11 +434,18 @@ public class CardEdge extends javacard.framework.Applet {
     // MuSig/nonce offset 9, length 11
     public static final byte[] TAGS_MUSIG2 = {'M','u','S','i','g','/','a','u','x',  'M','u','S','i','g','/','n','o','n','c','e'};
 
+    private AESKey bip327_encryptkey; // used with sc_aes128_cbc to encrypt secnonce for export
+    private AESKey bip327_mackey; // used with sigAESMAC to MAC encrypted secnonce for export
+
     // recvBuffer offset values to store intermediate values
-    public static final short OFFSET_BIP327_RAND_HASH= (short)32;
-    public static final short OFFSET_BIP327_PK= (short)33;
-    public static final short OFFSET_BIP327_K1= (short)177; // bytes 0->176 are used to store the nonce to hash
-    public static final short OFFSET_BIP327_K2= (short)209;
+    public static final short OFFSET_BIP327_K1= (short)0;
+    public static final short OFFSET_BIP327_K2= (short)32;
+    public static final short OFFSET_BIP327_RAND= (short)64; // bytes 64->64+176 are used to store the nonce to hash
+    public static final short OFFSET_BIP327_RAND_HASH= (short)96;
+    public static final short OFFSET_BIP327_PK= (short)97;
+    public static final short OFFSET_BIP327_PADDING= (short)97;
+    public static final short OFFSET_BIP327_IV= (short)112;
+    public static final short OFFSET_BIP327_MAC= (short)128;
 
     // buffer offset for input value to Musig2SignHash()
     // buffer = [cla, ins, p1, p2, lc] + [b(32b) | ea(32b) | r_has_even_y(1b) | ggacc_is_1(1b) | k1(32b) | k2(32b) | pk(33b)]
@@ -597,7 +609,8 @@ public class CardEdge extends javacard.framework.Applet {
         
         // common cryptographic objects
         randomData = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
-        sigECDSA= Signature.getInstance(ALG_ECDSA_SHA_256, false); 
+        sigECDSA= Signature.getInstance(ALG_ECDSA_SHA_256, false);
+        sigAESMAC= Signature.getInstance(Signature.ALG_AES_MAC_128_NOPAD, false);
         sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
         aes128= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_ECB_NOPAD, false);
         HmacSha160.init(tmpBuffer);
@@ -662,7 +675,7 @@ public class CardEdge extends javacard.framework.Applet {
         bip32_encryptkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
         randomData.generateData(recvBuffer, (short) 0, (short)16);
         bip32_encryptkey.setKey(recvBuffer, (short)0);
-        bip32_extendedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+        bip32_extendedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false); // todo: use transient
         //Secp256k1.setCommonCurveParameters(bip32_extendedkey); => done in setup() as it must be performed after each reset_to_factory!
 
         // Liquid-Bitcoin Master Binding Key from slip77
@@ -685,7 +698,16 @@ public class CardEdge extends javacard.framework.Applet {
         data2FA= new byte[OFFSET_2FA_SIZE];
         aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
         key_2FA= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
-        
+
+        // MuSig2 nonce encryption/decryption
+        bip327_encryptkey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
+        randomData.generateData(recvBuffer, (short) 0, (short)16);
+        bip327_encryptkey.setKey(recvBuffer, (short)0);
+        // MuSig2 encrypted nonce MAC
+        bip327_mackey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
+        randomData.generateData(recvBuffer, (short) 0, (short)16);
+        bip327_mackey.setKey(recvBuffer, (short)0);
+
         // card label
         card_label = new byte[MAX_CARD_LABEL_SIZE];  
         
@@ -3061,11 +3083,12 @@ public class CardEdge extends javacard.framework.Applet {
      *
      * ins: 0x7E
      * p1: key number or 0xFF for the last derived Bip32 extended key
-     * p2: RFU
-     * data: [aggpk_size(1b) | aggpk | msg_size (1b) | msg | extra_size(1b) | extra_bytes]
+     * p2: OP_INIT | OP_FINALIZE
+     * data (init): [aggpk_size(1b) | aggpk | msg_size (1b) | msg | extra_size(1b) | extra_bytes]
+     * data (finalize): []
      *
-     * return: [pubnonce(66b) | secnonce(97b)]
-     * TODO: encrypt secnonce!
+     * return (init): [pubnonce(66b)]
+     * return (finalize): [ encrypted_secnonce(144b) ]
      *
      */
     private short Musig2GenerateNonce(APDU apdu, byte[] buffer) {
@@ -3073,6 +3096,24 @@ public class CardEdge extends javacard.framework.Applet {
         // check that PIN[0] has been entered previously
         if (!pins[0].isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
+
+        // P2 defines the operation state (init or finalize)
+        byte p2 = buffer[ISO7816.OFFSET_P2];
+        if (p2 == OP_FINALIZE) {
+            // at this point, recvBuffer should contain the encrypted secnonce after having exported pubnonce in OP_INIT phase
+            // recvBuffer = [ k1(32b) | k2(32b) | rand(32b) | 0x33(1b) | pk(33b) | 0x15_padding(15b) | IV(16b) | mac(16b) ]
+
+            // check MAC then return encrypted nonce
+            sigAESMAC.init(bip327_mackey, Signature.MODE_VERIFY);
+            boolean isOk = sigAESMAC.verify(recvBuffer, OFFSET_BIP327_K1, (short) 128, recvBuffer, OFFSET_BIP327_MAC, (short)16);
+            if (!isOk)
+                ISOException.throwIt(SW_BIP327_WRONG_SECNONCE);
+
+            Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_K1, buffer, (short)0, (short)144);
+            return (short)144;
+        }
+
+        // OP_INIT
 
         // P1 defines which privkey is used
         byte key_nb = buffer[ISO7816.OFFSET_P1];
@@ -3099,26 +3140,25 @@ public class CardEdge extends javacard.framework.Applet {
         }
 
         // generate 32-byte randomness (rand')
-        randomData.generateData(recvBuffer,(short)0, (short)32);
+        randomData.generateData(recvBuffer,OFFSET_BIP327_RAND, (short)32);
         // DEBUG: using test vector "rand_": "0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F"
-        Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)32, (byte)0x0F);
+        Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP327_RAND, (short)32, (byte)0x0F);
 
         // hash randomness
-        schnorr_hash_tag(TAGS_MUSIG2, (short)0, (short)9, recvBuffer, (short)0, (short)32, recvBuffer, OFFSET_BIP327_RAND_HASH);
+        schnorr_hash_tag(TAGS_MUSIG2, (short)0, (short)9, recvBuffer, OFFSET_BIP327_RAND, (short)32, recvBuffer, OFFSET_BIP327_RAND_HASH);
 
-        // copy privkey (sk) in buffer
-        privkey.getS(recvBuffer,(short)0);
+        // overwrite rand' with privkey (sk) in buffer
+        privkey.getS(recvBuffer,OFFSET_BIP327_RAND);
 
-        // xor privkey with randomness
+        // xor privkey with hashed randomness
         // rand = sk ^ hash_MuSig/aux(rand')
         short i;
         for (i = (short)0; i < (short)32; i++){
-            recvBuffer[i] = (byte)(recvBuffer[i] ^ recvBuffer[(short)(OFFSET_BIP327_RAND_HASH+i)]);
+            recvBuffer[(short)(OFFSET_BIP327_RAND+i)] = (byte)(recvBuffer[(short)(OFFSET_BIP327_RAND+i)] ^ recvBuffer[(short)(OFFSET_BIP327_RAND_HASH+i)]);
         }
 
-        // compute pubkey pk and append to buffer
-        short recvOffset = 32;
-        recvBuffer[recvOffset++] = (byte)33; // size_pk
+        // compute pubkey pk and overwrite hashed randomness
+        recvBuffer[OFFSET_BIP327_RAND_HASH] = (byte)33; // size_pk
         keyAgreement.init(privkey);
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, OFFSET_BIP327_PK); //pubkey in uncompressed form (65bytes)
         // compute compression byte
@@ -3127,7 +3167,12 @@ public class CardEdge extends javacard.framework.Applet {
         } else {
             recvBuffer[OFFSET_BIP327_PK] = (byte)0x03;
         }
+        short recvOffset = OFFSET_BIP327_PK;
         recvOffset+=33;
+
+//        // DEBUG: return buffer with pubkey
+//        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_RAND, buffer, (short)0, (short)(recvOffset-OFFSET_BIP327_RAND));
+//        return (short)(recvOffset-OFFSET_BIP327_RAND);
 
         // get data from incoming apdu
         short buffer_offset = ISO7816.OFFSET_CDATA;
@@ -3147,6 +3192,10 @@ public class CardEdge extends javacard.framework.Applet {
         recvOffset+=aggpk_size;
         buffer_offset+=aggpk_size;
         bytesLeft-=aggpk_size;
+
+//        // DEBUG: return buffer with aggpk
+//        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_RAND, buffer, (short)0, (short)(recvOffset-OFFSET_BIP327_RAND));
+//        return (short)(recvOffset-OFFSET_BIP327_RAND);
 
         // parse m
         if (bytesLeft<1)
@@ -3176,6 +3225,11 @@ public class CardEdge extends javacard.framework.Applet {
             bytesLeft-=m_size;
         }
 
+//        // DEBUG: return buffer with msg
+//        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_RAND, buffer, (short)0, (short)(recvOffset-OFFSET_BIP327_RAND));
+//        return (short)(recvOffset-OFFSET_BIP327_RAND);
+
+
         // param extra_in
         if (bytesLeft<1)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
@@ -3197,18 +3251,19 @@ public class CardEdge extends javacard.framework.Applet {
         // compute k1
         recvBuffer[recvOffset] = (byte) 0x00;
 
-        // DEBUG: return buffer before hashing:
-//        recvOffset++;
-//        Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)0, recvOffset);
-//        return recvOffset;
+//        // DEBUG: return buffer before hashing:
+//        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_RAND, buffer, (short)0, (short)(recvOffset+1-OFFSET_BIP327_RAND));
+//        return (short)(recvOffset+1-OFFSET_BIP327_RAND);
 
-        schnorr_hash_tag(TAGS_MUSIG2, (short)9, (short)11, recvBuffer, (short)0, (short)(recvOffset+1), recvBuffer, OFFSET_BIP327_K1);
+        schnorr_hash_tag(TAGS_MUSIG2, (short)9, (short)11, recvBuffer, OFFSET_BIP327_RAND, (short)(recvOffset+1-OFFSET_BIP327_RAND), recvBuffer, OFFSET_BIP327_K1);
         // compute k2
         recvBuffer[recvOffset] = (byte) 0x01;
-        schnorr_hash_tag(TAGS_MUSIG2, (short)9, (short)11, recvBuffer, (short)0, (short)(recvOffset+1), recvBuffer, OFFSET_BIP327_K2);
+        schnorr_hash_tag(TAGS_MUSIG2, (short)9, (short)11, recvBuffer, OFFSET_BIP327_RAND, (short)(recvOffset+1-OFFSET_BIP327_RAND), recvBuffer, OFFSET_BIP327_K2);
         // todo: check not null (very low probability?)
 
-        // DEBUG: return buffer after hashing:
+        // at this point, recvBuffer = [ k1(32b) | k2(32b) | rand(32b) | 0x33 | pk(33b) | len(aggpk)(1b) | aggpk(32) | m_prefixed | extra_in_prefixed | 0x00 or 0x01 ]
+
+//        // DEBUG: return buffer after hashing:
 //        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_K1, buffer, (short)0, (short)64);
 //        return 64;
 
@@ -3241,24 +3296,28 @@ public class CardEdge extends javacard.framework.Applet {
         }
         buffer_offset+=33;
 
-        // copy 64-byte secnonce [k1 | k2]
-        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_K1, buffer, buffer_offset, (short)64);
-        buffer_offset+=64;
+        // save secnonce in recvBuffer for next step
+        // move pk so that it is located next to [k1 | k2 ]
+        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_PK, recvBuffer, OFFSET_BIP327_RAND, (short)64);
 
-        // compute pk (again)
-        keyAgreement.init(privkey);
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, buffer_offset); //pubkey in uncompressed form (65bytes)
-        // compute compression byte
-        if (buffer[(short)(buffer_offset+64)]%2 == 0){
-            buffer[buffer_offset] = (byte)0x02;
-        } else {
-            buffer[buffer_offset] = (byte)0x03;
-        }
-        buffer_offset+=33;
+        // add 15-bit padding to reach 112 bytes of data to encrypt
+        Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP327_PADDING, (short)15, (byte)15);
 
-        // TODO: encrypt [ k1 | k2 | pk ] using a key only known to the applet
+        // random 16-bit IV
+        randomData.generateData(recvBuffer,OFFSET_BIP327_IV, (short)16);
 
-        return buffer_offset;
+        // encrypt [ k1 | k2 | pk | padding ] using a key only known to the applet
+        // we reuse the cipher object of the secure channel, since it is used in a stateless way.
+        sc_aes128_cbc.init(bip327_encryptkey, Cipher.MODE_ENCRYPT, recvBuffer, OFFSET_BIP327_IV, SIZE_SC_IV);
+        sc_aes128_cbc.doFinal(recvBuffer, OFFSET_BIP327_K1, (short)112, recvBuffer, OFFSET_BIP327_K1);
+
+        // compute MAC over encrypted secnonce+IV
+        sigAESMAC.init(bip327_mackey, Signature.MODE_SIGN);
+        sigAESMAC.sign(recvBuffer, OFFSET_BIP327_K1, (short)128, recvBuffer, OFFSET_BIP327_MAC);
+
+        // at this point, recvBuffer = [ k1(32b) | k2(32b) | pk(33b) | 0x15_padding(15b) | IV(16b) | mac(16b) ]
+        // and buffer = [ k1(33b) | k2(33b) ]
+        return (short)66; // return the 66-bytes pubnonce
     }
 
 
@@ -3277,9 +3336,9 @@ public class CardEdge extends javacard.framework.Applet {
      * p1: key number or 0xFF for the last derived Bip32 extended key
      * p2: Init-Finalize
      *
-     * data (init): [secnonce(128b)]
+     * data (init): [encrypted secnonce(112b) | iv(16b) | mac(16b)]
      * data (finalize): [b(32b) | e*a(32b) | has_even_y(R) (1b) | g*gacc (1b)]
-     * TODO: use encrypted nonce (and decrypt it)
+     * TODO: use encrypted nonce
      *
      * return (init): []
      * return (finalize): [psig(32b)]
@@ -3296,12 +3355,12 @@ public class CardEdge extends javacard.framework.Applet {
         byte p2 = buffer[ISO7816.OFFSET_P2];
         if (p2 == OP_INIT){
 
-            if (bytesLeft<128){
+            if (bytesLeft<144){
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
             }
 
             // copy secnonce to recvBuffer for later processing
-            Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, recvBuffer, (short)0, (short)128);
+            Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, recvBuffer, OFFSET_BIP327_K1, (short)144);
             // we will validate secnonce in OP_FINALIZE to ensure integrity
 
             return (short)0;
@@ -3312,10 +3371,21 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         }
 
-        // todo: decrypt secnonce and vaidate integrity
+        // validate integrity than decrypt secnonce stored in recvBuffer during OP_INIT step
+        // compute MAC over encrypted secnonce+IV
+        // check MAC then return encrypted nonce
+        sigAESMAC.init(bip327_mackey, Signature.MODE_VERIFY);
+        boolean isOk = sigAESMAC.verify(recvBuffer, OFFSET_BIP327_K1, (short) 128, recvBuffer, OFFSET_BIP327_MAC, (short)16);
+        if (!isOk)
+            ISOException.throwIt(SW_BIP327_WRONG_SECNONCE);
+
+        // decrypt [ k1 | k2 | pk | padding ] using a key only known to the applet
+        // we reuse the cipher object of the secure channel, since it is used in a stateless way.
+        sc_aes128_cbc.init(bip327_encryptkey, Cipher.MODE_DECRYPT, recvBuffer, OFFSET_BIP327_IV, SIZE_SC_IV);
+        sc_aes128_cbc.doFinal(recvBuffer, OFFSET_BIP327_K1, (short)112, recvBuffer, OFFSET_BIP327_K1);
 
         // append decrypted secnonce to buffer
-        Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, OFFSET_BIP327_SIGN_K1_, (short)97);
+        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_K1, buffer, OFFSET_BIP327_SIGN_K1_, (short)97);
         // at this point, buffer = [cla, ins, p1, p2, lc] + [b(32b) | ea(32b) | r_has_even_y(1b) | ggacc_is_1(1b) | k1(32b) | k2(32b) | pk(33b)]
 
         // P1 defines which privkey is used
@@ -3355,13 +3425,12 @@ public class CardEdge extends javacard.framework.Applet {
         // check pubkey from secnonce match pubkey derived from sk
         if (0 != Util.arrayCompare(buffer, OFFSET_BIP327_SIGN_PK, recvBuffer, (short)0, (short)33)) {
             // todo clean up the buffers we used.
-            ISOException.throwIt(ISO7816.SW_WRONG_DATA); // todo: use specific error code
+            ISOException.throwIt(SW_BIP327_PUBKEY_MISMATCH);
 
-            // DEBUG
+            // DEBUG return pubkeys
 //            Util.arrayCopyNonAtomic(buffer, OFFSET_BIP327_SIGN_PK, buffer, (short)0, (short)33);
 //            Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)33, (short)33);
 //            return (short) 66;
-
         }
         // we don't need pk from recvBuffer anymore
 
@@ -3445,7 +3514,7 @@ public class CardEdge extends javacard.framework.Applet {
 
         // todo: sign with authentikey?
 
-        return (short)96;
+        return (short)32;
     }
 
 
