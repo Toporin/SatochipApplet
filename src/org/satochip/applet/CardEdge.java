@@ -109,10 +109,15 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.4: add NFC policy
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
-    private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
-    private final static byte PROTOCOL_MINOR_VERSION = (byte) 15;
-    private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-    private final static byte APPLET_MINOR_VERSION = (byte) 0;
+    // ff.ff-ff.ff: DEBUG VERSION
+    private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0xFF;
+    private final static byte PROTOCOL_MINOR_VERSION = (byte) 0xFF;
+    private final static byte APPLET_MAJOR_VERSION = (byte) 0xFF;
+    private final static byte APPLET_MINOR_VERSION = (byte) 0xFF;
+
+    // WARNING: DEBUGGING version!
+    // Use only for testing, validation and debugging!
+    private final static boolean DEBUG = true;
 
     // Maximum number of keys handled by the Cardlet
     private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -3154,8 +3159,11 @@ public class CardEdge extends javacard.framework.Applet {
 
         // generate 32-byte randomness (rand')
         randomData.generateData(recvBuffer,OFFSET_BIP327_RAND, (short)32);
-        // DEBUG: using test vector "rand_": "0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F"
-        Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP327_RAND, (short)32, (byte)0x0F);
+
+        // WARNING: DEBUG: using test vector "rand_": "0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F"
+        if (DEBUG){
+            Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP327_RAND, (short)32, (byte)0x0F);
+        }
 
         // hash randomness
         schnorr_hash_tag(TAGS_MUSIG2, (short)0, (short)9, recvBuffer, OFFSET_BIP327_RAND, (short)32, recvBuffer, OFFSET_BIP327_RAND_HASH);
@@ -3319,10 +3327,13 @@ public class CardEdge extends javacard.framework.Applet {
         // random 16-bit IV
         randomData.generateData(recvBuffer,OFFSET_BIP327_IV, (short)16);
 
-        // encrypt [ k1 | k2 | pk | padding ] using a key only known to the applet
-        // we reuse the cipher object of the secure channel, since it is used in a stateless way.
-        sc_aes128_cbc.init(bip327_encryptkey, Cipher.MODE_ENCRYPT, recvBuffer, OFFSET_BIP327_IV, SIZE_SC_IV);
-        sc_aes128_cbc.doFinal(recvBuffer, OFFSET_BIP327_K1, (short)112, recvBuffer, OFFSET_BIP327_K1);
+        // WARNING: encryption and integrity check are disabled for DEBUG mode!
+        if (!DEBUG) {
+            // encrypt [ k1 | k2 | pk | padding ] using a key only known to the applet
+            // we reuse the cipher object of the secure channel, since it is used in a stateless way.
+            sc_aes128_cbc.init(bip327_encryptkey, Cipher.MODE_ENCRYPT, recvBuffer, OFFSET_BIP327_IV, SIZE_SC_IV);
+            sc_aes128_cbc.doFinal(recvBuffer, OFFSET_BIP327_K1, (short) 112, recvBuffer, OFFSET_BIP327_K1);
+        }
 
         // compute MAC over encrypted secnonce+IV
         sigAESMAC.init(bip327_mackey, Signature.MODE_SIGN);
@@ -3365,7 +3376,7 @@ public class CardEdge extends javacard.framework.Applet {
         // check that feature is enabled
         if (feature_musig2_policy != FEATURE_ENABLED)
             ISOException.throwIt(SW_FEATURE_DISABLED);
-        
+
         // get data from incoming apdu
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
 
@@ -3388,18 +3399,22 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         }
 
-        // validate integrity than decrypt secnonce stored in recvBuffer during OP_INIT step
-        // compute MAC over encrypted secnonce+IV
-        // check MAC then return encrypted nonce
-        sigAESMAC.init(bip327_mackey, Signature.MODE_VERIFY);
-        boolean isOk = sigAESMAC.verify(recvBuffer, OFFSET_BIP327_K1, (short) 128, recvBuffer, OFFSET_BIP327_MAC, (short)16);
-        if (!isOk)
-            ISOException.throwIt(SW_BIP327_WRONG_SECNONCE);
+        // WARNING: encryption and integrity check are disabled for DEBUG mode!
+        if (!DEBUG) {
+            // validate integrity than decrypt secnonce stored in recvBuffer during OP_INIT step
+            // compute MAC over encrypted secnonce+IV
+            // check MAC then return encrypted nonce
+            sigAESMAC.init(bip327_mackey, Signature.MODE_VERIFY);
+            boolean isOk = sigAESMAC.verify(recvBuffer, OFFSET_BIP327_K1, (short) 128, recvBuffer, OFFSET_BIP327_MAC, (short) 16);
+            if (!isOk)
+                ISOException.throwIt(SW_BIP327_WRONG_SECNONCE);
 
-        // decrypt [ k1 | k2 | pk | padding ] using a key only known to the applet
-        // we reuse the cipher object of the secure channel, since it is used in a stateless way.
-        sc_aes128_cbc.init(bip327_encryptkey, Cipher.MODE_DECRYPT, recvBuffer, OFFSET_BIP327_IV, SIZE_SC_IV);
-        sc_aes128_cbc.doFinal(recvBuffer, OFFSET_BIP327_K1, (short)112, recvBuffer, OFFSET_BIP327_K1);
+
+            // decrypt [ k1 | k2 | pk | padding ] using a key only known to the applet
+            // we reuse the cipher object of the secure channel, since it is used in a stateless way.
+            sc_aes128_cbc.init(bip327_encryptkey, Cipher.MODE_DECRYPT, recvBuffer, OFFSET_BIP327_IV, SIZE_SC_IV);
+            sc_aes128_cbc.doFinal(recvBuffer, OFFSET_BIP327_K1, (short)112, recvBuffer, OFFSET_BIP327_K1);
+        }
 
         // append decrypted secnonce to buffer
         Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_K1, buffer, OFFSET_BIP327_SIGN_K1_, (short)97);
