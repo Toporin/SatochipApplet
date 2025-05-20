@@ -3154,8 +3154,6 @@ public class CardEdge extends javacard.framework.Applet {
 
         // generate 32-byte randomness (rand')
         randomData.generateData(recvBuffer,OFFSET_BIP327_RAND, (short)32);
-        // DEBUG: using test vector "rand_": "0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F"
-        Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP327_RAND, (short)32, (byte)0x0F);
 
         // hash randomness
         schnorr_hash_tag(TAGS_MUSIG2, (short)0, (short)9, recvBuffer, OFFSET_BIP327_RAND, (short)32, recvBuffer, OFFSET_BIP327_RAND_HASH);
