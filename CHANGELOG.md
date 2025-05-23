@@ -8,6 +8,44 @@ Satochip applet full versions follows this format: vX.Y-Z.W where:
 * X.Y refers to the PROTOCOL VERSION: changes that impact compatibility with the client side (e.g new functionalities, major patch...)
 * Z.W refers to changes with no impact on compatibility of the client (e.g minor patches, optimizations...)
 
+## [0.15-0.0]
+
+* MuSig2 support (experimental)
+
+**Overview of MuSig2 Smartcard Implementation**
+
+Given the resource limitations of smartcards (no display/button and constrained memory), we’ve implemented a partial 
+version of the [BIP327 specification](https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki), 
+specifically the following algorithms that involve the private key:
+
+* **Nonce generation**: `NonceGen(sk, pk, aggpk, m, extra_in)`
+* **Partial signing**: `Sign(secnonce, sk, session_ctx)`
+
+**NonceGen:**
+
+* The private key (`sk`) is derived from a seed imported onto the card during setup.
+* The card uses the internal `sk`, along with wallet-provided data (`pk`, `aggpk`, 32-byte `m`, and 32-byte `extra_in`) and 32 bytes of internal randomness to generate the `pubnonce` and `secnonce`.
+* The `pubnonce` is returned to the wallet, and the `secnonce` is encrypted using a random 16-byte key only known to the card.
+* Exporting the encrypted `secnonce` avoids having to store it in card memory, enabling multiple parallel `NonceGen()` sessions.
+
+**Sign:**
+
+* The wallet sends back the encrypted `secnonce` and session context data to the card.
+* The card decrypts the `secnonce`, verifies it matches the expected public key, and performs the signing operation using its internal private key.
+* The final output is the 32-byte `psig`.
+
+Due to limited card resources, some session context data is preprocessed externally by the wallet. The card requires the following inputs (as per BIP327 notation):
+
+* `b` (32 bytes)
+* `e*a mod n` (32 bytes)
+* `has_even_y(R)` (1 byte)
+* `g*gacc` (1 byte)
+
+Note: The smartcard performs blind signing, so limited checks are possible on the session context data. The card internally computes:
+`psig = (k1 + b*k2 + e*a*d) mod n`.
+
+This implementation has been validated against the relevant [BIP327 test vectors](https://github.com/bitcoin/bips/tree/master/bip-0327).
+
 ## [0.14-0.5]
 
 * Add policy to enable/disable various optional features
