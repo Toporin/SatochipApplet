@@ -182,7 +182,6 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte INS_MUSIG2_GENERATE_NONCE= (byte) 0x7E; // todo
     private final static byte INS_MUSIG2_SIGN_HASH= (byte) 0x7F;
 
-
     // Bitcoin-Liquid support for confidential transactions
     private final static byte INS_BIP32_GET_LIQUID_MASTER_BLINDING_KEY = (byte) 0x7D;
 
@@ -310,6 +309,8 @@ public class CardEdge extends javacard.framework.Applet {
     /** MuSig2 errors **/
     private final static short SW_BIP327_WRONG_SECNONCE = (short) 0x9C44;
     private final static short SW_BIP327_PUBKEY_MISMATCH= (short) 0x9C45;
+    private final static short SW_BIP327_COUNTER_OVERFLOW= (short) 0x9C46;
+    private final static short SW_BIP327_INVALID_ID= (short) 0x9C47;
 
     // KeyBlob Encoding in Key Blobs
     private final static byte BLOB_ENC_PLAIN = (byte) 0x00;
@@ -437,13 +438,22 @@ public class CardEdge extends javacard.framework.Applet {
     private AESKey bip327_encryptkey; // used with sc_aes128_cbc to encrypt secnonce for export
     private AESKey bip327_mackey; // used with sigAESMAC to MAC encrypted secnonce for export
 
+    // store a list of valid (not used) secnonce IDs. An entry of the array is overwritten each time a new secnonce is generated.
+    private short bip327_counter_high = (short)0; // current id high short value
+    private short bip327_counter_low = (short)1; // current id low short value
+    private short[] bip327_valid_ids;
+    public static final byte BIP327_MAX_NB_ID = (byte)16; // NOTE: should be a power of 2
+
     // recvBuffer offset values to store intermediate values
     public static final short OFFSET_BIP327_K1= (short)0;
     public static final short OFFSET_BIP327_K2= (short)32;
     public static final short OFFSET_BIP327_RAND= (short)64; // bytes 64->64+176 are used to store the nonce to hash
     public static final short OFFSET_BIP327_RAND_HASH= (short)96;
     public static final short OFFSET_BIP327_PK= (short)97;
-    public static final short OFFSET_BIP327_PADDING= (short)97;
+    //public static final short OFFSET_BIP327_PADDING= (short)97;
+    public static final short OFFSET_BIP327_ID_HIGH= (short)97;
+    public static final short OFFSET_BIP327_ID_LOW= (short)99;
+    public static final short OFFSET_BIP327_PADDING= (short)101;
     public static final short OFFSET_BIP327_IV= (short)112;
     public static final short OFFSET_BIP327_MAC= (short)128;
 
@@ -709,6 +719,9 @@ public class CardEdge extends javacard.framework.Applet {
         bip327_mackey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
         randomData.generateData(recvBuffer, (short) 0, (short)16);
         bip327_mackey.setKey(recvBuffer, (short)0);
+
+        // MuSig2 array storing 4-byte IDs of valid secnonce. Each id is made of 2 shorts.
+        bip327_valid_ids = new short[(short)2*BIP327_MAX_NB_ID];
 
         // card label
         card_label = new byte[MAX_CARD_LABEL_SIZE];  
@@ -3307,12 +3320,52 @@ public class CardEdge extends javacard.framework.Applet {
         }
         buffer_offset+=33;
 
+        // save id counter to buffer
+        Util.setShort(buffer, buffer_offset, bip327_counter_high);
+        buffer_offset+=2;
+        Util.setShort(buffer, buffer_offset, bip327_counter_low);
+        buffer_offset+=2;
+
         // save secnonce in recvBuffer for next step
         // move pk so that it is located next to [k1 | k2 ]
         Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_PK, recvBuffer, OFFSET_BIP327_RAND, (short)64);
 
-        // add 15-bit padding to reach 112 bytes of data to encrypt
-        Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP327_PADDING, (short)15, (byte)15);
+        // check id counter
+        if (bip327_counter_low == 0 && bip327_counter_high == 0) {
+            // if 4_byte counter is 0, we must have overflowed
+            // since we have used all available IDs, we invalidate all stored IDs
+            for (i=(short)0; i<BIP327_MAX_NB_ID; i++){
+                bip327_valid_ids[(short)(2*i)] = 0;
+                bip327_valid_ids[(short)(2*i+1)] = 0;
+            }
+
+            // we  generate a new MAC key, so that all externally stored encrypted secnonce are also invalidated
+            randomData.generateData(recvBuffer, (short) 0, (short)16);
+            bip327_mackey.setKey(recvBuffer, (short)0);
+
+            // restart low counter at 1 since id 0 is reserved to represent NULL id
+            bip327_counter_low = (short)1;
+
+            // return error
+            ISOException.throwIt(SW_BIP327_COUNTER_OVERFLOW);
+        }
+
+        // save the 4-byte id next to pk. This id is also stored in the card and erased after the signature phase, to avoid nonce reuse.
+        Util.setShort(recvBuffer, OFFSET_BIP327_ID_HIGH, bip327_counter_high);
+        Util.setShort(recvBuffer, OFFSET_BIP327_ID_LOW, bip327_counter_low);
+        // save id to internal state to track reuse of secnonce, new entry overwite older entries if necessary.
+        short offset_id = (short) 2*(bip327_counter_low % BIP327_MAX_NB_ID);
+        bip327_valid_ids[offset_id] = bip327_counter_high;
+        bip327_valid_ids[(short)(offset_id + 1)] = bip327_counter_low;
+        // increment counter
+        bip327_counter_low++;
+        if (bip327_counter_low == 0) {
+            // Since we just incremented, if counter_low is 0, we must have overflowed from 65535
+            bip327_counter_high++;
+        }
+
+        // add 11-bit padding to reach 112 bytes of data to encrypt
+        Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP327_PADDING, (short)11, (byte)11);
 
         // random 16-bit IV
         randomData.generateData(recvBuffer,OFFSET_BIP327_IV, (short)16);
@@ -3327,8 +3380,8 @@ public class CardEdge extends javacard.framework.Applet {
         sigAESMAC.sign(recvBuffer, OFFSET_BIP327_K1, (short)128, recvBuffer, OFFSET_BIP327_MAC);
 
         // at this point, recvBuffer = [ k1(32b) | k2(32b) | pk(33b) | 0x15_padding(15b) | IV(16b) | mac(16b) ]
-        // and buffer = [ k1(33b) | k2(33b) ]
-        return (short)66; // return the 66-bytes pubnonce
+        // and buffer = [ k1(33b) | k2(33b) | id(4b) ]
+        return (short)70;
     }
 
 
@@ -3394,10 +3447,26 @@ public class CardEdge extends javacard.framework.Applet {
         if (!isOk)
             ISOException.throwIt(SW_BIP327_WRONG_SECNONCE);
 
-        // decrypt [ k1 | k2 | pk | padding ] using a key only known to the applet
+        // decrypt [ k1 | k2 | pk | id | padding ] using a key only known to the applet
         // we reuse the cipher object of the secure channel, since it is used in a stateless way.
         sc_aes128_cbc.init(bip327_encryptkey, Cipher.MODE_DECRYPT, recvBuffer, OFFSET_BIP327_IV, SIZE_SC_IV);
         sc_aes128_cbc.doFinal(recvBuffer, OFFSET_BIP327_K1, (short)112, recvBuffer, OFFSET_BIP327_K1);
+
+        // check that the secnonce id is valid (not used yet)
+        short id_high = Util.getShort(recvBuffer, OFFSET_BIP327_ID_HIGH);
+        short id_low = Util.getShort(recvBuffer, OFFSET_BIP327_ID_LOW);
+        isOk = false;
+        for (short i=0; i<BIP327_MAX_NB_ID; i++){
+            if (bip327_valid_ids[(short)(2*i)] == id_high && bip327_valid_ids[(short)(2*i+1)] == id_low ) {
+                // invalidate id so it cannot be reused in the future
+                bip327_valid_ids[(short)(2*i)] = 0x00;
+                bip327_valid_ids[(short)(2*i+1)] = 0x00;
+                isOk = true;
+                break;
+            }
+        }
+        if (!isOk)
+            ISOException.throwIt(SW_BIP327_INVALID_ID);
 
         // append decrypted secnonce to buffer
         Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_K1, buffer, OFFSET_BIP327_SIGN_K1_, (short)97);
