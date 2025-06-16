@@ -8,6 +8,27 @@ Satochip applet full versions follows this format: vX.Y-Z.W where:
 * X.Y refers to the PROTOCOL VERSION: changes that impact compatibility with the client side (e.g new functionalities, major patch...)
 * Z.W refers to changes with no impact on compatibility of the client (e.g minor patches, optimizations...)
 
+## [0.15-0.1]
+
+MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
+
+This is implemented using a 2-byte counter starting from 1.
+This counter is increment during each GenerateSecnonce() execution.
+A unique id based on this counter is saved in the encrypted secnonce that is exported, and also stored in the chip in a list of valid ids.
+
+During Musig2SignHash(), the id recovered from the decrypted secnonce is checked against the locally-stored list of valid ids.
+If the id is found, the secnonce is considered valid and the id is removed from the list of valid ids to ensure it cannot be reused.
+If the id is not found, the secnonce is considered invalid and an error is thrown.
+
+When the counter overflows, we invalidate all encrypted secnonces by generating a new MAC key, and we reset the list of valid ids.
+
+The maximum size of the id list (BIP327_MAX_NB_ID) determines the maximum number of MuSig2 sessions that can be performed in parallel.
+Newly generated ids overwrite old entries in the list when the list reaches its maximum size.
+
+We use a 2-byte counter to reduce the memory footprint.
+After 65535 counter MuSig2 secnonce generations, the counter overflows and all existing secnonces are invalidated by changing the MAC key.
+The counter then resets to 1 and Musig2GenerateNonce() can be invoked again.
+
 ## [0.15-0.0]
 
 * MuSig2 support (experimental)
