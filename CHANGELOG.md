@@ -8,6 +8,13 @@ Satochip applet full versions follows this format: vX.Y-Z.W where:
 * X.Y refers to the PROTOCOL VERSION: changes that impact compatibility with the client side (e.g new functionalities, major patch...)
 * Z.W refers to changes with no impact on compatibility of the client (e.g minor patches, optimizations...)
 
+## [0.16-0.0]
+
+Work-in-progress version (NOT for production): security fixes and hardening patches following a security code review of the applet.
+This version will be bumped to v0.16-0.1 once all identified issues have been patched and thoroughly tested.
+
+* Fix ResetKey() 2FA check: the 2FA HMAC was computed over the wrong buffer (stale data in recvBuffer instead of the reset key's pubkey, which was itself stored in tmpBuffer and left unused). This made EC key reset unusable on 2FA-enabled cards. The pubkey is now correctly staged in recvBuffer before the HMAC computation.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.

@@ -110,10 +110,11 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
+    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, ...)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
-    private final static byte PROTOCOL_MINOR_VERSION = (byte) 15;
+    private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-    private final static byte APPLET_MINOR_VERSION = (byte) 1;
+    private final static byte APPLET_MINOR_VERSION = (byte) 0;
 
     // Maximum number of keys handled by the Cardlet
     private final static byte MAX_NUM_KEYS = (byte) 16;
@@ -1423,8 +1424,10 @@ public class CardEdge extends javacard.framework.Applet {
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
             
             // compute the corresponding partial public key...
+            // note: the pubkey must be staged in recvBuffer (not tmpBuffer), since
+            // tmpBuffer is used as scratch memory by computeHmacSha160() below
             keyAgreement.init((ECPrivateKey)key);
-            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form (65b)
+            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65b)
             // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x20^key_nb)-padding)
             Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte) (0x20^key_nb));
             HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
