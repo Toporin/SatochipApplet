@@ -1278,6 +1278,9 @@ public class CardEdge extends javacard.framework.Applet {
         bip32_masterkey.clearKey(); 
         bip32_masterchaincode.clearKey();
         bip32_extendedkey.clearKey();
+        Secp256k1.setCommonCurveParameters(bip32_extendedkey); // clearKey() also clears the curve parameters
+        taproot_tweakedkey.clearKey();
+        Secp256k1.setCommonCurveParameters(taproot_tweakedkey);
 
         // reset Liquid-Bitcoin Master Blinding Key (as it is derived from the seed)
         Util.arrayFillNonAtomic(liquid_master_blinding_key, (short)0, (short)32, (byte)0x00);
