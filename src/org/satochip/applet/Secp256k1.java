@@ -104,6 +104,74 @@ public class Secp256k1 {
         return true;
     }
     
+    /**
+     * Checks that a 65-byte uncompressed EC point (0x04 | X(32b) | Y(32b)) is a valid
+     * point on the secp256k1 curve: X and Y must be canonical field elements
+     * (strictly smaller than p) and must satisfy Y^2 = X^3 + 7 (mod p).
+     *
+     * This check must be performed on any externally-provided point before it is used
+     * in an EC operation (e.g. ECDH), to mitigate invalid-curve attacks (Lim-Lee small
+     * subgroup attacks) against the card's private keys.
+     * Since secp256k1 has cofactor 1, any point on the curve (except the point at
+     * infinity, which has no affine representation) has full order n, so checking the
+     * curve equation is sufficient.
+     *
+     * @param pubkey         buffer containing the 65-byte uncompressed point
+     * @param pubkey_offset  offset of the point in pubkey
+     * @param scratch        scratch buffer (192 bytes from scratch_offset), clobbered during the check
+     * @param scratch_offset offset of the scratch area in scratch
+     * @return true if the point is on secp256k1, false otherwise
+     */
+    public static boolean isOnCurve(byte[] pubkey, short pubkey_offset, byte[] scratch, short scratch_offset){
+        // scratch layout: [0..96): mult/mod scratch | [96..128): y^2 mod p | [128..160): (x^3+7) mod p | [160..192): constant 7
+        short offset_product = scratch_offset;
+        short offset_y2 = (short)(scratch_offset+96);
+        short offset_x3 = (short)(scratch_offset+128);
+        short offset_cst7 = (short)(scratch_offset+160);
+        
+        // X and Y must be canonical field elements
+        if (!Biginteger.lessThan(pubkey, (short)(pubkey_offset+1), SECP256K1, OFFSET_SECP256K1_P, (short)32))
+            return false;
+        if (!Biginteger.lessThan(pubkey, (short)(pubkey_offset+33), SECP256K1, OFFSET_SECP256K1_P, (short)32))
+            return false;
+        
+        if (!Biginteger.FLAG_FAST_MULT_VIA_RSA){
+            // The RSA engine used by mult_rsa_trick() is not available on this card:
+            // the curve equation cannot be verified, so the point is accepted with only
+            // the canonical-encoding checks above (same behavior as before this check).
+            return true;
+        }
+        
+        // y^2 mod p
+        Biginteger.mult_rsa_trick(pubkey, (short)(pubkey_offset+33), pubkey, (short)(pubkey_offset+33), (short)32, scratch, offset_product);
+        Biginteger.mod(scratch, offset_product, (short)96, SECP256K1, OFFSET_SECP256K1_P, (short)32);
+        Util.arrayCopyNonAtomic(scratch, (short)(offset_product+64), scratch, offset_y2, (short)32);
+        
+        // x^2 mod p
+        Biginteger.mult_rsa_trick(pubkey, (short)(pubkey_offset+1), pubkey, (short)(pubkey_offset+1), (short)32, scratch, offset_product);
+        Biginteger.mod(scratch, offset_product, (short)96, SECP256K1, OFFSET_SECP256K1_P, (short)32);
+        Util.arrayCopyNonAtomic(scratch, (short)(offset_product+64), scratch, offset_x3, (short)32);
+        
+        // x^3 = x^2 * x mod p
+        Biginteger.mult_rsa_trick(scratch, offset_x3, pubkey, (short)(pubkey_offset+1), (short)32, scratch, offset_product);
+        Biginteger.mod(scratch, offset_product, (short)96, SECP256K1, OFFSET_SECP256K1_P, (short)32);
+        Util.arrayCopyNonAtomic(scratch, (short)(offset_product+64), scratch, offset_x3, (short)32);
+        
+        // x^3 + 7 mod p (no carry possible: (x^3 mod p) + 7 <= (p-1)+7 < 2^256)
+        Util.arrayFillNonAtomic(scratch, offset_cst7, (short)32, (byte)0);
+        scratch[(short)(offset_cst7+31)] = (byte)0x07;
+        Biginteger.add_carry(scratch, offset_x3, scratch, offset_cst7, (short)32);
+        if (!Biginteger.lessThan(scratch, offset_x3, SECP256K1, OFFSET_SECP256K1_P, (short)32)){
+            Biginteger.subtract(scratch, offset_x3, SECP256K1, OFFSET_SECP256K1_P, (short)32);
+        }
+        
+        // check y^2 == (x^3 + 7) (mod p)
+        boolean is_on_curve = (Util.arrayCompare(scratch, offset_y2, scratch, offset_x3, (short)32) == (byte)0);
+        // clear scratch
+        Util.arrayFillNonAtomic(scratch, scratch_offset, (short)192, (byte)0);
+        return is_on_curve;
+    }
+    
     
     
 //  

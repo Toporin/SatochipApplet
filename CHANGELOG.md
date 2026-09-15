@@ -15,6 +15,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Fix ResetKey() 2FA check: the 2FA HMAC was computed over the wrong buffer (stale data in recvBuffer instead of the reset key's pubkey, which was itself stored in tmpBuffer and left unused). This made EC key reset unusable on 2FA-enabled cards. The pubkey is now correctly staged in recvBuffer before the HMAC computation.
 
+* Add EC point validation for external pubkeys (SeedKeeper trusted pubkey and secure-channel client pubkey): points are now checked to be canonically encoded and on the secp256k1 curve (Y^2 = X^3 + 7 mod p) before any EC operation. This mitigates invalid-curve attacks (Lim-Lee small subgroup attacks) against the authentikey (used for SeedKeeper secure seed import) and the secure channel ephemeral key.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.

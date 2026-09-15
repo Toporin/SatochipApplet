@@ -110,7 +110,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
-    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, ...)
+    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, ...)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -3801,6 +3801,10 @@ public class CardEdge extends javacard.framework.Applet {
         if (buffer[buffer_offset] != 0x04) {
             ISOException.throwIt(SW_INVALID_PARAMETER);
         }
+        // check that the point is on secp256k1 (mitigates invalid-curve attacks on the authentikey via ECDH)
+        if (!Secp256k1.isOnCurve(buffer, buffer_offset, recvBuffer, (short)0)) {
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        }
         Util.arrayCopyNonAtomic(buffer, buffer_offset, trusted_pubkey, (short) 0, PUBKEY_SIZE);
         is_trusted_pubkey = true;
 
@@ -3977,6 +3981,9 @@ public class CardEdge extends javacard.framework.Applet {
         if (bytesLeft < (short)65)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         if (buffer[ISO7816.OFFSET_CDATA] != (byte)0x04)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        // check that the client point is on secp256k1 (mitigates invalid-curve attacks via ECDH)
+        if (!Secp256k1.isOnCurve(buffer, ISO7816.OFFSET_CDATA, recvBuffer, (short)0))
             ISOException.throwIt(SW_INVALID_PARAMETER);
             
         // generate a new ephemeral key
