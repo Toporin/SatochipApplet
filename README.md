@@ -66,6 +66,27 @@ You can build the javacard CAP files or use the last [version built](https://git
 
 To generate the CAP file from the sources, you can use the Eclipse IDE with the [ant-javacard](https://github.com/martinpaljak/ant-javacard) Ant task (see the instruction on the ant-javacard github repository).
 
+* Download [Ant-Javacard](https://github.com/martinpaljak/ant-javacard) into the `lib` folder:
+```
+https://github.com/martinpaljak/ant-javacard/releases/latest/download/ant-javacard.jar
+```
+* Install Apache Ant (https://ant.apache.org/srcdownload.cgi):
+```
+sudo apt install ant
+```
+* Use java JDK 17:
+```
+sudo update-alternatives --config java
+```
+* Download javacard SDK into satochip project:
+```
+git submodule add https://github.com/martinpaljak/oracle_javacard_sdks sdks
+```
+* Build using ant:
+``` 
+ant 
+```
+
 # Install
 
 Once you have a CAP file, you have to download it on the chip card. You can use [GlobalPlatformPro](https://github.com/martinpaljak/GlobalPlatformPro) to do this:
