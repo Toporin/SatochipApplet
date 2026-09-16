@@ -110,7 +110,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
-    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, ...)
+    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, ...)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -1232,10 +1232,16 @@ public class CardEdge extends javacard.framework.Applet {
         return true;
     }
     
-    /** Erase all user data */
+    /**
+     * Erase all user data (factory reset).
+     *
+     * Note: the personalization PKI data deliberately survives a factory reset:
+     * the authentikey keypair (device identity), the authentikey certificate and
+     * the personalizationDone flag are kept unchanged, so that the device can still
+     * prove its authenticity (genuine personalization) afterwards. The authentikey
+     * is generated once at install time and is never modified afterwards.
+     */
     private boolean resetToFactory(){
-        
-        //TODO
         
         //2FA
         needs_2FA= false;
@@ -1254,6 +1260,13 @@ public class CardEdge extends javacard.framework.Applet {
                 eckeys[nb_key].clearKey();
         }
         eckeys_flag=(short)0;
+        
+        // secure channel session key
+        sc_sessionkey.clearKey();
+        initialized_secure_channel=false;
+        
+        // option flags
+        option_flags=(short)0;
 
         // reset NFC policy to enabled
         nfc_policy = NFC_ENABLED;
@@ -1295,7 +1308,34 @@ public class CardEdge extends javacard.framework.Applet {
             is_trusted_pubkey = false;
             Util.arrayFillNonAtomic(trusted_pubkey, (short) 0, PUBKEY_SIZE, (byte) 0x00);
         }
+        
+        // reset MuSig2 state: invalidate all exported encrypted secnonces and reset nonce ids
+        resetMusig2NonceState();
+        
         return true;
+    }
+    
+    /**
+     * Invalidates all MuSig2 secnonces and resets the nonce id state:
+     * clears the list of valid secnonce ids, restarts the id counter at 1 and
+     * generates new secnonce encryption/MAC keys, so that all previously exported
+     * encrypted secnonces become unusable.
+     * Used by Musig2GenerateNonce() when the id counter overflows, and by
+     * resetSeed() (hence also resetToFactory()) to clear the MuSig2 state.
+     * Note: uses recvBuffer as scratch (first 16 bytes).
+     */
+    private void resetMusig2NonceState(){
+        // invalidate all stored ids
+        for (short i=(short)0; i<BIP327_MAX_NB_ID; i++){
+            bip327_valid_ids[i] = 0;
+        }
+        // restart counter at 1 since id 0 is reserved to represent NULL id
+        bip327_counter = (short)1;
+        // generate new encryption & MAC keys, so that all externally stored encrypted secnonces are invalidated
+        randomData.generateData(recvBuffer, (short) 0, (short)16);
+        bip327_encryptkey.setKey(recvBuffer, (short)0);
+        randomData.generateData(recvBuffer, (short) 0, (short)16);
+        bip327_mackey.setKey(recvBuffer, (short)0);
     }
     
     /****************************************
@@ -3339,18 +3379,10 @@ public class CardEdge extends javacard.framework.Applet {
 
         // check id counter
         if (bip327_counter == 0) {
-            // if 2-byte counter is 0, we must have overflowed
-            // since we have used all possible IDs, we invalidate all stored IDs
-            for (i=(short)0; i<BIP327_MAX_NB_ID; i++){
-                bip327_valid_ids[i] = 0;
-            }
-
-            // we  generate a new MAC key, so that all externally stored encrypted secnonce are also invalidated
-            randomData.generateData(recvBuffer, (short) 0, (short)16);
-            bip327_mackey.setKey(recvBuffer, (short)0);
-
-            // restart counter at 1 since id 0 is reserved to represent NULL id
-            bip327_counter = (short)1;
+            // if 2-byte counter is 0, we must have overflowed: since we have used all possible
+            // IDs, we invalidate all stored IDs and all externally stored encrypted secnonces
+            // (new encryption & MAC keys), and restart the counter at 1
+            resetMusig2NonceState();
 
             // return error
             ISOException.throwIt(SW_BIP327_COUNTER_OVERFLOW);

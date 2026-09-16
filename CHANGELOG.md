@@ -21,6 +21,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Fix crash in Musig2GenerateNonce() after 32768 secnonce generations: the id-list index was computed with a modulo on a signed short counter, producing a negative array index (uncaught exception) once the counter overflowed, permanently breaking MuSig2 nonce generation and making the counter-overflow handler unreachable. The index is now computed with a bitmask, so the full 65535-id cycle works as documented: ids stay unique, the overflow handler is reached, the MAC key is rotated and the counter restarts at 1.
 
+* Complete resetToFactory()/resetSeed(): the MuSig2 state (secnonce encryption/MAC keys, list of valid secnonce ids, id counter) is now reset on both factory reset and plain seed reset, so encrypted secnonces exported before the reset can no longer be used (a new resetMusig2NonceState() function is shared with the Musig2GenerateNonce() counter-overflow handler). The secure channel session key and the option flags are now also cleared on factory reset. The code now documents that the personalization PKI data (authentikey, certificate, personalizationDone flag) deliberately survives a factory reset.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
