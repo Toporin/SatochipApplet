@@ -110,7 +110,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
-    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, ...)
+    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, ...)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -507,15 +507,20 @@ public class CardEdge extends javacard.framework.Applet {
     private static final byte OFFSET_2FA_SIZE=OFFSET_2FA_LIMIT+8;
     private static final short HMAC_CHALRESP_2FA=(short)0x8000;
     /**
-     * 2FA codes:
-     * - Tx approval: [ 32b TX hash | 32-bit 0x00-padding ]
-     * - ECkey import:[ 32b coordx  | 32-bit (0x10^key_nb)-padding ]
-     * - ECkey reset: [ 32b coordx  | 32-bit (0x20^key_nb)-padding ] 
-     * - Seed reset:  [ 32b authentikey-coordx  | 32-bit 0xFF-padding ] 
-     * - 2FA reset:   [ 20b 2FA_ID  | 44-bit 0xAA-padding ]  
-     * - Msg signing: [ 32b SHA26(btcHeader+msg) | 32-bit 0xBB-padding ]
-     * - Hash signing:[ 32b Hash | 32-bit 0xCC-padding ]
-     * - Schnorr hash:[ 32b Hash | 32-bit 0xDD-padding ]
+     * 2FA codes: each 2FA-protected operation requires an HMAC-SHA1 (computed with the
+     * 20-byte 2FA secret) over a 64-byte message made of a 32-byte operation-specific
+     * value followed by a 32-byte padding constant. The padding byte provides domain
+     * separation between operations, so a 2FA approval for one operation cannot be
+     * reused for another operation:
+     * - Tx approval (SignTransaction):      [ 32b TX hash | 32-byte 0x00-padding ]
+     * - ECkey import (ImportKey):           [ 32b coordx  | 32-byte (0x10^key_nb)-padding ]
+     * - ECkey reset (ResetKey):             [ 32b coordx  | 32-byte (0x20^key_nb)-padding ] 
+     * - Seed reset (resetBIP32Seed):        [ 32b authentikey-coordx  | 32-byte 0xFF-padding ] 
+     * - 2FA reset (reset2FAKey):            [ 20b 2FA_ID  | 44-byte 0xAA-padding ]  
+     * - Msg signing (signMessage):          [ 32b SHA256(btcHeader+msg) | 32-byte 0xBB-padding ]
+     * - Hash signing (SignTransactionHash): [ 32b Hash | 32-byte 0xCC-padding ]
+     * - Schnorr hash (SignSchnorrHash):     [ 32b Hash | 32-byte 0xDD-padding ]
+     * - MuSig2 sign (Musig2SignHash):       [ 32b nonce coefficient b | 32-byte 0xEE-padding ]
      *  */ 
     
     // 2FA msg encryption
@@ -3395,8 +3400,7 @@ public class CardEdge extends javacard.framework.Applet {
      * p2: Init-Finalize
      *
      * data (init): [encrypted secnonce(112b) | iv(16b) | mac(16b)]
-     * data (finalize): [b(32b) | e*a(32b) | has_even_y(R) (1b) | g*gacc (1b)]
-     * TODO: use encrypted nonce
+     * data (finalize): [b(32b) | e*a(32b) | has_even_y(R) (1b) | g*gacc (1b) | (option)2FA-flag(2b) | (option)2FA-hmac(20b)]
      *
      * return (init): []
      * return (finalize): [psig(32b)]
@@ -3431,6 +3435,26 @@ public class CardEdge extends javacard.framework.Applet {
         // at this point p2 != OP_INIT, we perform the bulk of signature processing
         if (bytesLeft<66){
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
+
+        // check 2FA if required
+        // done before secnonce validation, so that a failed 2FA attempt does not invalidate the secnonce id
+        if(needs_2FA){
+            // check data length
+            if (bytesLeft<(short)(66+2+20))
+                ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+            // check flag for 2fa_hmac_chalresp
+            short hmac_flags= Util.getShort(buffer, (short)(ISO7816.OFFSET_CDATA+66));
+            if (hmac_flags!=HMAC_CHALRESP_2FA)
+                ISOException.throwIt(SW_INCORRECT_ALG);
+            // hmac of 64-bytes msg: ( 32bytes nonce coefficient b | 32bytes 0xEE-padding)
+            // b commits to the MuSig2 session (aggnonce, aggpk, message) and plays the role of the signed hash
+            // the message is staged after the 144-byte encrypted secnonce in recvBuffer, to keep it intact
+            Util.arrayCopyNonAtomic(buffer, (short)ISO7816.OFFSET_CDATA, recvBuffer, (short)144, (short)32);
+            Util.arrayFillNonAtomic(recvBuffer, (short)(144+32), (short)32, (byte)0xEE); // 0xEE for MuSig2 partial sig
+            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)144, (short)64, recvBuffer, (short)(144+64));
+            if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA+66+2), recvBuffer, (short)(144+64), (short)20)!=0)
+                ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
 
         // validate integrity then decrypt secnonce stored in recvBuffer during OP_INIT step

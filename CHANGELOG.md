@@ -17,6 +17,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Add EC point validation for external pubkeys (SeedKeeper trusted pubkey and secure-channel client pubkey): points are now checked to be canonically encoded and on the secp256k1 curve (Y^2 = X^3 + 7 mod p) before any EC operation. This mitigates invalid-curve attacks (Lim-Lee small subgroup attacks) against the authentikey (used for SeedKeeper secure seed import) and the secure channel ephemeral key.
 
+* Fix 2FA bypass in Musig2SignHash(): when 2FA is enabled, the OP_FINALIZE step now requires the 2FA HMAC, like all other signing operations. The 2FA code is computed over the 32-byte nonce coefficient b (which commits to the MuSig2 session: aggnonce, aggpk, message) with a 32-byte 0xEE-padding, provided as [2FA-flag(2b) | hmac(20b)] after the signing data. The check is performed before the secnonce is validated, so a failed 2FA attempt does not burn the secnonce id. The per-operation 2FA padding constants are now documented in the code.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
