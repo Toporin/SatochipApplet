@@ -110,7 +110,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
-    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, ...)
+    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, ...)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -3359,7 +3359,11 @@ public class CardEdge extends javacard.framework.Applet {
         // save the 2-byte id next to pk. This id is also stored in the card and erased after the signature phase, to avoid nonce reuse.
         Util.setShort(recvBuffer, OFFSET_BIP327_ID, bip327_counter);
         // save id to internal state to track reuse of secnonce, new entry overwite older entries if necessary.
-        bip327_valid_ids[(short) (bip327_counter % BIP327_MAX_NB_ID)] = bip327_counter;
+        // note: use a bitmask instead of modulo so that the index stays in range even when the
+        // counter is negative (short overflow after 32768 generations). BIP327_MAX_NB_ID is a
+        // power of 2, so consecutive ids always map to distinct slots. Ids remain unique bit
+        // patterns until the counter wraps to 0, which is handled above (keys are rotated).
+        bip327_valid_ids[(short) (bip327_counter & (BIP327_MAX_NB_ID-1))] = bip327_counter;
         // increment counter
         bip327_counter++;
 

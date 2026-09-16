@@ -19,6 +19,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Fix 2FA bypass in Musig2SignHash(): when 2FA is enabled, the OP_FINALIZE step now requires the 2FA HMAC, like all other signing operations. The 2FA code is computed over the 32-byte nonce coefficient b (which commits to the MuSig2 session: aggnonce, aggpk, message) with a 32-byte 0xEE-padding, provided as [2FA-flag(2b) | hmac(20b)] after the signing data. The check is performed before the secnonce is validated, so a failed 2FA attempt does not burn the secnonce id. The per-operation 2FA padding constants are now documented in the code.
 
+* Fix crash in Musig2GenerateNonce() after 32768 secnonce generations: the id-list index was computed with a modulo on a signed short counter, producing a negative array index (uncaught exception) once the counter overflowed, permanently breaking MuSig2 nonce generation and making the counter-overflow handler unreachable. The index is now computed with a bitmask, so the full 65535-id cycle works as documented: ids stay unique, the overflow handler is reached, the MAC key is rotated and the counter restarts at 1.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
