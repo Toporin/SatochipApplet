@@ -110,7 +110,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
-    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, ...)
+    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ...)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -419,6 +419,10 @@ public class CardEdge extends javacard.framework.Applet {
     // BIP0340/challenge offset 24, length 17
     // 'TapTweak' offset 41, length 8
     public static final byte[] tags = {'B','I','P','0','3','4','0','/','a','u','x',  'B','I','P','0','3','4','0','/','n','o','n','c','e',  'B','I','P','0','3','4','0','/','c','h','a','l','l','e','n','g','e', 'T','a','p','T','w','e','a','k'};
+
+    // TaprootTweakPrivateKey() operations, provided in P2
+    private final static byte TAPROOT_TWEAK = (byte) 0x00; // BIP341 key tweak
+    private final static byte TAPROOT_BYPASS_TWEAK = (byte) 0x01; // no tweaking, e.g. for Nostr
 
     // recvBuffer offset values to store intermediate values
     public static final short OFFSET_BIP340_sk= (short)0;
@@ -2850,16 +2854,34 @@ public class CardEdge extends javacard.framework.Applet {
      * derived from a BIP32 seed using getBIP32ExtendedKey().
      * 
      * The tweaked key is then stored in a dedicated keyslot and available next for schnorr signing.
-     * The function returns the corresponding public key coordx, self-signed
-     * 
-     * If P2 parameter is not 0x00, the tweaking is bypassed.
-     * 
+     * The function returns the corresponding public key, signed by the authentikey.
+     *
+     * The tweak is computed as specified in BIP341:
+     *      t = int_from_bytes(tagged_hash("TapTweak", bytes_from_int(x(P)) || h))
+     * where h is the taproot merkle root provided by the client. The tagged hash is computed
+     * over the CONCATENATION of x(P) and h, so:
+     *      - tweak_size 32: h is the merkle root, 64 bytes are hashed
+     *      - tweak_size 0:  the output commits to no script tree (BIP86 key-path-only
+     *                       spending), h is the empty byte string, 32 bytes are hashed
+     *
+     * WARNING: applet versions up to v0.15-0.1 instead hashed the 32-byte XOR of x(P) and h.
+     * That is not BIP341 compliant: it breaks script-path spending and does not bind the tweak
+     * to a specific internal key. The XOR only coincides with BIP341 when h is all-zero, which
+     * is exactly what tweak_size 0 computes above, so key-path-only (BIP86) addresses derived by
+     * earlier versions are NOT affected and remain spendable with this version.
+     * However, a tweak derived with a NON-ZERO h by v0.15-0.1 or earlier cannot be reproduced by
+     * this version and is no longer derivable on-card: either temporarily reinstall the v0.15-0.1
+     * applet and sweep them, or compute the legacy tweak offline.
+     *
      * ins: 0x7C
-     * p1: key number or 0xFF for the last derived Bip32 extended key  
-     * p2: 0x00 for key tweak, 0x01 to bypass tweak
-     * data: [tweak_size (1b) | tweak data (32b)]
-     * 
-     * return: [coordx_size(2b) | coordx | sig_size(2b) | authentikey_sig]
+     * p1: key number or 0xFF for the last derived Bip32 extended key
+     * p2: TAPROOT_TWEAK (0x00) for BIP341 key tweak,
+     *     TAPROOT_BYPASS_TWEAK (0x01) to bypass tweaking (e.g. Nostr).
+     *     Any other value is rejected with SW_INCORRECT_P2.
+     * data: [tweak_size (1b) | tweak data (tweak_size)] if p2 is 0x00 else (none)
+     *       where tweak_size is 32, or 0 for TAPROOT_TWEAK with no script tree
+     *
+     * return: [pubkey_size(2b) | uncompressed_pubkey(65b) | sig_size(2b) | authentikey_sig]
      */
     private short TaprootTweakPrivateKey(APDU apdu, byte[] buffer){
 
@@ -2894,41 +2916,51 @@ public class CardEdge extends javacard.framework.Applet {
                 ISOException.throwIt(SW_INCORRECT_ALG);
         } 
 
-        short seckeyOffset;
+        // the tweaked (or plain) secret key is staged at this offset in recvBuffer
+        short seckeyOffset = (short) 97;
         short buffer_offset;
-        if (p2==(byte)0x00){ 
+        if (p2==TAPROOT_TWEAK){
 
-            // tweak vector should be exactly 32bytes, thus 33 bytes in total
+            // a tweaked key can only be used for schnorr signatures, so respect the schnorr policy
+            if (feature_schnorr_policy != FEATURE_ENABLED)
+                ISOException.throwIt(SW_FEATURE_DISABLED);
+
+            // The tweak data is the taproot merkle root: either 32 bytes, or absent (size 0)
+            // when the output commits to no script tree (BIP86 key-path-only spending).
             short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-            if (bytesLeft< (byte)33)
+            if (bytesLeft < (short)1)
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-            if (buffer[ISO7816.OFFSET_CDATA] != (byte)32)
+            short tweak_size = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_CDATA]);
+            if (tweak_size != (short)0 && tweak_size != (short)32)
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-
+            if (bytesLeft < (short)(1+tweak_size))
+                ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 
             // compute pubkey corresponding to private key
             keyAgreement.init((ECPrivateKey)privkey);
             keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65bytes)
+            // recvBuffer= [ 0x04(1b) | coordx(32b) | coordy(32b) ]
 
-            // xor pubkey coordx with tweak vector
+            // save the parity of y(P) now, as coordy is overwritten below
+            boolean p_has_even_y = ((recvBuffer[(short)64] & 0x01) == 0x00);
+
             short recvBuffer_offset = (short)0x1;
             buffer_offset = (short)(ISO7816.OFFSET_CDATA+1);
-            short i;
-            for (i = (short)0; i < (short)32; i++){
-                recvBuffer[(short)(recvBuffer_offset+i)] = (byte) (recvBuffer[(short)(recvBuffer_offset+i)] ^ buffer[(short)(buffer_offset+i)]);
-            }
 
-            // compute tagged hash
-            // t = int_from_bytes(tagged_hash("TapTweak", bytes_from_int(x(P)) + h))
-            schnorr_hash_tag(tags, (short)41, (short)8, recvBuffer, recvBuffer_offset, (short)32, recvBuffer, (short)65);
+            // compute tagged hash over the CONCATENATION of x(P) and h, i.e. 32+tweak_size bytes
+            // t = int_from_bytes(tagged_hash("TapTweak", bytes_from_int(x(P)) || h))
+            // coordy is not needed anymore, so overwrite it with h to make both operands contiguous
+            Util.arrayCopyNonAtomic(buffer, buffer_offset, recvBuffer, (short)33, tweak_size);
+            schnorr_hash_tag(tags, (short)41, (short)8, recvBuffer, recvBuffer_offset, (short)(32+tweak_size), recvBuffer, (short)65);
+            // recvBuffer= [ 0x04(1b) | x(P)(32b) | h(tweak_size) | ... | t(32b) at offset 65 ]
+
             // fails if t >= SECP256K1_ORDER (low probability)
             if(!Biginteger.lessThan(recvBuffer, (short)65, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32)){
                 ISOException.throwIt(SW_TAPROOT_TWEAK_ERROR);
             }
 
             //seckey = seckey0 if has_even_y(P) else SECP256K1_ORDER - seckey0
-            seckeyOffset = (short) 97;
-            if ( (recvBuffer[(byte)64] % 0x02) == 0x00) {
+            if (p_has_even_y) {
                 privkey.getS(recvBuffer, seckeyOffset);
             } else {
                 privkey.getS(recvBuffer, (short)129);
@@ -2949,14 +2981,16 @@ public class CardEdge extends javacard.framework.Applet {
                 }
             } 
 
-        } else {
+        } else if (p2==TAPROOT_BYPASS_TWEAK) {
             // check that feature is enabled
             if (feature_nostr_policy != FEATURE_ENABLED)
                 ISOException.throwIt(SW_FEATURE_DISABLED);
 
             // just copy privkey as is
-            seckeyOffset = (short) 97;
             privkey.getS(recvBuffer, seckeyOffset);
+        } else {
+            // reject unknown operations: silently bypassing the tweak would sign with the untweaked key
+            ISOException.throwIt(SW_INCORRECT_P2);
         }
 
         // save tweaked secret key 
