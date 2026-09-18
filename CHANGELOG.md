@@ -35,6 +35,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Harden ImportKey(): the imported private key scalar is now checked to be in range [1, n-1] for secp256k1, returning SW_INVALID_PARAMETER otherwise (previously an invalid scalar triggered an uncaught CryptoException from setS(), returning 0x6F00). Also fixed the error path for a wrong blob_size, which threw the blob_size value itself as status word (returning 0x9000, i.e. success, if blob_size was 0x9000) instead of SW_INVALID_PARAMETER.
 
+* Use constant-time comparison for all MAC/HMAC verifications (2FA checks, secure channel MAC, secure import MAC): Util.arrayCompare() may return as soon as the first difference is found, providing a timing oracle that could allow byte-by-byte forgery of authentication codes, and there is no try counter limiting the number of attempts. A new arrayCompareConstantTime() function (XOR-accumulate over the full length, no early exit) is now used at all 11 authentication-check call sites. Comparisons over public data (tx hash, MuSig2 pubkey match, secret fingerprint) are unchanged.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.

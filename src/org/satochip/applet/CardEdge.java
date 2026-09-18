@@ -110,7 +110,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
-    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, ...)
+    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, ...)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -1237,6 +1237,23 @@ public class CardEdge extends javacard.framework.Applet {
     }
     
     /**
+     * Constant-time comparison of two byte arrays, for authentication codes.
+     * Unlike Util.arrayCompare(), the execution time does not depend on the
+     * position of the first difference: such an early exit would provide a
+     * timing oracle allowing byte-by-byte forgery of MAC/HMAC values, and
+     * there is no try counter limiting the number of attempts.
+     * 
+     * @return true if the length bytes at both locations are equal, false otherwise
+     */
+    private static boolean arrayCompareConstantTime(byte[] a, short aOffset, byte[] b, short bOffset, short length){
+        byte diff = (byte)0;
+        for (short i=(short)0; i<length; i++){
+            diff |= (byte)(a[(short)(aOffset+i)] ^ b[(short)(bOffset+i)]);
+        }
+        return (diff == (byte)0);
+    }
+    
+    /**
      * Erase all user data (factory reset).
      *
      * Note: the personalization PKI data deliberately survives a factory reset:
@@ -1439,7 +1456,7 @@ public class CardEdge extends javacard.framework.Applet {
             // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x10^key_nb)-padding)
             Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte)(0x10^key_nb));
             HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
-            if (Util.arrayCompare(buffer, (short)(dataOffset+blob_size), recvBuffer, (short)65, (short)20)!=0)
+            if (!arrayCompareConstantTime(buffer, (short)(dataOffset+blob_size), recvBuffer, (short)65, (short)20))
                 ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
         
@@ -1490,7 +1507,7 @@ public class CardEdge extends javacard.framework.Applet {
             // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x20^key_nb)-padding)
             Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte) (0x20^key_nb));
             HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
-            if (Util.arrayCompare(buffer, ISO7816.OFFSET_CDATA, recvBuffer, (short)65, (short)20)!=0)
+            if (!arrayCompareConstantTime(buffer, ISO7816.OFFSET_CDATA, recvBuffer, (short)65, (short)20))
                 ISOException.throwIt(SW_SIGNATURE_INVALID);         
         }
         
@@ -2123,7 +2140,7 @@ public class CardEdge extends javacard.framework.Applet {
             authentikey_public.getW(recvBuffer, (short)0);
             Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte)0xFF);
             HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
-            if (Util.arrayCompare(buffer, offset, recvBuffer, (short)65, (short)20)!=0)
+            if (!arrayCompareConstantTime(buffer, offset, recvBuffer, (short)65, (short)20))
                 ISOException.throwIt(SW_SIGNATURE_INVALID);
         }   
         
@@ -2574,7 +2591,7 @@ public class CardEdge extends javacard.framework.Applet {
                     // hmac of 64-bytes msg: (sha256(btcheader+msg) | 32bytes 0xBB-padding)
                     Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0xBB);
                     HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
-                    if (Util.arrayCompare(buffer, offset, recvBuffer, (short)64, (short)20)!=0)
+                    if (!arrayCompareConstantTime(buffer, offset, recvBuffer, (short)64, (short)20))
                         ISOException.throwIt(SW_SIGNATURE_INVALID);
                 }
                 
@@ -2753,7 +2770,7 @@ public class CardEdge extends javacard.framework.Applet {
                 // hmac of 64-bytes msg: (doublesha256(raw_tx) | 32bytes zero-padding)
                 Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0x00);
                 HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
-                if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20)!=0)
+                if (!arrayCompareConstantTime(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20))
                     ISOException.throwIt(SW_SIGNATURE_INVALID);
                 // reset total amount
                 Util.arrayFillNonAtomic(transactionData, OFFSET_TRANSACTION_TOTAL, (short)8, (byte)0x00);
@@ -2826,7 +2843,7 @@ public class CardEdge extends javacard.framework.Applet {
             Util.arrayCopyNonAtomic(buffer, (short)ISO7816.OFFSET_CDATA, recvBuffer, (short)0, (short)32);
             Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0xCC);
             HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
-            if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20)!=0)
+            if (!arrayCompareConstantTime(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20))
                 ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
         
@@ -3073,7 +3090,7 @@ public class CardEdge extends javacard.framework.Applet {
             Util.arrayCopyNonAtomic(buffer, (short)ISO7816.OFFSET_CDATA, recvBuffer, (short)0, (short)32);
             Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0xDD); // 0xDD for Schnorr sig
             HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
-            if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20)!=0)
+            if (!arrayCompareConstantTime(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20))
                 ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
 
@@ -3548,7 +3565,7 @@ public class CardEdge extends javacard.framework.Applet {
             Util.arrayCopyNonAtomic(buffer, (short)ISO7816.OFFSET_CDATA, recvBuffer, (short)144, (short)32);
             Util.arrayFillNonAtomic(recvBuffer, (short)(144+32), (short)32, (byte)0xEE); // 0xEE for MuSig2 partial sig
             HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)144, (short)64, recvBuffer, (short)(144+64));
-            if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA+66+2), recvBuffer, (short)(144+64), (short)20)!=0)
+            if (!arrayCompareConstantTime(buffer, (short)(ISO7816.OFFSET_CDATA+66+2), recvBuffer, (short)(144+64), (short)20))
                 ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
 
@@ -3796,7 +3813,7 @@ public class CardEdge extends javacard.framework.Applet {
         Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)64, (byte)0xAA);
         Util.arrayCopyNonAtomic(data2FA, OFFSET_2FA_ID, recvBuffer, (short)0, (short)20);
         HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
-        if (Util.arrayCompare(buffer, offset, recvBuffer, (short)64, (short)20)!=0)
+        if (!arrayCompareConstantTime(buffer, offset, recvBuffer, (short)64, (short)20))
             ISOException.throwIt(SW_SIGNATURE_INVALID);
         
         // reset flag and data
@@ -4050,7 +4067,7 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(SW_INVALID_PARAMETER);
         }
         short sign_size = HmacSha160.computeHmacSha160(recvBuffer, (short)33, SIZE_SC_MACKEY, recvBuffer, (short)53, (short)32, recvBuffer, (short)85);
-        if (Util.arrayCompare(buffer, hmac_offset, recvBuffer, (short)(85), (short)20) != (byte)0)
+        if (!arrayCompareConstantTime(buffer, hmac_offset, recvBuffer, (short)(85), (short)20))
             ISOException.throwIt(SW_SECURE_IMPORT_WRONG_MAC);
 
         // decrypt secret
@@ -4194,7 +4211,7 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         // we compute the hmac on the very end of the recvBuffer, so that first bytes can be used as temporary storage between 2 commands.
         HmacSha160.computeHmacSha160(sc_buffer, OFFSET_SC_MACKEY, SIZE_SC_MACKEY, buffer, offset, (short)(SIZE_SC_IV+2+sizein), recvBuffer, (short)248);
-        if ( Util.arrayCompare(recvBuffer, (short)248, buffer, (short)(offset+SIZE_SC_IV+2+sizein+2), (short)20) != (byte)0 )
+        if ( !arrayCompareConstantTime(recvBuffer, (short)248, buffer, (short)(offset+SIZE_SC_IV+2+sizein+2), (short)20) )
             ISOException.throwIt(SW_SECURE_CHANNEL_WRONG_MAC);
         
         // process IV
