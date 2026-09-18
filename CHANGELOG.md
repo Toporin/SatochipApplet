@@ -39,6 +39,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Code cleanup: removed ~25 redundant casts (on variables and constants already of the target type) that generated compiler warnings during the build. No functional change.
 
+* Fix spurious select (see https://github.com/Toporin/SatochipApplet/issues/11)
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
