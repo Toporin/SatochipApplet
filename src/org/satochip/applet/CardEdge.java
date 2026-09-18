@@ -3042,6 +3042,13 @@ public class CardEdge extends javacard.framework.Applet {
         if (feature_schnorr_policy != FEATURE_ENABLED)
             ISOException.throwIt(SW_FEATURE_DISABLED);
 
+        // a key must have been staged by TaprootTweakPrivateKey() first,
+        // otherwise keyAgreement.init() below would throw an uncaught
+        // CryptoException (0x6F00). This is the state after a seed reset or a
+        // factory reset, which both clear the tweaked key.
+        if (!taproot_tweakedkey.isInitialized())
+            ISOException.throwIt(SW_INCORRECT_INITIALIZATION);
+
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         if (bytesLeft<MessageDigest.LENGTH_SHA_256)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
@@ -3082,14 +3089,16 @@ public class CardEdge extends javacard.framework.Applet {
         keyAgreement.init(taproot_tweakedkey);
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)31); //pubkey in uncompressed form (65bytes) 
         // we leave 32 bytes before coordx for reuse in next steps
+        // Keep a copy of the tweaked secret: taproot_tweakedkey is borrowed
+        // below as scratch storage to compute R = rand*G, which overwrites it,
+        // and it must be restored so that it survives this signature.
+        taproot_tweakedkey.getS(recvBuffer, OFFSET_BIP340_sk);
         // check evenness
         if (buffer[31+64]%2 == 0){
             // d= sk
-            //Util.arrayCopyNonAtomic(sk, (short)0, d, (short)0, (short)32);
-            taproot_tweakedkey.getS(recvBuffer, OFFSET_BIP340_d);
+            Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_sk, recvBuffer, OFFSET_BIP340_d, (short)32);
         } else {
             // d= n-sk
-            taproot_tweakedkey.getS(recvBuffer, OFFSET_BIP340_sk);
             Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, OFFSET_BIP340_d, (short)32);
             Biginteger.subtract(recvBuffer, OFFSET_BIP340_d, recvBuffer, OFFSET_BIP340_sk, (short)32);
         }
@@ -3111,9 +3120,18 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt((short)0x7778);
         }
         // todo: rand = rand % n
+        // taproot_tweakedkey is borrowed here to compute R = rand*G: keyAgreement
+        // needs an ECPrivateKey and there is no spare one. The tweaked key is put
+        // back immediately afterwards, before anything can throw: leaving the
+        // nonce in place would make the NEXT SignSchnorrHash() sign with this
+        // signature's nonce as its private key, silently returning a well-formed
+        // signature that does not verify under the taproot output key.
         taproot_tweakedkey.setS(recvBuffer, OFFSET_BIP340_t, (short)32);
         keyAgreement.init(taproot_tweakedkey);
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form (65bytes) 
+        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form (65bytes)
+        // restore the tweaked key, so that several hashes can be signed after a
+        // single TaprootTweakPrivateKey() (e.g. the inputs of one transaction)
+        taproot_tweakedkey.setS(recvBuffer, OFFSET_BIP340_sk, (short)32);
         // check evenness
         if (tmpBuffer[64]%2 == 0){
             // k = rand
