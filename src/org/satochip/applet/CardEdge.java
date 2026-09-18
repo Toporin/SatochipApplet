@@ -612,14 +612,14 @@ public class CardEdge extends javacard.framework.Applet {
         
         // Temporary working arrays
         try {
-            tmpBuffer = JCSystem.makeTransientByteArray((short) TMP_BUFFER_SIZE, JCSystem.CLEAR_ON_DESELECT);
+            tmpBuffer = JCSystem.makeTransientByteArray(TMP_BUFFER_SIZE, JCSystem.CLEAR_ON_DESELECT);
         } catch (SystemException e) {
             tmpBuffer = new byte[TMP_BUFFER_SIZE];
         }
         // Initialize the extended APDU buffer
         try {
             // Try to allocate the extended APDU buffer on RAM memory
-            recvBuffer = JCSystem.makeTransientByteArray((short) EXT_APDU_BUFFER_SIZE, JCSystem.CLEAR_ON_DESELECT);
+            recvBuffer = JCSystem.makeTransientByteArray(EXT_APDU_BUFFER_SIZE, JCSystem.CLEAR_ON_DESELECT);
         } catch (SystemException e) {
             // Allocate the extended APDU buffer on EEPROM memory
             // This is the fallback method, but its usage is really not
@@ -801,7 +801,7 @@ public class CardEdge extends javacard.framework.Applet {
         // Reset to factory 
         //    To trigger reset to factory, user must insert and remove card a fixed number of time, 
         //    without sending any other command than 1 reset in between
-        if (ins == (byte) INS_RESET_TO_FACTORY){
+        if (ins == INS_RESET_TO_FACTORY){
             if (reset_array[0]==0){
                 reset_counter--;
                 reset_array[0]=(byte)1;
@@ -823,7 +823,7 @@ public class CardEdge extends javacard.framework.Applet {
         }
         
         // prepare APDU buffer
-        if (ins != (byte) INS_GET_STATUS){
+        if (ins != INS_GET_STATUS){
             short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
             if (bytesLeft != apdu.setIncomingAndReceive())
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
@@ -832,17 +832,17 @@ public class CardEdge extends javacard.framework.Applet {
         // only 3 commands are allowed, the others must be wrapped in a secure channel command
         // the 3 commands are: get_status, initialize_secure_channel & process_secure_channel
         short sizeout=(short)0;
-        if (ins == (byte) INS_GET_STATUS){
+        if (ins == INS_GET_STATUS){
             sizeout= GetStatus(apdu, buffer);
             apdu.setOutgoingAndSend((short) 0, sizeout);
             return;
         }
-        else if (ins == (byte) INS_INIT_SECURE_CHANNEL){
+        else if (ins == INS_INIT_SECURE_CHANNEL){
             sizeout= InitiateSecureChannel(apdu, buffer);
             apdu.setOutgoingAndSend((short) 0, sizeout);
             return;
         }
-        else if (ins == (byte) INS_PROCESS_SECURE_CHANNEL){
+        else if (ins == INS_PROCESS_SECURE_CHANNEL){
             sizeout= ProcessSecureChannel(apdu, buffer);
             //todo: check if sizeout and buffer[ISO7816.OFFSET_LC] matches...
             //if sizeout>4, buffer[ISO7816.OFFSET_LC] should be equal to (sizeout-5)
@@ -868,7 +868,7 @@ public class CardEdge extends javacard.framework.Applet {
                 ISOException.throwIt(SW_SETUP_NOT_DONE);
             } 
         }
-        if (setupDone && (ins == (byte) INS_SETUP))
+        if (setupDone && (ins == INS_SETUP))
             ISOException.throwIt(SW_SETUP_ALREADY_DONE);
         
         switch (ins) {
@@ -1016,7 +1016,7 @@ public class CardEdge extends javacard.framework.Applet {
         if (sizeout==0){
             return;
         }
-        else if ((ins == (byte) INS_GET_STATUS) || (ins == (byte) INS_INIT_SECURE_CHANNEL)) {
+        else if ((ins == INS_GET_STATUS) || (ins == INS_INIT_SECURE_CHANNEL)) {
             apdu.setOutgoingAndSend((short) 0, sizeout);
         }
         else if (needs_secure_channel) { // encrypt response
@@ -1421,7 +1421,7 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(SW_INVALID_PARAMETER);
         dataOffset += (short) 2; 
         bytesLeft -= (short) 2;
-        if (bytesLeft < (short) (blob_size))
+        if (bytesLeft < blob_size)
             ISOException.throwIt(SW_INVALID_PARAMETER);
         
         // check that the private key scalar is in range [1, n-1] for secp256k1
@@ -1787,7 +1787,7 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(SW_INCORRECT_P1);
         if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
             ISOException.throwIt(SW_INCORRECT_P2);
-        byte expectedBytes = (byte) (buffer[ISO7816.OFFSET_LC]);
+        byte expectedBytes = buffer[ISO7816.OFFSET_LC];
         if (expectedBytes != (short) 2)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         // Build the PIN bit mask
@@ -1827,10 +1827,10 @@ public class CardEdge extends javacard.framework.Applet {
         
         short pos = (short) 0;
         // applet version
-        buffer[pos++] = (byte) PROTOCOL_MAJOR_VERSION; // Major Card Edge Protocol version n.
-        buffer[pos++] = (byte) PROTOCOL_MINOR_VERSION; // Minor Card Edge Protocol version n.
-        buffer[pos++] = (byte) APPLET_MAJOR_VERSION; // Major Applet version n.
-        buffer[pos++] = (byte) APPLET_MINOR_VERSION; // Minor Applet version n.
+        buffer[pos++] = PROTOCOL_MAJOR_VERSION; // Major Card Edge Protocol version n.
+        buffer[pos++] = PROTOCOL_MINOR_VERSION; // Minor Card Edge Protocol version n.
+        buffer[pos++] = APPLET_MAJOR_VERSION; // Major Applet version n.
+        buffer[pos++] = APPLET_MINOR_VERSION; // Minor Applet version n.
         // PIN/PUK remaining tries available
         if (setupDone){
             buffer[pos++] = pins[0].getTriesRemaining();
@@ -2118,7 +2118,7 @@ public class CardEdge extends javacard.framework.Applet {
         byte triesRemaining = pin.getTriesRemaining();
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
-        if (!pin.check(buffer, (short) ISO7816.OFFSET_CDATA, (byte) pin_size)) {
+        if (!pin.check(buffer, (short) ISO7816.OFFSET_CDATA, pin_size)) {
             LogoutIdentity((byte)0x00);
             ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
         }
@@ -2395,7 +2395,7 @@ public class CardEdge extends javacard.framework.Applet {
         bip32_extendedkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
         
         // save chaincode to buffer then clear recvBuffer
-        Util.arrayCopyNonAtomic(recvBuffer, (short)BIP32_OFFSET_PARENT_CHAINCODE, buffer, (short)0, BIP32_KEY_SIZE); 
+        Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, buffer, (short)0, BIP32_KEY_SIZE); 
         Util.arrayFillNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_OFFSET_END, (byte)0);
                 
         // compute the corresponding partial public key...
@@ -2566,7 +2566,7 @@ public class CardEdge extends javacard.framework.Applet {
                 offset= (short)ISO7816.OFFSET_CDATA;
                 chunk_size=Util.getShort(buffer, offset);
                 offset+=2;
-                sha256.update(buffer, (short) offset, chunk_size);
+                sha256.update(buffer, offset, chunk_size);
                 return (short)0;
             
             // final
@@ -2579,7 +2579,7 @@ public class CardEdge extends javacard.framework.Applet {
                 chunk_size=Util.getShort(buffer, offset);
                 offset+=2;
                 bytesLeft-=2;
-                sha256.doFinal(buffer, (short)offset, chunk_size, recvBuffer, (short) 0);
+                sha256.doFinal(buffer, offset, chunk_size, recvBuffer, (short) 0);
                 sign_flag= false;// reset flag
                 offset+=chunk_size;
                 bytesLeft-=chunk_size;
@@ -2961,7 +2961,7 @@ public class CardEdge extends javacard.framework.Applet {
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 
             // compute pubkey corresponding to private key
-            keyAgreement.init((ECPrivateKey)privkey);
+            keyAgreement.init(privkey);
             keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65bytes)
             // recvBuffer= [ 0x04(1b) | coordx(32b) | coordy(32b) ]
 
@@ -3868,7 +3868,7 @@ public class CardEdge extends javacard.framework.Applet {
                 if (ciph_dir==Cipher.MODE_ENCRYPT){
                     randomData.generateData(buffer,(short)0, IVlength);
                     aes128_cbc.init(key_2FA, Cipher.MODE_ENCRYPT, buffer, (short)0, IVlength);
-                    Util.arrayCopyNonAtomic(data2FA, OFFSET_2FA_ID, buffer, (short)IVlength, (short)20);
+                    Util.arrayCopyNonAtomic(data2FA, OFFSET_2FA_ID, buffer, IVlength, (short)20);
                     return (short)(IVlength + 20);
                 }
                 if (ciph_dir==Cipher.MODE_DECRYPT){

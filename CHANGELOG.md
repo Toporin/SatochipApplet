@@ -37,6 +37,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Use constant-time comparison for all MAC/HMAC verifications (2FA checks, secure channel MAC, secure import MAC): Util.arrayCompare() may return as soon as the first difference is found, providing a timing oracle that could allow byte-by-byte forgery of authentication codes, and there is no try counter limiting the number of attempts. A new arrayCompareConstantTime() function (XOR-accumulate over the full length, no early exit) is now used at all 11 authentication-check call sites. Comparisons over public data (tx hash, MuSig2 pubkey match, secret fingerprint) are unchanged.
 
+* Code cleanup: removed ~25 redundant casts (on variables and constants already of the target type) that generated compiler warnings during the build. No functional change.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.

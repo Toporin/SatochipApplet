@@ -65,12 +65,12 @@ public class Biginteger {
     public static void init(){
         // init arrays
         try {
-            buffer1 = JCSystem.makeTransientByteArray((short) BUFFER_SIZE, JCSystem.CLEAR_ON_DESELECT);
+            buffer1 = JCSystem.makeTransientByteArray(BUFFER_SIZE, JCSystem.CLEAR_ON_DESELECT);
         } catch (SystemException e) {
             buffer1 = new byte[BUFFER_SIZE];
         }
         try {
-            buffer2 = JCSystem.makeTransientByteArray((short) BUFFER_SIZE, JCSystem.CLEAR_ON_DESELECT);
+            buffer2 = JCSystem.makeTransientByteArray(BUFFER_SIZE, JCSystem.CLEAR_ON_DESELECT);
         } catch (SystemException e) {
             buffer2 = new byte[BUFFER_SIZE];
         }
@@ -260,7 +260,7 @@ public class Biginteger {
      * For a Biginteger bi of given size stored in a given byte array at given offset, 
      * the function sets the Biginteger to zero*/
     public static void setZero(byte[] x, short offsetx, short size) {
-        Util.arrayFillNonAtomic(x, offsetx, (short)size, (byte)0x00);
+        Util.arrayFillNonAtomic(x, offsetx, size, (byte)0x00);
     }
     
     /**
