@@ -110,7 +110,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
-    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ...)
+    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, ...)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -1401,10 +1401,17 @@ public class CardEdge extends javacard.framework.Applet {
                 ISOException.throwIt(SW_INVALID_PARAMETER);
         short blob_size = Util.getShort(buffer, dataOffset);
         if (blob_size != BIP32_KEY_SIZE) // only bitcoin
-            ISOException.throwIt(blob_size);
+            ISOException.throwIt(SW_INVALID_PARAMETER);
         dataOffset += (short) 2; 
         bytesLeft -= (short) 2;
         if (bytesLeft < (short) (blob_size))
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        
+        // check that the private key scalar is in range [1, n-1] for secp256k1
+        // (avoids an uncaught CryptoException from setS() with an invalid scalar)
+        if (Biginteger.equalZero(buffer, dataOffset, BIP32_KEY_SIZE))
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        if (!Biginteger.lessThan(buffer, dataOffset, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE))
             ISOException.throwIt(SW_INVALID_PARAMETER);
         
         // check type and size

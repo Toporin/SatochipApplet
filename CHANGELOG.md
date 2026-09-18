@@ -33,6 +33,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Complete resetToFactory()/resetSeed(): the MuSig2 state (secnonce encryption/MAC keys, list of valid secnonce ids, id counter) is now reset on both factory reset and plain seed reset, so encrypted secnonces exported before the reset can no longer be used (a new resetMusig2NonceState() function is shared with the Musig2GenerateNonce() counter-overflow handler). The secure channel session key and the option flags are now also cleared on factory reset. The code now documents that the personalization PKI data (authentikey, certificate, personalizationDone flag) deliberately survives a factory reset.
 
+* Harden ImportKey(): the imported private key scalar is now checked to be in range [1, n-1] for secp256k1, returning SW_INVALID_PARAMETER otherwise (previously an invalid scalar triggered an uncaught CryptoException from setS(), returning 0x6F00). Also fixed the error path for a wrong blob_size, which threw the blob_size value itself as status word (returning 0x9000, i.e. success, if blob_size was 0x9000) instead of SW_INVALID_PARAMETER.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
