@@ -25,7 +25,7 @@ Advantages:
 - Plug and play
 - Smartcards have a long experience in dealing with security and physical security in particular
 - Can be easily used or extended for other crypto-currencies
-- A test package is run during build to ensure that critical functionalities are implemented correctly
+- Critical functionalities are covered by a test suite run against the card, including the official Bitcoin BIP test vectors (see [Test](#test))
 
 Also, if used with a Yubikey:
 - Yubikey has minimal size and is practically indestructible
@@ -86,6 +86,12 @@ git submodule add https://github.com/martinpaljak/oracle_javacard_sdks sdks
 ``` 
 ant 
 ```
+
+# Test
+
+This repository has no test suite of its own: the applet is tested from the client side, over the APDU interface, by the [pysatochip](https://github.com/Toporin/pysatochip) library. It provides both offline tests, which check the client and pin a BIP340/BIP341 reference implementation to the official Bitcoin test vectors, and hardware tests, which run the applet's BIP32 derivation, message signing, taproot/schnorr and MuSig2 commands against a card and compare the results to those vectors.
+
+See the [Running the Tests](https://github.com/Toporin/pysatochip#running-the-tests) section of the pysatochip README for the test list and how to run them. Note that the hardware tests are destructive: only run them against a development card.
 
 # Install
 
