@@ -4062,7 +4062,8 @@ public class CardEdge extends javacard.framework.Applet {
         data_size = Util.getShort(buffer, buffer_offset);
         buffer_offset += 2;
         bytes_left -= 2;
-        if (bytes_left < data_size) {
+        // data_size must be positive and a multiple of the AES block size (16 bytes)
+        if (data_size <= 0 || (data_size % 16) != 0 || bytes_left < data_size) {
             ISOException.throwIt(SW_INVALID_PARAMETER);
         }
 
@@ -4084,8 +4085,10 @@ public class CardEdge extends javacard.framework.Applet {
 
         // decrypt secret
         dec_size = sc_aes128_cbc.update(buffer, buffer_offset, data_size, buffer, buffer_offset);
-        // padding
+        // padding (PKCS#7): pad length must be in [1, 16] and cannot exceed the decrypted size
         short padsize = buffer[ (short)(buffer_offset+dec_size-1) ];
+        if (padsize < 1 || padsize > 16 || padsize > dec_size)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
         data_size = (short)(dec_size-padsize);
         // hash for fingerprinting
         sha256.reset();

@@ -45,6 +45,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Enforce a minimum seed size in importBIP32Seed(): the seed size must now be in range [16, 64] bytes (BIP32 recommends at least 128 bits of entropy), returning SW_WRONG_LENGTH otherwise. Previously any size from 0 to 64 was accepted, including a degenerate empty seed. SeedKeeper imports (16-64 byte master seeds) are unaffected.
 
+* Harden importEncryptedSecret() input validation: the encrypted_secret_size field is now checked to be positive and a multiple of the AES block size (16 bytes) before use (previously a value with the high bit set was read as a negative short, slipped past the length check, and caused negative-length exceptions). The PKCS#7 padding length read from the decrypted data is now also validated to be in range [1, 16] and not larger than the decrypted size, returning SW_INVALID_PARAMETER otherwise.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
