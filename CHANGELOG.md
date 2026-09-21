@@ -47,6 +47,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Harden importEncryptedSecret() input validation: the encrypted_secret_size field is now checked to be positive and a multiple of the AES block size (16 bytes) before use (previously a value with the high bit set was read as a negative short, slipped past the length check, and caused negative-length exceptions). The PKCS#7 padding length read from the decrypted data is now also validated to be in range [1, 16] and not larger than the decrypted size, returning SW_INVALID_PARAMETER otherwise.
 
+* Merge [PR #22](https://github.com/Toporin/SatochipApplet/pull/22) (thanks @kkdao): count the two-byte size prefix in importTrustedPubkey() (fixes [#21](https://github.com/Toporin/SatochipApplet/issues/21)). The length check compared Lc with pubkey_size alone, so a command with Lc = 65 or 66 passed and the 65-byte copy read past the command data, silently storing a corrupted trusted pubkey. Well-formed 67-byte commands behave exactly as before.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
