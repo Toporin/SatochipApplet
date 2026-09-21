@@ -103,6 +103,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.12-0.3: SeedKeeper support: label & labelsize no longer required 
     // 0.12-0.4: add reset to factory support
     // 0.12-0.5: add support for personalisation PKI
+    // 0.12-0.6: patch spurious select issue
     // 0.14-0.1: add Schnorr signature support (beta)
     // 0.14-0.2: Schnorr signature - add option to bypass key tweaking (beta)
     // 0.14-0.3: add Liquid-Bitcoin support
@@ -3945,10 +3946,11 @@ public class CardEdge extends javacard.framework.Applet {
         if (pubkey_size != PUBKEY_SIZE) {
             ISOException.throwIt(SW_INVALID_PARAMETER);
         }
+        buffer_offset += 2;
+        bytes_left -= 2;
         if (bytes_left < pubkey_size) {
             ISOException.throwIt(SW_INVALID_PARAMETER);
         }
-        buffer_offset += 2;
         if (buffer[buffer_offset] != 0x04) {
             ISOException.throwIt(SW_INVALID_PARAMETER);
         }
