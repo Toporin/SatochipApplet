@@ -1705,13 +1705,18 @@ public class CardEdge extends javacard.framework.Applet {
     }
 
     /**
-     * This function unblocks a PIN number using the unblock code specified in the
-     * DATA portion. The P3 byte specifies the unblock code length.
-     * 
+     * This function unblocks a PIN number using the unblock code (PUK) specified in the
+     * DATA portion. If PUK code is wrong, its counter is decreased.
+     * When the counter reaches zero, the PIN/PUK are effectively blocked until factory reset is performed.
+     * If a new PIN is provided, it replaces the forgotten PIN; if only the PUK is
+     * provided, the PIN is unblocked but keeps its previous value.
+     *
+     * breaking change: on v0.15 and lower, only [PUK] (without size prefix) was provided.
+     *
      * ins: 0x46
      * p1: PIN number (0x00-0x07)
      * p2: 0x00
-     * data: [PUK] 
+     * data: [PUK_size(1b) | PUK | (optional) PIN_size(1b) | (optional) PIN]
      * return: none (throws an exception in case of wrong PUK)
      */
     private short UnblockPIN(APDU apdu, byte[] buffer) {
@@ -1729,23 +1734,49 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(SW_OPERATION_NOT_ALLOWED);
         if (buffer[ISO7816.OFFSET_P2] != 0x00)
             ISOException.throwIt(SW_INCORRECT_P2);
+
+        short buffer_offset = ISO7816.OFFSET_CDATA;
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-        /*
-         * Here I suppose the PIN code is small enough to fit into the buffer
-         * TODO: Verify the assumption and eventually adjust code to support
-         * reading PIN in multiple read()s
-         */
-        if (!CheckPINPolicy(buffer, ISO7816.OFFSET_CDATA, (byte) bytesLeft))
+        if (bytesLeft < 1)
             ISOException.throwIt(SW_INVALID_PARAMETER);
+
+        // parse PUK
+        byte puk_size = buffer[buffer_offset];
+        buffer_offset++;
+        bytesLeft--;
+        if (bytesLeft < (short) puk_size)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        if (!CheckPINPolicy(buffer, buffer_offset, puk_size))
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+
+        // parse optional new PIN (validate all inputs before any state change)
+        short pin_offset = (short)(buffer_offset + puk_size);
+        short remaining = (short)(bytesLeft - puk_size);
+        byte pin_size = (byte)0;
+        if (remaining >= 1){
+            pin_size = buffer[pin_offset];
+            pin_offset++;
+            remaining--;
+            if (remaining < (short) pin_size)
+                ISOException.throwIt(SW_INVALID_PARAMETER);
+            if (!CheckPINPolicy(buffer, pin_offset, pin_size))
+                ISOException.throwIt(SW_INVALID_PARAMETER);
+        }
+
+        // check PUK (exact length)
         byte triesRemaining = ublk_pin.getTriesRemaining();
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
-        if (!ublk_pin.check(buffer, ISO7816.OFFSET_CDATA, (byte) bytesLeft))
+        if (!ublk_pin.check(buffer, buffer_offset, puk_size))
             ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
-        
+
+        // PUK is correct: unblock the PIN and restore try counters
         pin.resetAndUnblock();
         ublk_pin.reset();
-        
+
+        // set the new PIN if one was provided
+        if (pin_size > (byte)0)
+            pin.update(buffer, pin_offset, pin_size);
         return (short)0;
     }
 

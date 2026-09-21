@@ -51,6 +51,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Refactor reset to factory to v3: Reset to factory is now triggered by sending one single APDU command. Note that the new reset path goes through the secure channel, so INIT_SECURE_CHANNEL must be performed first. resetToFactory() now also resets and unblocks all PINs and PUKs, restoring their try counters (OwnerPIN.update() does not reset them).
 
+* Extend UnblockPIN(): a forgotten PIN can now be unblocked AND changed by providing the PUK code. The data format is now [PUK_size(1b) | PUK | (optional) PIN_size(1b) | (optional) PIN]: if a new PIN is provided, it replaces the forgotten one; if only the PUK is provided, the PIN is simply unblocked with its previous value. After a successful unblock, the PIN and PUK try counters are restored. All inputs are validated before any state change and the PUK is checked with its exact length. Compatibility note: the previous format ([PUK] without size prefix) is not accepted anymore, clients must be updated.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
