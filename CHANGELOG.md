@@ -43,6 +43,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Harden signMessage() input validation: the 2-byte chunk_size in the OP_PROCESS and OP_FINALIZE data is now checked against the number of bytes actually received (and to be non-negative), returning SW_WRONG_LENGTH otherwise. Previously, a wrong chunk_size made the hash read stale APDU buffer content or throw an out-of-bounds exception (0x6F00).
 
+* Enforce a minimum seed size in importBIP32Seed(): the seed size must now be in range [16, 64] bytes (BIP32 recommends at least 128 bits of entropy), returning SW_WRONG_LENGTH otherwise. Previously any size from 0 to 64 was accepted, including a degenerate empty seed. SeedKeeper imports (16-64 byte master seeds) are unaffected.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.

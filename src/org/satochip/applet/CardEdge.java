@@ -2035,7 +2035,7 @@ public class CardEdge extends javacard.framework.Applet {
      * The authentikey full public key can be recovered from the signature.
      *  
      *  ins: 0x6C
-     *  p1: seed_size(1b) 
+     *  p1: seed_size(1b), must be in range [16, 64] 
      *  p2: 0x00 
      *  data: [seed_data (seed_size)]
      *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
@@ -2052,9 +2052,9 @@ public class CardEdge extends javacard.framework.Applet {
         
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         
-        // get seed bytesize (max 64 bytes)
+        // get seed bytesize (16 to 64 bytes, as per BIP32 recommendation of at least 128 bits of entropy)
         byte bip32_seedsize = buffer[ISO7816.OFFSET_P1]; 
-        if (bip32_seedsize <0 || bip32_seedsize>64)
+        if (bip32_seedsize <16 || bip32_seedsize>64)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         if (bytesLeft < bip32_seedsize)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);      
