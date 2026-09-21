@@ -2564,9 +2564,15 @@ public class CardEdge extends javacard.framework.Applet {
                     ISOException.throwIt(SW_INCORRECT_INITIALIZATION);
                     
                 // buffer data = [2-byte chunk_size | n-byte message to sign]
+                if (bytesLeft < (short)2)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
                 offset= (short)ISO7816.OFFSET_CDATA;
                 chunk_size=Util.getShort(buffer, offset);
                 offset+=2;
+                bytesLeft-=2;
+                // check that chunk_size does not exceed the data actually received
+                if (chunk_size < 0 || chunk_size > bytesLeft)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
                 sha256.update(buffer, offset, chunk_size);
                 return (short)0;
             
@@ -2576,10 +2582,15 @@ public class CardEdge extends javacard.framework.Applet {
                     ISOException.throwIt(SW_INCORRECT_INITIALIZATION);
                 
                 // buffer data = [2-byte chunk_size | n-byte message to sign]
+                if (bytesLeft < (short)2)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
                 offset= (short)ISO7816.OFFSET_CDATA;
                 chunk_size=Util.getShort(buffer, offset);
                 offset+=2;
                 bytesLeft-=2;
+                // check that chunk_size does not exceed the data actually received
+                if (chunk_size < 0 || chunk_size > bytesLeft)
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
                 sha256.doFinal(buffer, offset, chunk_size, recvBuffer, (short) 0);
                 sign_flag= false;// reset flag
                 offset+=chunk_size;
