@@ -111,7 +111,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
-    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, ...)
+    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, reset-to-factory refactoring, ...)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -207,8 +207,8 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte INS_LOCK_PKI = (byte) 0x99;
     private final static byte INS_CHALLENGE_RESPONSE_PKI= (byte) 0x9A;
     
-    // reset to factory settings
-    private final static byte INS_RESET_TO_FACTORY = (byte) 0xFF;
+    // reset to factory settings v3
+    private final static byte INS_RESET_TO_FACTORY_V3 = (byte) 0xFD;
     
     /****************************************
      *          Error codes                 *
@@ -314,6 +314,13 @@ public class CardEdge extends javacard.framework.Applet {
     private final static short SW_BIP327_PUBKEY_MISMATCH= (short) 0x9C45;
     private final static short SW_BIP327_COUNTER_OVERFLOW= (short) 0x9C46;
     private final static short SW_BIP327_INVALID_ID= (short) 0x9C47;
+
+    /****************************************
+     *            Other constants           *
+     ****************************************/
+
+    static final byte FACTORY_RESET_P1_MAGIC = (byte) 0xAA;
+    static final byte FACTORY_RESET_P2_MAGIC = 0x55;
 
     // KeyBlob Encoding in Key Blobs
     private final static byte BLOB_ENC_PLAIN = (byte) 0x00;
@@ -569,11 +576,6 @@ public class CardEdge extends javacard.framework.Applet {
     // additional options
     private short option_flags;
     
-    // reset factory
-    private byte[] reset_array;
-    private final static byte MAX_RESET_COUNTER= (byte)5;
-    private byte reset_counter=MAX_RESET_COUNTER;
-
     // NFC policy
     private static final byte NFC_ENABLED=0;
     private static final byte NFC_DISABLED=1; // can be re-enabled at any time
@@ -649,13 +651,6 @@ public class CardEdge extends javacard.framework.Applet {
             sc_buffer = new byte[SIZE_SC_BUFFER];
         }
 
-        // reset to factory test...
-        try {
-            reset_array = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_RESET);
-        } catch (SystemException e) {
-            ISOException.throwIt(SW_UNSUPPORTED_FEATURE);// unsupported feature => use a more recent card!
-        }
-        
         // secure channel
         sc_sessionkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false); // todo: make transient?
         //ephemeral_privkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false); // todo: make transient
@@ -799,30 +794,6 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
 
         byte ins = buffer[ISO7816.OFFSET_INS];
-        
-        // Reset to factory 
-        //    To trigger reset to factory, user must insert and remove card a fixed number of time, 
-        //    without sending any other command than 1 reset in between
-        if (ins == INS_RESET_TO_FACTORY){
-            if (reset_array[0]==0){
-                reset_counter--;
-                reset_array[0]=(byte)1;
-            }else{
-                // if INS_RESET_TO_FACTORY is sent after any instruction, the reset process is aborted.
-                reset_counter=MAX_RESET_COUNTER;
-                ISOException.throwIt((short)(SW_RESET_TO_FACTORY + 0xFF));
-            }
-            if (reset_counter== 0) {
-                reset_counter=MAX_RESET_COUNTER;
-                resetToFactory();
-                ISOException.throwIt(SW_RESET_TO_FACTORY);
-            }
-            ISOException.throwIt((short)(SW_RESET_TO_FACTORY + reset_counter));
-        }
-        else{
-            reset_counter=MAX_RESET_COUNTER;
-            reset_array[0]=(byte)1;
-        }
         
         // prepare APDU buffer
         if (ins != INS_GET_STATUS){
@@ -1010,6 +981,9 @@ public class CardEdge extends javacard.framework.Applet {
         case INS_CHALLENGE_RESPONSE_PKI:
             sizeout= challenge_response_pki(apdu, buffer);
             break;
+        case INS_RESET_TO_FACTORY_V3:
+            sizeout= resetToFactory(apdu, buffer);
+            break;
         default:
             ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
         }//end of switch
@@ -1194,6 +1168,77 @@ public class CardEdge extends javacard.framework.Applet {
         return (short)0;//nothing to return
     }
 
+    /**
+     * Erase all user data (factory reset).
+     * All PINs and PUKs are reset and unblocked (try counters restored), so that
+     * the card can be set up and used again afterwards.
+     *
+     * Note: the personalization PKI data deliberately survives a factory reset:
+     * the authentikey keypair (device identity), the authentikey certificate and
+     * the personalizationDone flag are kept unchanged, so that the device can still
+     * prove its authenticity (genuine personalization) afterwards. The authentikey
+     * is generated once at install time and is never modified afterwards.
+     */
+    private short resetToFactory(APDU apdu, byte[] buffer){
+        if ((buffer[ISO7816.OFFSET_P1] != FACTORY_RESET_P1_MAGIC) || (buffer[ISO7816.OFFSET_P2] != FACTORY_RESET_P2_MAGIC)) {
+            ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
+        }
+
+        //2FA
+        needs_2FA= false;
+        key_2FA.clearKey();
+        Util.arrayFillNonAtomic(data2FA, (short)0,(short)data2FA.length, (byte)0);
+
+        //seed & BIP32 data
+        resetSeed();
+
+        //taproot
+        taproot_tweakedkey.clearKey();
+
+        // private keys
+        for (byte nb_key=0; nb_key<MAX_NUM_KEYS; nb_key++){
+            if (eckeys[nb_key] != null)
+                eckeys[nb_key].clearKey();
+        }
+        eckeys_flag=(short)0;
+
+        // secure channel session key
+        sc_sessionkey.clearKey();
+        initialized_secure_channel=false;
+
+        // option flags
+        option_flags=(short)0;
+
+        // reset NFC policy to enabled
+        nfc_policy = NFC_ENABLED;
+
+        // reset optional features to default
+        feature_schnorr_policy = FEATURE_ENABLED;
+        feature_nostr_policy = FEATURE_ENABLED;
+        feature_liquid_policy = FEATURE_ENABLED;
+        feature_musig2_policy = FEATURE_ENABLED;
+
+        // reset card label
+        card_label_size=0;
+        Util.arrayFillNonAtomic(card_label, (short)0, (short)card_label.length, (byte)0);
+
+        // PINs & PUKs: reset try counters and unblock them, so that the card can be
+        // set up and used again (PIN/PUK values are set again during setup).
+        // Note: OwnerPIN.update() does not reset the try counter, hence this loop.
+        for (byte nb_pin=(byte)0; nb_pin<MAX_NUM_PINS; nb_pin++){
+            if (pins[nb_pin] != null)
+                pins[nb_pin].resetAndUnblock();
+            if (ublk_pins[nb_pin] != null)
+                ublk_pins[nb_pin].resetAndUnblock();
+        }
+
+        // setup
+        pins[0].update(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length);
+        setupDone=false;
+
+        return (short)0;
+    }
+
     /************************* 
      *    UTILITY FUNCTIONS  *
      *************************/
@@ -1254,63 +1299,7 @@ public class CardEdge extends javacard.framework.Applet {
         }
         return (diff == (byte)0);
     }
-    
-    /**
-     * Erase all user data (factory reset).
-     *
-     * Note: the personalization PKI data deliberately survives a factory reset:
-     * the authentikey keypair (device identity), the authentikey certificate and
-     * the personalizationDone flag are kept unchanged, so that the device can still
-     * prove its authenticity (genuine personalization) afterwards. The authentikey
-     * is generated once at install time and is never modified afterwards.
-     */
-    private boolean resetToFactory(){
-        
-        //2FA
-        needs_2FA= false;
-        key_2FA.clearKey();
-        Util.arrayFillNonAtomic(data2FA, (short)0,(short)data2FA.length, (byte)0);
-        
-        //seed & BIP32 data
-        resetSeed();
-        
-        //taproot
-        taproot_tweakedkey.clearKey();
 
-        // private keys
-        for (byte nb_key=0; nb_key<MAX_NUM_KEYS; nb_key++){
-            if (eckeys[nb_key] != null)
-                eckeys[nb_key].clearKey();
-        }
-        eckeys_flag=(short)0;
-        
-        // secure channel session key
-        sc_sessionkey.clearKey();
-        initialized_secure_channel=false;
-        
-        // option flags
-        option_flags=(short)0;
-
-        // reset NFC policy to enabled
-        nfc_policy = NFC_ENABLED;
-
-        // reset optional features to default
-        feature_schnorr_policy = FEATURE_ENABLED;
-        feature_nostr_policy = FEATURE_ENABLED;
-        feature_liquid_policy = FEATURE_ENABLED;
-        feature_musig2_policy = FEATURE_ENABLED;
-
-        // reset card label
-        card_label_size=0;
-        Util.arrayFillNonAtomic(card_label, (short)0, (short)card_label.length, (byte)0);
-
-        // setup
-        pins[0].update(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length);
-        setupDone=false;
-        
-        return true;
-    }
-    
     private boolean resetSeed(){
         // reset memory cache, bip32 flag and all data!
         if (bip32_om != null)
@@ -1717,7 +1706,7 @@ public class CardEdge extends javacard.framework.Applet {
 
     /**
      * This function unblocks a PIN number using the unblock code specified in the
-     * DATA portion. The P3 byte specifies the unblock code length. 
+     * DATA portion. The P3 byte specifies the unblock code length.
      * 
      * ins: 0x46
      * p1: PIN number (0x00-0x07)
@@ -1755,6 +1744,7 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
         
         pin.resetAndUnblock();
+        ublk_pin.reset();
         
         return (short)0;
     }

@@ -49,6 +49,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Merge [PR #22](https://github.com/Toporin/SatochipApplet/pull/22) (thanks @kkdao): count the two-byte size prefix in importTrustedPubkey() (fixes [#21](https://github.com/Toporin/SatochipApplet/issues/21)). The length check compared Lc with pubkey_size alone, so a command with Lc = 65 or 66 passed and the 65-byte copy read past the command data, silently storing a corrupted trusted pubkey. Well-formed 67-byte commands behave exactly as before.
 
+* Refactor reset to factory to v3: Reset to factory is now triggered by sending one single APDU command. Note that the new reset path goes through the secure channel, so INIT_SECURE_CHANNEL must be performed first. resetToFactory() now also resets and unblocks all PINs and PUKs, restoring their try counters (OwnerPIN.update() does not reset them).
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
