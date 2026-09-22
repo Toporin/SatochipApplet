@@ -55,6 +55,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Improve authentikey management (ported from Seedkeeper-Applet commit [29ce8f0](https://github.com/Toporin/Seedkeeper-Applet/commit/29ce8f0984dd6ae02e0689ccf339f3b2865bc543)): the InitiateSecureChannel() response now also returns the authentikey coordx ([coordx_size(2b) | authentikey_coordx] appended), allowing non-ambiguous recovery of the authentikey public key from the signature. The PIN requirement is removed from getAuthentikey() (ins 0xAD) and export_PKI_pubkey() (ins 0x98), since the authentikey public key is public data that can already be recovered from the secure channel initiation. getBIP32AuthentiKey() (ins 0x73) is now documented as deprecated (kept for backward compatibility).
 
+* Use transient (RAM) AES session keys for the secure channels (ported from Seedkeeper-Applet commit [87922ed](https://github.com/Toporin/Seedkeeper-Applet/commit/87922eda0fffdf9d5b37ce857b373cd3067ac9d2)): sc_sessionkey and secret_sc_sessionkey are now allocated with TYPE_AES_TRANSIENT_DESELECT in priority, falling back to TYPE_AES_TRANSIENT_RESET, then to persistent TYPE_AES. Previously, every secure channel initiation rewrote the key in EEPROM, wearing out the flash over the card's lifetime. Transient keys are also automatically cleared on deselect/reset, which is better hygiene for session keys. This addresses a long-standing "todo: make transient?" comment in the code.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.

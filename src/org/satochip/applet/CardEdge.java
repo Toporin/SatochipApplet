@@ -111,7 +111,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
-    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, reset-to-factory refactoring, authentikey mgmt, ...)
+    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, reset-to-factory refactoring, authentikey mgmt, transient AES session keys, ...)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -335,6 +335,8 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte ALG_EC_SVDP_DH_PLAIN= (byte) 3; //https://javacard.kenai.com/javadocs/connected/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN
     private final static byte ALG_EC_SVDP_DH_PLAIN_XY= (byte) 6; //https://docs.oracle.com/javacard/3.0.5/api/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN_XY
     private final static short LENGTH_EC_FP_256= (short) 256;
+    private final static byte TYPE_AES_TRANSIENT_DESELECT = (byte) 14;
+    private final static byte TYPE_AES_TRANSIENT_RESET = (byte) 13;
 
     /****************************************
      *    Instance variables declaration    *
@@ -652,8 +654,19 @@ public class CardEdge extends javacard.framework.Applet {
         }
 
         // secure channel
-        sc_sessionkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false); // todo: make transient?
-        //ephemeral_privkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false); // todo: make transient
+        try {
+            // Put the AES key in RAM if we can.
+            sc_sessionkey = (AESKey) KeyBuilder.buildKey(TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, false);
+        } catch (CryptoException e) {
+            try {
+                // This uses a bit more RAM, but at least it isn't using flash.
+                sc_sessionkey = (AESKey) KeyBuilder.buildKey(TYPE_AES_TRANSIENT_RESET, KeyBuilder.LENGTH_AES_128, false);
+            } catch (CryptoException e1) {
+                // Last option as it will wear out the flash eventually
+                sc_sessionkey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
+            }
+        }
+
         sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
 
         try {
@@ -732,7 +745,18 @@ public class CardEdge extends javacard.framework.Applet {
         
         // import from SeedKeeper
         trusted_pubkey = new byte[PUBKEY_SIZE];
-        secret_sc_sessionkey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
+        try {
+            // Put the AES key in RAM if we can.
+            secret_sc_sessionkey = (AESKey) KeyBuilder.buildKey(TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, false);
+        } catch (CryptoException e) {
+            try {
+                // This uses a bit more RAM, but at least it isn't using flash.
+                secret_sc_sessionkey = (AESKey) KeyBuilder.buildKey(TYPE_AES_TRANSIENT_RESET, KeyBuilder.LENGTH_AES_128, false);
+            } catch (CryptoException e1) {
+                // Last option as it will wear out the flash eventually
+                secret_sc_sessionkey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
+            }
+        }
 
         // debug
         register();
