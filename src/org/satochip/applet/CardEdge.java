@@ -535,7 +535,6 @@ public class CardEdge extends javacard.framework.Applet {
     
     // secure channel
     private static final byte[] CST_SC = {'s','c','_','k','e','y', 's','c','_','m','a','c'};
-    private boolean needs_secure_channel = true;
     private boolean initialized_secure_channel = false;
     private ECPrivateKey ephemeral_privkey;
     private boolean ephemeral_privkey_transient = false;
@@ -834,7 +833,7 @@ public class CardEdge extends javacard.framework.Applet {
             //if sizeout>4, buffer[ISO7816.OFFSET_LC] should be equal to (sizeout-5)
             //todo: remove padding ? (it is actually not used)          
         }
-        else if (needs_secure_channel){
+        else {
             ISOException.throwIt(SW_SECURE_CHANNEL_REQUIRED);
         }
         
@@ -1008,7 +1007,7 @@ public class CardEdge extends javacard.framework.Applet {
         else if ((ins == INS_GET_STATUS) || (ins == INS_INIT_SECURE_CHANNEL)) {
             apdu.setOutgoingAndSend((short) 0, sizeout);
         }
-        else if (needs_secure_channel) { // encrypt response
+        else { // encrypt response through the Secure Channel
             // buffer contains the data (sizeout)
             // for encryption, data is padded with PKCS#7
             short blocksize=(short)16;
@@ -1024,9 +1023,7 @@ public class CardEdge extends javacard.framework.Applet {
             //send back
             apdu.setOutgoingAndSend((short) 0, sizeout);
         }
-        else {
-            apdu.setOutgoingAndSend((short) 0, sizeout);
-        }
+
         
     } // end of process method
 
@@ -1886,11 +1883,8 @@ public class CardEdge extends javacard.framework.Applet {
             buffer[pos++] = (byte)0x01;
         else
             buffer[pos++] = (byte)0x00;
-        // secure channel  (offset 11)
-        if (needs_secure_channel)
-            buffer[pos++] = (byte)0x01;
-        else
-            buffer[pos++] = (byte)0x00;
+        // secure channel (offset 11)
+        buffer[pos++] = (byte)0x01; // always enabled
         // NFC policy (offset 12)
         buffer[pos++] = nfc_policy;
         // Optional features policy (offset 13-15)
