@@ -803,10 +803,14 @@ public class CardEdge extends javacard.framework.Applet {
         // declares constants to denote the offset of
         // these bytes in the APDU buffer
         
-        if (selectingApplet())
-            ISOException.throwIt(ISO7816.SW_NO_ERROR);
-
+        short sizeout=(short)0;
         byte[] buffer = apdu.getBuffer();
+        if (selectingApplet()){
+            // returns card status on card select
+            sizeout= GetStatus(apdu, buffer);
+            apdu.setOutgoingAndSend((short) 0, sizeout);
+            return;
+        }
         // check SELECT APDU command
         if ((buffer[ISO7816.OFFSET_CLA] == 0) && (buffer[ISO7816.OFFSET_INS] == (byte) 0xA4))
             ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND); // spurious select (see https://github.com/Toporin/SatochipApplet/issues/11)
@@ -828,7 +832,6 @@ public class CardEdge extends javacard.framework.Applet {
         
         // only 3 commands are allowed, the others must be wrapped in a secure channel command
         // the 3 commands are: get_status, initialize_secure_channel & process_secure_channel
-        short sizeout=(short)0;
         if (ins == INS_GET_STATUS){
             sizeout= GetStatus(apdu, buffer);
             apdu.setOutgoingAndSend((short) 0, sizeout);
@@ -1867,10 +1870,8 @@ public class CardEdge extends javacard.framework.Applet {
         //if (!pins[0].isValidated())
         //  ISOException.throwIt(SW_UNAUTHORIZED);
         
-        if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
-            ISOException.throwIt(SW_INCORRECT_P1);
-        if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
-            ISOException.throwIt(SW_INCORRECT_P2);
+        // note: P1/P2 are not checked, since this function is also called on card
+        // selection, where the SELECT command carries its own parameters (P1=0x04)
         
         short pos = (short) 0;
         // applet version

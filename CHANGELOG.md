@@ -59,6 +59,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Simplify SignSchnorrHash(): the R = rand*G computation now uses the ephemeral_privkey scratch EC key (already used the same way in InitiateSecureChannel, ImportKey and Musig2GenerateNonce) instead of borrowing the taproot_tweakedkey object and restoring it afterwards. The tweaked private key is therefore never overwritten, making the bug fixed in b1fb9dd (borrowed key not restored) structurally impossible. No functional change: the signature output is identical.
 
+* Return card status on card select (ported from Seedkeeper-Applet commit [01bc193](https://github.com/Toporin/Seedkeeper-Applet/commit/01bc19376fdc2dd22de4a265ddacb401a709f98f)): the SELECT APDU response now includes the same data as a GET_STATUS command (applet version, PIN/PUK tries remaining, 2FA/seeded/setup flags, NFC & feature policies), saving a round trip for clients. GetStatus() no longer checks P1/P2, since the SELECT command carries its own parameters (P1=0x04). This information was already available to anyone through the unauthenticated GET_STATUS command, so nothing new is disclosed.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
