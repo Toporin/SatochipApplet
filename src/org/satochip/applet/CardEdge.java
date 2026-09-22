@@ -231,8 +231,8 @@ public class CardEdge extends javacard.framework.Applet {
     /** Algorithm specified is not correct */
     private final static short SW_INCORRECT_ALG = (short) 0x9C09;
     
-    /** There have been memory problems on the card */
-    private final static short SW_NO_MEMORY_LEFT = Bip32ObjectManager.SW_NO_MEMORY_LEFT;
+    /** DEPRECATED - There have been memory problems on the card */
+    //private final static short SW_NO_MEMORY_LEFT = (short) 0x9C01;
     ///** DEPRECATED - Required object is missing */
     //private final static short SW_OBJECT_NOT_FOUND= (short) 0x9C07;
 
@@ -372,51 +372,41 @@ public class CardEdge extends javacard.framework.Applet {
     private KeyAgreement keyAgreement;
     private Signature sigECDSA;
     private Signature sigAESMAC;
-    private Cipher aes128;
 
     /*********************************************
      *  BIP32 Hierarchical Deterministic Wallet  *
      *********************************************/
-    // Secure Memory & Object Manager with no access from outside (used internally for storing BIP32 objects)
-    private Bip32ObjectManager bip32_om;
     
     // seed derivation
     private static final byte[] BITCOIN_SEED = {'B','i','t','c','o','i','n',' ','s','e','e','d'};
-    private static final byte MAX_BIP32_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
+    private static final byte BIP32_MAX_DEPTH = 10; // max depth in extended key from master (m/i is depth 1)
 
     // Liquid-Bitcoin Master Blinding Key derivation constant
     private static final byte[] SLIP21_DOMAIN = {'S','y','m','m','e','t','r','i','c',' ','k','e','y',' ','s','e','e','d'};
     private static final byte[] SLIP77_LABEL = {0x00,'S','L','I','P','-','0','0','7','7'};
     private byte[] liquid_master_blinding_key;
 
-    // BIP32_object= [ hash(address) (4b) | extended_key (32b) | chain_code (32b) | compression_byte(1b)]
+
     // recvBuffer=[ parent_chain_code (32b) | 0x00 | parent_key (32b) | hash(address) (32b) | current_extended_key(32b) | current_chain_code(32b) ]
-    // hash(address)= [ index(4b) | unused (28-4b) | ANTICOLLISIONHASH(4b)]
     private static final short BIP32_KEY_SIZE= 32; // size of extended key and chain code is 256 bits
-    private static final short BIP32_ANTICOLLISION_LENGTH=4; // max 12 bytes so that index+crc + two hashes fit in 32 bits
-    private static final short BIP32_OBJECT_SIZE= (short)(2*BIP32_KEY_SIZE+BIP32_ANTICOLLISION_LENGTH+1);  
-    
+
     // offset in working buffer
+    // recvBuffer=[ parent_chain_code (32b) | 0x00 | parent_key (32b) | buffer(index)(32b) | current_extended_key(32b) | current_chain_code(32b) | pubkey(65b) | path(40b)]
     private static final short BIP32_OFFSET_PARENT_CHAINCODE=0;
     private static final short BIP32_OFFSET_PARENT_SEPARATOR=BIP32_KEY_SIZE;
     private static final short BIP32_OFFSET_PARENT_KEY=BIP32_KEY_SIZE+1;
     private static final short BIP32_OFFSET_INDEX= (short)(2*BIP32_KEY_SIZE+1);
-    private static final short BIP32_OFFSET_COLLISIONHASH= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE-BIP32_ANTICOLLISION_LENGTH);
-    private static final short BIP32_OFFSET_CHILD_KEY= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE); 
+    private static final short BIP32_OFFSET_CHILD_KEY= (short)(BIP32_OFFSET_INDEX+BIP32_KEY_SIZE);
     private static final short BIP32_OFFSET_CHILD_CHAINCODE= (short)(BIP32_OFFSET_CHILD_KEY+BIP32_KEY_SIZE);
     private static final short BIP32_OFFSET_PUB= (short)(BIP32_OFFSET_CHILD_CHAINCODE+BIP32_KEY_SIZE);
     private static final short BIP32_OFFSET_PUBX= (short)(BIP32_OFFSET_PUB+1);
     private static final short BIP32_OFFSET_PUBY= (short)(BIP32_OFFSET_PUBX+BIP32_KEY_SIZE);
-    private static final short BIP32_OFFSET_PATH= (short)(BIP32_OFFSET_PUBY+BIP32_KEY_SIZE);
-    private static final short BIP32_OFFSET_END= (short)(BIP32_OFFSET_PATH+4*MAX_BIP32_DEPTH);
-    private static final short BIP32_OFFSET_SIG= (short)(ISO7816.OFFSET_CDATA+4*MAX_BIP32_DEPTH);//temporary location 
-    
+    private static final short BIP32_OFFSET_END= (short)(BIP32_OFFSET_PUBY+BIP32_KEY_SIZE);
+
     //   bip32 keys
     private boolean bip32_seeded= false;
-    private byte bip32_master_compbyte; // compression byte for master key
     private AESKey bip32_masterkey; 
-    private AESKey bip32_masterchaincode; 
-    private AESKey bip32_encryptkey; // used to encrypt sensitive data in object
+    private AESKey bip32_masterchaincode;
     private ECPrivateKey bip32_extendedkey; // object storing last extended key used
     
     /*********************************************
@@ -637,7 +627,6 @@ public class CardEdge extends javacard.framework.Applet {
         sigECDSA= Signature.getInstance(ALG_ECDSA_SHA_256, false);
         sigAESMAC= Signature.getInstance(Signature.ALG_AES_MAC_128_NOPAD, false);
         sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
-        aes128= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_ECB_NOPAD, false);
         HmacSha160.init(tmpBuffer);
         HmacSha512.init(tmpBuffer);
         try {
@@ -701,9 +690,6 @@ public class CardEdge extends javacard.framework.Applet {
         // BIP32 material
         bip32_masterkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
         bip32_masterchaincode= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
-        bip32_encryptkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
-        randomData.generateData(recvBuffer, (short) 0, (short)16);
-        bip32_encryptkey.setKey(recvBuffer, (short)0);
         bip32_extendedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false); // todo: use transient
         //Secp256k1.setCommonCurveParameters(bip32_extendedkey); => done in setup() as it must be performed after each reset_to_factory!
 
@@ -1054,7 +1040,7 @@ public class CardEdge extends javacard.framework.Applet {
      * data: [default_pin_length(1b) | default_pin | 
      *        pin_tries0(1b) | ublk_tries0(1b) | pin0_length(1b) | pin0 | ublk0_length(1b) | ublk0 | 
      *        pin_tries1(1b) | ublk_tries1(1b) | pin1_length(1b) | pin1 | ublk1_length(1b) | ublk1 | 
-     *        secmemsize(2b) | RFU(2b) | RFU(3b) |
+     *        RFU(2b) | RFU(2b) | RFU(3b) |
      *        option_flags(2b) | 
      *        (option): hmacsha1_key(20b) | amount_limit(8b)
      *        ]
@@ -1062,9 +1048,9 @@ public class CardEdge extends javacard.framework.Applet {
      *      default_pin: {0x4D, 0x75, 0x73, 0x63, 0x6C, 0x65, 0x30, 0x30};
      *      pin_tries: max number of PIN try allowed before the corresponding PIN is blocked
      *      ublk_tries:  max number of UBLK(unblock) try allowed before the PUK is blocked
-     *      secmemsize: number of bytes reserved for internal memory (storage of Bip32 objects)
-     *      memsize: number of bytes reserved for memory with external access
-     *      ACL: creation rights for objects - Key - PIN
+     *      RFU(secmemsize) - deprecated: number of bytes reserved for internal memory (storage of Bip32 objects)
+     *      RFU(memsize) - deprecated: number of bytes reserved for memory with external access
+     *      RFU(ACL) - deprecated: creation rights for objects - Key - PIN
      *      option_flags: flags to define up to 16 additional options:
      *      bit15 set: second factor authentication using hmac-sha1 challenge-response (v0.2-0.1)
      *          hmacsha1_key: 20-byte hmac key used for transaction authorization
@@ -1146,9 +1132,9 @@ public class CardEdge extends javacard.framework.Applet {
         base += numBytes;
         bytesLeft-=numBytes;
         
-        short secmem_size= Util.getShort(buffer, base);
+        short RFU= Util.getShort(buffer, base); // deprecated: secmemsize => RFU
         base += (short) 2;
-        short RFU = Util.getShort(buffer, base); //mem_size deprecated => RFU...
+        RFU = Util.getShort(buffer, base); //mem_size deprecated => RFU
         base += (short) 2;
         bytesLeft-=4;
         
@@ -1157,14 +1143,10 @@ public class CardEdge extends javacard.framework.Applet {
         RFU = buffer[base++]; //create_pin_ACL deprecated => RFU
         bytesLeft-=3;
         
-        if (bip32_om==null)
-            bip32_om= new Bip32ObjectManager(secmem_size,BIP32_OBJECT_SIZE, BIP32_ANTICOLLISION_LENGTH);
-        
         logged_ids = 0x0000; // No identities logged in
             
         // bip32 material
         bip32_seeded= false;
-        bip32_master_compbyte=0x04;     
         Secp256k1.setCommonCurveParameters(bip32_extendedkey);
         // taproot tweaked privkey
         Secp256k1.setCommonCurveParameters(taproot_tweakedkey);
@@ -1328,9 +1310,7 @@ public class CardEdge extends javacard.framework.Applet {
     }
 
     private boolean resetSeed(){
-        // reset memory cache, bip32 flag and all data!
-        if (bip32_om != null)
-            bip32_om.reset();
+        // reset bip32 flag and all data!
         bip32_seeded= false;
         bip32_masterkey.clearKey(); 
         bip32_masterchaincode.clearKey();
@@ -2286,190 +2266,144 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         short pos=0;
-        Util.setShort(buffer, pos, bip32_om.nb_elem_free); // number of slot available 
+        Util.setShort(buffer, pos, (short)0); // deprecated - number of slot available
         pos += (short) 2;
-        Util.setShort(buffer, pos, bip32_om.nb_elem_used); // number of slot used 
+        Util.setShort(buffer, pos, (short)0); // deprecated - number of slot used
         pos += (short) 2;
         return pos;
     }// end of setBIP32AuthentikeyPubkey
-    
+
     /**
-     * The function computes the Bip32 extended key derived from the master key and returns the 
-     * x-coordinate of the public key signed by the authentikey.
-     * Extended key is stored in the chip in a temporary EC key, along with corresponding ACL
-     * Extended key and chaincode is also cached as a Bip32 object in secure memory
-     * 
+     * The function computes the Bip32 extended key derived from the master key and returns either the 
+     * 32-bytes x-coordinate of the public key, or the 32-bytes private key, signed by the authentikey.
+     *
+     * The Path for the derivation is provided in the apdu data.
+     *
      * ins: 0x6D
      * p1: depth of the extended key (master is depth 0, m/i is depht 1). Max depth is 10
-     * p2: 0x00 (default) or 0xFF (erase all Bip32 objects from secure memory)
-     * p2: option flags:
-     *      0x80: reset the bip32 cache memory
-     *      0x40: optimize non-hardened child derivation
-     *      0x20: TODO flag whether to store (save) key as object (currently by default)?
-     * data: index path from master to extended key (m/i/j/k/...). 4 bytes per index
-     * 
-     * return: [chaincode(32b) | coordx_size(2b) | coordx | sig_size(2b) | self-sig | sig_size(2b) | authentikey-sig]
-     * 
-     * */
+     * p2: option_flags (masks):
+     *      0x80: (deprecated: reset the bip32 cache memory)
+     *      0x40: (deprecated: optimize non-hardened child derivation)
+     *      0x20: (deprecated: flag whether to store key as object)
+     * data: [path_bytes(4*depth)] where:
+     *      path_bytes is the index path from master to extended key (m/i/j/k/...). 4 bytes per index
+     *
+     * returns: [chaincode(32b) | coordx_size(2b) | coordx | sig_size(2b) | self-sig | sig_size(2b) | authentikey-sig]
+     *
+     **/
     private short getBIP32ExtendedKey(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
+        // check that PIN has been entered previously
         if (!pins[0].isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
-        
+
         // check whether the seed is seed is initialized
         if (!bip32_seeded)
             ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
         
-        // input 
-        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-        
+        // input
         byte bip32_depth = buffer[ISO7816.OFFSET_P1];
-        if ((bip32_depth < 0) || (bip32_depth > MAX_BIP32_DEPTH) )
+        if ((bip32_depth < 0) || (bip32_depth > BIP32_MAX_DEPTH) )
             ISOException.throwIt(SW_INCORRECT_P1);
+        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         if (bytesLeft < (short)(4*bip32_depth))
             ISOException.throwIt(SW_INVALID_PARAMETER);
-        
-        // P2 option flags
-        byte opts = buffer[ISO7816.OFFSET_P2]; 
-        if ((opts & 0x80)==0x80)
-            bip32_om.reset();
-        
+
         // master key data (usefull as parent's data for key derivation)
         // The method uses a temporary buffer recvBuffer to store the parent and extended key object data:
-        // recvBuffer=[ parent_chain_code (32b) | 0x00 | parent_key (32b) | hash(address)(32b) | current_extended_key(32b) | current_chain_code(32b) | parent_pubkey(65b) | bip32_path(40b)]
-        // hash(address)= [ index(4b) | unused (16b)| crc (4b) | ANTICOLLISIONHASHTMP(4b)| ANTICOLLISIONHASH(4b)]
+        // recvBuffer=[ parent_chain_code (32b) | 0x00 | parent_key (32b) | buffer(index)(32b) | current_extended_key(32b) | current_chain_code(32b) | parent_pubkey(65b)]
         // parent_pubkey(65b)= [compression_byte(1b) | coord_x (32b) | coord_y(32b)]
         bip32_masterchaincode.getKey(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE);
-        bip32_masterkey.getKey(recvBuffer,BIP32_OFFSET_PARENT_KEY);         
+        bip32_masterkey.getKey(recvBuffer,BIP32_OFFSET_PARENT_KEY);
         recvBuffer[BIP32_OFFSET_PARENT_SEPARATOR]=0x00; // separator, also facilitate HMAC derivation
-        Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, recvBuffer, BIP32_OFFSET_PATH, (short)(4*bip32_depth));
-        short parent_base=Bip32ObjectManager.NULL_OFFSET; 
-        
-        // iterate on indexes provided 
-        for (byte i=1; i<=bip32_depth; i++){
-                        
-            //compute SHA of the extended key address up to depth i (only the last bytes are actually used)
-            sha256.reset(); 
-            sha256.doFinal(recvBuffer, BIP32_OFFSET_PATH, (short)(i*4), recvBuffer, BIP32_OFFSET_INDEX);
-            short base=bip32_om.getBaseAddress(recvBuffer,BIP32_OFFSET_COLLISIONHASH);
-            // retrieve object at this address if it exists
-            if (base!=Bip32ObjectManager.NULL_OFFSET){
-                bip32_om.getBytes(recvBuffer, BIP32_OFFSET_COLLISIONHASH, base, (short)0, BIP32_OBJECT_SIZE);
+
+        // iterate on path indexes provided
+        // path indexes are stored in buffer starting at ISO7816.OFFSET_CDATA offset
+        short path_offset = ISO7816.OFFSET_CDATA;
+        for (byte i=0; i<bip32_depth; i++){
+            path_offset = (short)(ISO7816.OFFSET_CDATA+4*i);
+
+            // normal or hardened child?
+            byte msb= buffer[path_offset];
+            if ((msb & 0x80)!=0x80){ // normal child
+
+                // compute coord x from parent privkey
+                if (ephemeral_privkey_transient) {
+                    Secp256k1.setCommonCurveParameters(ephemeral_privkey);
+                }
+                ephemeral_privkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
+                keyAgreement.init(ephemeral_privkey);
+
+                // keyAgreement.generateSecret() recovers X and Y coordinates
+                keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, BIP32_OFFSET_PUB); //pubkey in uncompressed form
+                byte compbyte = (byte)(0x02 | (recvBuffer[(short)(BIP32_OFFSET_PUBY+31)] & 0x01));
+
+                // compute HMAC of compressed pubkey + index
+                recvBuffer[BIP32_OFFSET_PUB]= compbyte;
+                Util.arrayCopyNonAtomic(buffer, path_offset, recvBuffer, BIP32_OFFSET_PUBY, (short)4);
+                HmacSha512.computeHmacSha512(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_KEY_SIZE, recvBuffer, BIP32_OFFSET_PUB, (short)(1+BIP32_KEY_SIZE+4), recvBuffer, BIP32_OFFSET_CHILD_KEY);
             }
-            // otherwise, create object if no object was found
-            if (base==Bip32ObjectManager.NULL_OFFSET){
-                
-                // normal or hardened child?
-                byte msb= recvBuffer[(short)(BIP32_OFFSET_PATH+4*(i-1))];
-                if ((msb & 0x80)!=0x80){ // normal child
-                    // we must compute parent's compressed pubkey from privkey
-                    // check if parent's compression byte is available
-                    byte compbyte=0x04;//default
-                    if (parent_base==Bip32ObjectManager.NULL_OFFSET)
-                        compbyte=bip32_master_compbyte;
-                    else
-                        compbyte=bip32_om.getByte(parent_base, (short)(BIP32_OBJECT_SIZE-1));
-                    
-                    // compute coord x from privkey 
-                    bip32_extendedkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
-                    keyAgreement.init(bip32_extendedkey);
-                    
-                    // keyAgreement.generateSecret() recovers X and Y coordinates
-                    keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, BIP32_OFFSET_PUB); //pubkey in uncompressed form
-                    boolean parity= ((recvBuffer[(short)(BIP32_OFFSET_PUBY+31)]&0x01)==0);
-                    compbyte= (parity)?(byte)0x02:(byte)0x03; 
-                    // save compbyte in parent's object for future use
-                    if (parent_base==Bip32ObjectManager.NULL_OFFSET)
-                        bip32_master_compbyte= compbyte;
-                    else
-                        bip32_om.setByte(parent_base, (short)(BIP32_OBJECT_SIZE-1), compbyte);
-                
-                    // compute HMAC of compressed pubkey + index
-                    recvBuffer[BIP32_OFFSET_PUB]= compbyte;
-                    Util.arrayCopyNonAtomic(recvBuffer, (short)(BIP32_OFFSET_PATH+4*(i-1)), recvBuffer, BIP32_OFFSET_PUBY, (short)4);
-                    HmacSha512.computeHmacSha512(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_KEY_SIZE, recvBuffer, BIP32_OFFSET_PUB, (short)(1+BIP32_KEY_SIZE+4), recvBuffer, BIP32_OFFSET_CHILD_KEY);
-                }
-                else { // hardened child
-                    recvBuffer[BIP32_KEY_SIZE]= 0x00;
-                    Util.arrayCopyNonAtomic(recvBuffer, (short)(BIP32_OFFSET_PATH+4*(i-1)), recvBuffer, BIP32_OFFSET_INDEX, (short)4);
-                    HmacSha512.computeHmacSha512(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_KEY_SIZE, recvBuffer, BIP32_OFFSET_PARENT_SEPARATOR, (short)(1+BIP32_KEY_SIZE+4), recvBuffer, BIP32_OFFSET_CHILD_KEY);
-                }
-                
-                // addition with parent_key...
-                // First check that parse256(IL) < SECP256K1_R
+            else { // hardened child
+                recvBuffer[BIP32_OFFSET_PARENT_SEPARATOR]= 0x00;
+                Util.arrayCopyNonAtomic(buffer, path_offset, recvBuffer, BIP32_OFFSET_INDEX, (short)4);
+                HmacSha512.computeHmacSha512(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_KEY_SIZE, recvBuffer, BIP32_OFFSET_PARENT_SEPARATOR, (short)(1+BIP32_KEY_SIZE+4), recvBuffer, BIP32_OFFSET_CHILD_KEY);
+            }
+
+            // addition with parent_key...
+            // First check that parse256(IL) < SECP256K1_R
+            if(!Biginteger.lessThan(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE)){
+                ISOException.throwIt(SW_BIP32_DERIVATION_ERROR);
+            }
+            // add parent_key (mod SECP256K1_R)
+            if(Biginteger.add_carry(recvBuffer, BIP32_OFFSET_CHILD_KEY, recvBuffer, (short) (BIP32_KEY_SIZE+1), BIP32_KEY_SIZE)){
+                // in case of final carry, we must substract SECP256K1_R
+                // we have IL<SECP256K1_R and parent_key<SECP256K1_R, so IL+parent_key<2*SECP256K1_R
+                Biginteger.subtract(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE);
+            }else{
+                // in the unlikely case where SECP256K1_R<=IL+parent_key<2^256
                 if(!Biginteger.lessThan(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE)){
+                    Biginteger.subtract(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE);
+                }
+                // check that value is not 0
+                if(Biginteger.equalZero(recvBuffer, BIP32_OFFSET_CHILD_KEY, BIP32_KEY_SIZE)){
                     ISOException.throwIt(SW_BIP32_DERIVATION_ERROR);
                 }
-                // add parent_key (mod SECP256K1_R)
-                if(Biginteger.add_carry(recvBuffer, BIP32_OFFSET_CHILD_KEY, recvBuffer, (short) (BIP32_KEY_SIZE+1), BIP32_KEY_SIZE)){
-                    // in case of final carry, we must substract SECP256K1_R
-                    // we have IL<SECP256K1_R and parent_key<SECP256K1_R, so IL+parent_key<2*SECP256K1_R
-                    Biginteger.subtract(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE); 
-                }else{
-                    // in the unlikely case where SECP256K1_R<=IL+parent_key<2^256
-                    if(!Biginteger.lessThan(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE)){
-                        Biginteger.subtract(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE);
-                    }
-                    // check that value is not 0
-                    if(Biginteger.equalZero(recvBuffer, BIP32_OFFSET_CHILD_KEY, BIP32_KEY_SIZE)){
-                        ISOException.throwIt(SW_BIP32_DERIVATION_ERROR);
-                    }
-                }
-                
-                // encrypt privkey & chaincode
-                aes128.init(bip32_encryptkey, Cipher.MODE_ENCRYPT);
-                aes128.doFinal(recvBuffer, BIP32_OFFSET_CHILD_KEY, (short)(2*BIP32_KEY_SIZE), recvBuffer, BIP32_OFFSET_CHILD_KEY);
-                
-                // Update object data
-                recvBuffer[BIP32_OFFSET_PUB]=0x04;
-                // create object 
-                // todo: should we create object for tx keys in last index (since they are usually used only once)?
-                base= bip32_om.createObject(recvBuffer,BIP32_OFFSET_COLLISIONHASH);
-                
-            }//end if (object creation)
-            
-            // at this point, recvBuffer contains a copy of the object related to extended key at depth i
-            // decrypt privkey & chaincode as they are encrypted at this point
-            aes128.init(bip32_encryptkey, Cipher.MODE_DECRYPT);
-            aes128.doFinal(recvBuffer, BIP32_OFFSET_CHILD_KEY, (short)(2*BIP32_KEY_SIZE), recvBuffer, BIP32_OFFSET_CHILD_KEY);
+            }
+
+            // at this point, recvBuffer contains the extended key at depth i
             // copy privkey & chain code in parent's offset
             Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_CHILD_CHAINCODE, recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_KEY_SIZE); // chaincode
             Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_CHILD_KEY, recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE); // extended_key
-            recvBuffer[BIP32_KEY_SIZE]=0x00;
-            
-            // update parent_base for next iteration
-            parent_base=base;           
+            recvBuffer[BIP32_OFFSET_PARENT_SEPARATOR]=0x00;
         } // end for
-        
-        // at this point, recvBuffer contains a copy of the last extended key 
-        // instantiate elliptic curve with last extended key + copy ACL
+
+        // instantiate elliptic curve with last extended key
         bip32_extendedkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
-        
+
         // save chaincode to buffer then clear recvBuffer
-        Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, buffer, (short)0, BIP32_KEY_SIZE); 
+        Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, buffer, (short)0, BIP32_KEY_SIZE);
         Util.arrayFillNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_OFFSET_END, (byte)0);
-                
+
         // compute the corresponding partial public key...
         keyAgreement.init(bip32_extendedkey);
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)33); //pubkey in uncompressed form
         Util.setShort(buffer, BIP32_KEY_SIZE, BIP32_KEY_SIZE);
-        
+
         // self-sign coordx
         sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
         short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2+BIP32_KEY_SIZE), buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+4));
         Util.setShort(buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+2), sign_size);
-        
+
         // coordx signed by authentikey
         sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
         short sign_size2= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+4), buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+6));
         Util.setShort(buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+4), sign_size2);
-        
+
         // return x-coordinate of public key+signatures
         // the client can recover full public-key by guessing the compression value () and verifying the signature... 
         // buffer=[chaincode(32) | coordx_size(2) | coordx | sign_size(2) | self-sign | sign_size(2) | auth_sign]
         return (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+sign_size2+6);
-        
-    }// end of getBip32ExtendedKey()    
+
+    }// end of getBip32ExtendedKey()
     
     /**
      * DEPRECATED - Not necessary anymore when recovering the pubkey with ALG_EC_SVDP_DH_PLAIN_XY
@@ -2492,9 +2426,9 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         short pos=0;
-        Util.setShort(buffer, pos, bip32_om.nb_elem_free); // number of slot available 
+        Util.setShort(buffer, pos, (short)0); // deprecated - number of slot available
         pos += (short) 2;
-        Util.setShort(buffer, pos, bip32_om.nb_elem_used); // number of slot used 
+        Util.setShort(buffer, pos, (short)0); // deprecated - number of slot used
         pos += (short) 2;
         return pos;
     }// end of setBIP32ExtendedPubkey

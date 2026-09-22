@@ -61,6 +61,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Return card status on card select (ported from Seedkeeper-Applet commit [01bc193](https://github.com/Toporin/Seedkeeper-Applet/commit/01bc19376fdc2dd22de4a265ddacb401a709f98f)): the SELECT APDU response now includes the same data as a GET_STATUS command (applet version, PIN/PUK tries remaining, 2FA/seeded/setup flags, NFC & feature policies), saving a round trip for clients. GetStatus() no longer checks P1/P2, since the SELECT command carries its own parameters (P1=0x04). This information was already available to anyone through the unauthenticated GET_STATUS command, so nothing new is disclosed.
 
+* Refactor getBIP32ExtendedKey() (ported from Seedkeeper-Applet commit [1efa05a](https://github.com/Toporin/Seedkeeper-Applet/commit/1efa05a13a3c21662f5db43fc7ce81ee0f1e69a9)): extended keys are now derived on the spot from the master key and master chaincode, instead of caching intermediate extended keys in the BIP32 object store (Bip32ObjectManager). The command APDU and the response format are unchanged, so client parsing is unaffected. The p2 option flags (0x80 reset cache, 0x40 optimize non-hardened derivation, 0x20 store key as object) are now deprecated and silently ignored. Note the performance trade-off: on the one hand a depth-d derivation now costs d EC multiplications + 2d HMAC-SHA512 on every call (previously ~1 EC multiplication on cache hits). On the other hand, no caching operations are needed anymore. All in all, tests did not show any significant performance changes.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
