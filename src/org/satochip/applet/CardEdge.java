@@ -111,7 +111,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
-    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, reset-to-factory refactoring, ...)
+    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, reset-to-factory refactoring, authentikey mgmt, ...)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -2175,7 +2175,11 @@ public class CardEdge extends javacard.framework.Applet {
     }
     
     /**
-     * This function returns the authentikey public key (uniquely derived from the Bip32 seed).
+     * DEPRECATED - use getAuthentikey() (ins 0xAD) instead.
+     * This function is kept for backward compatibility with legacy satochip cards
+     * (where the authentikey was derived from the seed).
+     *
+     * This function returns the authentikey public key.
      * The function returns the x-coordinate of the authentikey, self-signed.
      * The authentikey full public key can be recovered from the signature.
      * 
@@ -2202,7 +2206,7 @@ public class CardEdge extends javacard.framework.Applet {
      * The function returns the x-coordinate of the authentikey, self-signed.
      * The authentikey full public key can be recovered from the signature.
      * 
-     * Compared to getBIP32AuthentiKey(), this method returns the Authentikey even if the card is not seeded.
+     * Compared to getBIP32AuthentiKey(), this method returns the Authentikey even if the card is not seeded (for legacy satochip cards).
      * For SeedKeeper encrypted seed import, we use the authentikey as a Trusted Pubkey for the ECDH key exchange, 
      * thus the authentikey must be available before the Satochip is seeded. 
      * Before a seed is available, the authentiey is generated oncard randomly in the constructor
@@ -2214,9 +2218,8 @@ public class CardEdge extends javacard.framework.Applet {
      *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
      */
     private short getAuthentikey(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
+        // We don't require PIN for this functionality, since the authentikey can also be recovered
+        // from the authentikey coordx & signature in InitiateSecureChannel()
         
         return computeAuthentikey(buffer);
     }
@@ -4149,7 +4152,7 @@ public class CardEdge extends javacard.framework.Applet {
      *  p1: 0x00
      *  p2: 0x00
      *  data: [client-pubkey(65b)]
-     *  return: [coordx_size(2b) | authentikey-coordx | sig_size(2b) | self-sig | sig2_size(2b) | authentikey-sig]
+     *  return: [coordx_size(2b) | ephemeralkey_coordx | sig_size(2b) | self_sig | sig2_size(2b) | authentikey_sig | coordx_size(2b) | authentikey_coordx]
      */
     private short InitiateSecureChannel(APDU apdu, byte[] buffer){
         
@@ -4203,14 +4206,19 @@ public class CardEdge extends javacard.framework.Applet {
         sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
         short sign2_size= sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
         Util.setShort(buffer, offset, sign2_size);
-        offset+=(short)(2+sign2_size); 
+        offset+=(short)(2+sign2_size);
+        
+        // add coordx for authentikey (allows for non-ambiguous recovery of pubkey using signature)
+        authentikey_public.getW(buffer, (short)(offset+1));
+        Util.setShort(buffer, offset, BIP32_KEY_SIZE);
+        offset+=(short)(2+BIP32_KEY_SIZE);
         
         initialized_secure_channel= true;
         
         // return x-coordinate of public key+signature
         // the client can recover full public-key from the signature or
         // by guessing the compression value () and verifying the signature... 
-        // buffer= [coordx_size(2) | coordx | sigsize(2) | sig | sig2_size(optional) | sig2(optional)]
+        // buffer= [coordx_size(2b) | ephemeralkey_coordx | sig_size(2b) | self_sig | sig2_size | authentikey_sig | coordx_size(2b) | authentikey_coordx]
         return offset;
     }
     
@@ -4290,9 +4298,8 @@ public class CardEdge extends javacard.framework.Applet {
      *  return: [ pubkey (65b) ]
      */
     private short export_PKI_pubkey(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
+        // We don't require PIN for this functionality, since the authentikey can also be recovered
+        // from the authentikey coordx & signature in InitiateSecureChannel()
         
         authentikey_public.getW(buffer, (short)0); 
         return (short)65;

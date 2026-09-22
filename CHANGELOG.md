@@ -53,6 +53,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Extend UnblockPIN(): a forgotten PIN can now be unblocked AND changed by providing the PUK code. The data format is now [PUK_size(1b) | PUK | (optional) PIN_size(1b) | (optional) PIN]: if a new PIN is provided, it replaces the forgotten one; if only the PUK is provided, the PIN is simply unblocked with its previous value. After a successful unblock, the PIN and PUK try counters are restored. All inputs are validated before any state change and the PUK is checked with its exact length. Compatibility note: the previous format ([PUK] without size prefix) is not accepted anymore, clients must be updated.
 
+* Improve authentikey management (ported from Seedkeeper-Applet commit [29ce8f0](https://github.com/Toporin/Seedkeeper-Applet/commit/29ce8f0984dd6ae02e0689ccf339f3b2865bc543)): the InitiateSecureChannel() response now also returns the authentikey coordx ([coordx_size(2b) | authentikey_coordx] appended), allowing non-ambiguous recovery of the authentikey public key from the signature. The PIN requirement is removed from getAuthentikey() (ins 0xAD) and export_PKI_pubkey() (ins 0x98), since the authentikey public key is public data that can already be recovered from the secure channel initiation. getBIP32AuthentiKey() (ins 0x73) is now documented as deprecated (kept for backward compatibility).
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
