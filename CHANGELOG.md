@@ -57,6 +57,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Use transient (RAM) AES session keys for the secure channels (ported from Seedkeeper-Applet commit [87922ed](https://github.com/Toporin/Seedkeeper-Applet/commit/87922eda0fffdf9d5b37ce857b373cd3067ac9d2)): sc_sessionkey and secret_sc_sessionkey are now allocated with TYPE_AES_TRANSIENT_DESELECT in priority, falling back to TYPE_AES_TRANSIENT_RESET, then to persistent TYPE_AES. Previously, every secure channel initiation rewrote the key in EEPROM, wearing out the flash over the card's lifetime. Transient keys are also automatically cleared on deselect/reset, which is better hygiene for session keys. This addresses a long-standing "todo: make transient?" comment in the code.
 
+* Simplify SignSchnorrHash(): the R = rand*G computation now uses the ephemeral_privkey scratch EC key (already used the same way in InitiateSecureChannel, ImportKey and Musig2GenerateNonce) instead of borrowing the taproot_tweakedkey object and restoring it afterwards. The tweaked private key is therefore never overwritten, making the bug fixed in b1fb9dd (borrowed key not restored) structurally impossible. No functional change: the signature output is identical.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.

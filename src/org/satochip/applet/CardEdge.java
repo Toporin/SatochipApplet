@@ -3205,18 +3205,15 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt((short)0x7778);
         }
         // todo: rand = rand % n
-        // taproot_tweakedkey is borrowed here to compute R = rand*G: keyAgreement
-        // needs an ECPrivateKey and there is no spare one. The tweaked key is put
-        // back immediately afterwards, before anything can throw: leaving the
-        // nonce in place would make the NEXT SignSchnorrHash() sign with this
-        // signature's nonce as its private key, silently returning a well-formed
-        // signature that does not verify under the taproot output key.
-        taproot_tweakedkey.setS(recvBuffer, OFFSET_BIP340_t, (short)32);
-        keyAgreement.init(taproot_tweakedkey);
+        // compute R = rand*G using the scratch ephemeral key (same pattern as in
+        // InitiateSecureChannel, ImportKey and Musig2GenerateNonce), so that the
+        // tweaked private key never has to be borrowed and restored.
+        if (ephemeral_privkey_transient) {
+            Secp256k1.setCommonCurveParameters(ephemeral_privkey);
+        }
+        ephemeral_privkey.setS(recvBuffer, OFFSET_BIP340_t, (short)32);
+        keyAgreement.init(ephemeral_privkey);
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form (65bytes)
-        // restore the tweaked key, so that several hashes can be signed after a
-        // single TaprootTweakPrivateKey() (e.g. the inputs of one transaction)
-        taproot_tweakedkey.setS(recvBuffer, OFFSET_BIP340_sk, (short)32);
         // check evenness
         if (tmpBuffer[64]%2 == 0){
             // k = rand
