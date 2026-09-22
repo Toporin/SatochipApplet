@@ -2054,9 +2054,7 @@ public class CardEdge extends javacard.framework.Applet {
 
     /**
      * This function imports a Bip32 seed to the applet and derives the master key and chain code.
-     * It also derives a second ECC that uniquely authenticates the HDwallet: the authentikey.
-     * Lastly, it derives a 32-bit AES key that is used to encrypt/decrypt Bip32 object stored in secure memory 
-     * If the seed already exists, it is reset if the logged identities allow it.
+     * If the seed already exists, an exception is thrown.
      *         
      * The function returns the x-coordinate of the authentikey, self-signed.
      * The authentikey full public key can be recovered from the signature.
@@ -2123,7 +2121,7 @@ public class CardEdge extends javacard.framework.Applet {
      * This function resets the Bip32 seed and all derived keys: the master key, chain code, authentikey 
      * and the 32-bit AES key that is used to encrypt/decrypt Bip32 object stored in secure memory.
      * The Liquid-Bitcoin Master Blinding Key is also reset.
-     * If 2FA is enabled, then a hmac code must be provided, based on the 4-byte counter-2FA.
+     * If 2FA is enabled, then a hmac code must be provided.
      *  
      *  ins: 0x77
      *  p1: PIN_size 
