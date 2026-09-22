@@ -110,7 +110,7 @@ public class Biginteger {
      * <P>
      * 
      * compute x= x+y
-     * operands are stored Most Signifiant Byte First
+     * operands are stored Most Significant Byte First
      * size is the size in bytes of the operands (should be same size, padded with 0..0 if needed)
      * @param other 
      */
@@ -130,7 +130,7 @@ public class Biginteger {
     
     /**
      * compute x= x+1
-     * operands are stored Most Signifiant Byte First
+     * operands are stored Most Significant Byte First
      * size is the size in bytes of the operand x
      */
     public static boolean add1_carry(byte[] x, short offsetx, short size)
@@ -158,7 +158,7 @@ public class Biginteger {
      * <P>
      *
      * compute x= x-y
-     * operands are stored Most Signifiant Byte First
+     * operands are stored Most Significant Byte First
      * size is the size in bytes of the operands (should be same size, padded with 0..0 if needed) 
      */
     public static boolean subtract(byte[] x, short offsetx, byte[] y, short offsety, short size) {
@@ -179,7 +179,7 @@ public class Biginteger {
     
     /**
      * compute x= x-1
-     * operands are stored Most Signifiant Byte First
+     * operands are stored Most Significant Byte First
      * size is the size in bytes of the operand x
      */
     public static boolean subtract1_carry(byte[] x, short offsetx, short size) {
@@ -230,7 +230,7 @@ public class Biginteger {
     
     /**
     * Check whether x is strictly equal to 0 
-    * operands are stored Most Signifiant Byte First (big-endian)
+    * operands are stored Most Significant Byte First (big-endian)
     * size is the size in bytes of the operand 
     * returns true if x is equal to 0, false otherwise
     */

@@ -3460,7 +3460,7 @@ public class CardEdge extends javacard.framework.Applet {
         // increment counter
         bip327_counter++;
 
-        // add 13-bit padding to reach 112 bytes of data to encrypt
+        // add 13-byte padding to reach 112 bytes of data to encrypt
         Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP327_PADDING, (short)13, (byte)13);
 
         // random 16-bit IV
