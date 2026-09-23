@@ -1275,6 +1275,38 @@ public class CardEdge extends javacard.framework.Applet {
     }
 
     /**
+     * Returns the EC private key stored in the given keyslot, after checking that
+     * a key is initialized in the keyslot, that it has the expected type and
+     * size (secp256k1 private key), and that its curve parameters are intact.
+     * This centralizes the checks previously copy-pasted in each function using
+     * a keyslot.
+     * Note: uses tmpBuffer as scratch (first 65 bytes), do not call while live
+     * data is stored there.
+     *
+     * @param key_nb the keyslot number (0x00-0x0F), assumed already validated
+     * @return the initialized ECPrivateKey stored in the keyslot
+     * @throws ISOException SW_INCORRECT_P1 if no key is initialized in the keyslot,
+     *         SW_INCORRECT_ALG if the key has an unexpected type or size, or if
+     *         its curve parameters have been altered (fault injection check)
+     */
+    private ECPrivateKey getInitializedECKey(byte key_nb) {
+        Key key = eckeys[key_nb];
+        // check that a key is initialized in the keyslot
+        if ((key == null) || !key.isInitialized())
+            ISOException.throwIt(SW_INCORRECT_P1);
+        // check type and size
+        if (key.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
+            ISOException.throwIt(SW_INCORRECT_ALG);
+        if (key.getSize()!= LENGTH_EC_FP_256)
+            ISOException.throwIt(SW_INCORRECT_ALG);
+        // check the curve parameters integrity (countermeasure against fault
+        // injection / curve substitution attacks; uses tmpBuffer as scratch)
+        if(!Secp256k1.checkCurveParameters((ECPrivateKey)key, tmpBuffer, (short)0))
+            ISOException.throwIt(SW_INCORRECT_ALG);
+        return (ECPrivateKey) key;
+    }
+
+    /**
      * Registers logout of an identity. This must be called anycase when a PIN
      * verification or external authentication fail
      */
@@ -1482,10 +1514,7 @@ public class CardEdge extends javacard.framework.Applet {
         if ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS))
             ISOException.throwIt(SW_INCORRECT_P1);
         
-        Key key = eckeys[key_nb];
-        // check type and size
-        if ((key == null) || !key.isInitialized())
-            ISOException.throwIt(SW_INCORRECT_P1);
+        ECPrivateKey key = getInitializedECKey(key_nb);
         
         // check 2FA if required
         if (needs_2FA){
@@ -1497,7 +1526,7 @@ public class CardEdge extends javacard.framework.Applet {
             // compute the corresponding partial public key...
             // note: the pubkey must be staged in recvBuffer (not tmpBuffer), since
             // tmpBuffer is used as scratch memory by computeHmacSha160() below
-            keyAgreement.init((ECPrivateKey)key);
+            keyAgreement.init(key);
             keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65b)
             // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x20^key_nb)-padding)
             Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte) (0x20^key_nb));
@@ -1535,20 +1564,10 @@ public class CardEdge extends javacard.framework.Applet {
         if ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS))
             ISOException.throwIt(SW_INCORRECT_P1);
         
-        Key key = eckeys[key_nb];
-        // check type and size
-        if ((key == null) || !key.isInitialized())
-            ISOException.throwIt(SW_INCORRECT_P1);
-        if (key.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
-            ISOException.throwIt(SW_INCORRECT_ALG);     
-        if (key.getSize()!= LENGTH_EC_FP_256)
-            ISOException.throwIt(SW_INCORRECT_ALG);
-        // check the curve param
-        if(!Secp256k1.checkCurveParameters((ECPrivateKey)key, recvBuffer, (short)0))
-            ISOException.throwIt(SW_INCORRECT_ALG);
+        ECPrivateKey key = getInitializedECKey(key_nb);
                 
         // compute the corresponding partial public key...
-        keyAgreement.init((ECPrivateKey)key);
+        keyAgreement.init(key);
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
         Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
         
@@ -2587,15 +2606,7 @@ public class CardEdge extends javacard.framework.Applet {
                 if (key_nb==(byte)0xFF)
                     sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
                 else{
-                    Key key= eckeys[key_nb];
-                    // check type and size
-                    if ((key == null) || !key.isInitialized())
-                        ISOException.throwIt(SW_INCORRECT_P1);
-                    if (key.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
-                        ISOException.throwIt(SW_INCORRECT_ALG);     
-                    if (key.getSize()!= LENGTH_EC_FP_256)
-                        ISOException.throwIt(SW_INCORRECT_ALG);
-                    sigECDSA.init(key, Signature.MODE_SIGN);
+                    sigECDSA.init(getInitializedECKey(key_nb), Signature.MODE_SIGN);
                 }
                 short sign_size= sigECDSA.sign(recvBuffer, (short)0, (short)32, buffer, (short)0);
                 return sign_size;
@@ -2773,15 +2784,7 @@ public class CardEdge extends javacard.framework.Applet {
         if (key_nb==(byte)0xFF)
             sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
         else{
-            Key key= eckeys[key_nb];
-            // check type and size
-            if ((key == null) || !key.isInitialized())
-                ISOException.throwIt(SW_INCORRECT_P1);
-            if (key.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
-                ISOException.throwIt(SW_INCORRECT_ALG);     
-            if (key.getSize()!= LENGTH_EC_FP_256)
-                ISOException.throwIt(SW_INCORRECT_ALG);
-            sigECDSA.init(key, Signature.MODE_SIGN);
+            sigECDSA.init(getInitializedECKey(key_nb), Signature.MODE_SIGN);
         }
         short sign_size= sigECDSA.sign(transactionData, OFFSET_TRANSACTION_HASH, (short)32, buffer, (short)0);
         return sign_size;
@@ -2839,15 +2842,7 @@ public class CardEdge extends javacard.framework.Applet {
         if (key_nb==(byte)0xFF)
             sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
         else{
-            Key key= eckeys[key_nb];
-            // check type and size
-            if ((key == null) || !key.isInitialized())
-                ISOException.throwIt(SW_INCORRECT_P1);
-            if (key.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
-                ISOException.throwIt(SW_INCORRECT_ALG);     
-            if (key.getSize()!= LENGTH_EC_FP_256)
-                ISOException.throwIt(SW_INCORRECT_ALG);
-            sigECDSA.init(key, Signature.MODE_SIGN);
+            sigECDSA.init(getInitializedECKey(key_nb), Signature.MODE_SIGN);
         }
         short sign_size= sigECDSA.signPreComputedHash(buffer, ISO7816.OFFSET_CDATA, MessageDigest.LENGTH_SHA_256, buffer, (short)0);
         return sign_size;
@@ -2918,14 +2913,7 @@ public class CardEdge extends javacard.framework.Applet {
         if (key_nb==(byte)0xFF)
             privkey = bip32_extendedkey;
         else{
-            privkey= (ECPrivateKey) eckeys[key_nb];
-            // check type and size
-            if ((privkey == null) || !privkey.isInitialized())
-                ISOException.throwIt(SW_INCORRECT_P1);
-            if (privkey.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
-                ISOException.throwIt(SW_INCORRECT_ALG);     
-            if (privkey.getSize()!= LENGTH_EC_FP_256)
-                ISOException.throwIt(SW_INCORRECT_ALG);
+            privkey = getInitializedECKey(key_nb);
         } 
 
         // the tweaked (or plain) secret key is staged at this offset in recvBuffer
@@ -3265,14 +3253,7 @@ public class CardEdge extends javacard.framework.Applet {
         if (key_nb==(byte)0xFF)
             privkey = bip32_extendedkey;
         else{
-            privkey= (ECPrivateKey) eckeys[key_nb];
-            // check type and size
-            if ((privkey == null) || !privkey.isInitialized())
-                ISOException.throwIt(SW_INCORRECT_P1);
-            if (privkey.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
-                ISOException.throwIt(SW_INCORRECT_ALG);
-            if (privkey.getSize()!= LENGTH_EC_FP_256)
-                ISOException.throwIt(SW_INCORRECT_ALG);
+            privkey = getInitializedECKey(key_nb);
         }
 
         // generate 32-byte randomness (rand')
@@ -3599,14 +3580,7 @@ public class CardEdge extends javacard.framework.Applet {
         if (key_nb==(byte)0xFF)
             privkey = bip32_extendedkey;
         else{
-            privkey= (ECPrivateKey) eckeys[key_nb];
-            // check type and size
-            if ((privkey == null) || !privkey.isInitialized())
-                ISOException.throwIt(SW_INCORRECT_P1);
-            if (privkey.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
-                ISOException.throwIt(SW_INCORRECT_ALG);
-            if (privkey.getSize()!= LENGTH_EC_FP_256)
-                ISOException.throwIt(SW_INCORRECT_ALG);
+            privkey = getInitializedECKey(key_nb);
         }
 
         // compute pubkey pk from sk
