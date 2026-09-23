@@ -308,6 +308,7 @@ public class CardEdge extends javacard.framework.Applet {
     
     /** Taproot very low probability error*/
     private final static short SW_TAPROOT_TWEAK_ERROR = (short) 0x9C43;
+    private final static short SW_SCHNORR_INVALID_NONCE = (short) 0x9C4C;
 
     /** MuSig2 errors **/
     private final static short SW_BIP327_WRONG_SECNONCE = (short) 0x9C44;
@@ -583,7 +584,7 @@ public class CardEdge extends javacard.framework.Applet {
     private byte feature_schnorr_policy = FEATURE_ENABLED; // schnorr signature
     private byte feature_nostr_policy = FEATURE_ENABLED; // nostr event signing
     private byte feature_liquid_policy = FEATURE_ENABLED; // Liquid-Bitcoin
-    private byte feature_musig2_policy = FEATURE_ENABLED; // Liquid-Bitcoin
+    private byte feature_musig2_policy = FEATURE_ENABLED; // musig2 signature
 
     /****************************************
      *                Methods               *
@@ -1855,7 +1856,7 @@ public class CardEdge extends javacard.framework.Applet {
      *  data: none
      *  return: [versions(4b) | PIN0-PUK0-PIN1-PUK1 tries (4b) |
      *           needs2FA (1b) | is_seeded(1b) | setupDone(1b) | needs_secure_channel(1b) |
-     *           nfc_policy(1b) | taproot_policy(1b) | nostr_policy(1b) | liquid_policy(1b)]
+     *           nfc_policy(1b) | taproot_policy(1b) | nostr_policy(1b) | liquid_policy(1b) | musig2_policy(1b)]
      */
     private short GetStatus(APDU apdu, byte[] buffer) {
         // check that PIN[0] has been entered previously
@@ -2144,7 +2145,7 @@ public class CardEdge extends javacard.framework.Applet {
         
         // check provided PIN
         byte pin_size= buffer[ISO7816.OFFSET_P1];
-        OwnerPIN pin = pins[(byte)0x00];
+        OwnerPIN pin = pins[0];
         if (bytesLeft < pin_size)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         if (!CheckPINPolicy(buffer, ISO7816.OFFSET_CDATA, pin_size))
@@ -3113,7 +3114,7 @@ public class CardEdge extends javacard.framework.Applet {
         schnorr_hash_tag(tags, (short)11, (short)13, buffer, (short)0, (short)96, recvBuffer, OFFSET_BIP340_t); // reuse t to store rand
         // k', k
         if (Biginteger.equalZero(recvBuffer, OFFSET_BIP340_t, (short)32)){
-            ISOException.throwIt((short)0x7778);
+            ISOException.throwIt(SW_SCHNORR_INVALID_NONCE);
         }
         // todo: rand = rand % n
         // compute R = rand*G using the scratch ephemeral key (same pattern as in
@@ -3440,7 +3441,7 @@ public class CardEdge extends javacard.framework.Applet {
         // add 13-byte padding to reach 112 bytes of data to encrypt
         Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP327_PADDING, (short)13, (byte)13);
 
-        // random 16-bit IV
+        // random 16-byte IV
         randomData.generateData(recvBuffer,OFFSET_BIP327_IV, (short)16);
 
         // encrypt [ k1 | k2 | pk | id | padding ] using a key only known to the applet
