@@ -1250,28 +1250,30 @@ public class CardEdge extends javacard.framework.Applet {
      *************************/
 
     /**
-     * Retrieves the Key object to be used w/ the specified key number, key type
-     * (KEY_XX) and size. If exists, check it has the proper key type If not,
-     * creates it.
-     * 
-     * @return Retrieved Key object or throws SW_UNATUTHORIZED,
-     *         SW_OPERATION_NOT_ALLOWED
+     * Returns an uninitialized ECPrivateKey object for the given keyslot, creating it
+     * if necessary. The key's secp256k1 curve parameters are (re)set, so the slot is
+     * guaranteed to be usable for import.
+     * @return ECPrivateKey object
+     * @throws SW_ECKEYS_INITIALIZED_KEY if the slot already holds an initialized key,
+     *         SW_INCORRECT_ALG if the slot holds a key of unexpected type or size
      */
-    private Key getKey(byte key_nb, byte key_type, short key_size) {
-        
-        if (eckeys[key_nb] == null) {
+    private ECPrivateKey getUninitializedKey(byte key_nb) {
+        ECPrivateKey key = (ECPrivateKey) eckeys[key_nb];
+        if (key == null) {
             // We have to create the Key
-            eckeys[key_nb] = KeyBuilder.buildKey(key_type, key_size, false);
+            key = (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+            eckeys[key_nb] = key;
         } else {
-            // Key already exists: check size & type
-            /*
-             * TODO: As an option, we could just discard and recreate if not of
-             * the correct type, but creates trash objects
-             */
-            if ((eckeys[key_nb].getSize() != key_size) || (eckeys[key_nb].getType() != key_type))
-                ISOException.throwIt(SW_OPERATION_NOT_ALLOWED);
+            // do not overwrite an existing key
+            if (key.isInitialized())
+                ISOException.throwIt(SW_ECKEYS_INITIALIZED_KEY);
+            // check type and size
+            if ((key.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE) || (key.getSize() != LENGTH_EC_FP_256))
+                ISOException.throwIt(SW_INCORRECT_ALG);
         }
-        return eckeys[key_nb];
+        // (re)set the secp256k1 parameters: clearKey() also clears them (e.g. after factory reset)
+        Secp256k1.setCommonCurveParameters(key);
+        return key;
     }
 
     /**
@@ -1297,7 +1299,7 @@ public class CardEdge extends javacard.framework.Applet {
         // check type and size
         if (key.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
             ISOException.throwIt(SW_INCORRECT_ALG);
-        if (key.getSize()!= LENGTH_EC_FP_256)
+        if (key.getSize() != LENGTH_EC_FP_256)
             ISOException.throwIt(SW_INCORRECT_ALG);
         // check the curve parameters integrity (countermeasure against fault
         // injection / curve substitution attacks; uses tmpBuffer as scratch)
@@ -1458,14 +1460,8 @@ public class CardEdge extends javacard.framework.Applet {
         if (!Biginteger.lessThan(buffer, dataOffset, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE))
             ISOException.throwIt(SW_INVALID_PARAMETER);
         
-        // check type and size
-        ECPrivateKey ec_prv_key = (ECPrivateKey) getKey(key_nb, key_type, key_size);
-        if ((ec_prv_key != null) && ec_prv_key.isInitialized())
-            ISOException.throwIt(SW_INCORRECT_P1);
-        
-        // curves parameters are take by default as SECP256k1
-        // Satochip default is secp256k1 (over Fp)
-        Secp256k1.setCommonCurveParameters(ec_prv_key);
+        // check that the key slot is available and in the correct format
+        ECPrivateKey ec_prv_key = getUninitializedKey(key_nb);
         
         // check 2FA if required
         if(needs_2FA){
@@ -3759,12 +3755,6 @@ public class CardEdge extends javacard.framework.Applet {
         
         if (!needs_2FA)
             ISOException.throwIt(SW_2FA_UNINITIALIZED_KEY);
-        
-//      // DEPRECATED: reset 2FA can only be done if all private keys are cleared
-//      if (bip32_seeded)
-//          ISOException.throwIt(SW_BIP32_INITIALIZED_SEED);
-//      if (eckeys_flag != 0x0000)
-//          ISOException.throwIt(SW_ECKEYS_INITIALIZED_KEY);
         
         // compute hmac(2FA_ID) and compare with value provided 
         // hmac of 64-bytes msg: (id_2FA(20b) | 44 bytes 0xAA-padding)
