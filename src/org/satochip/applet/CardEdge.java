@@ -111,7 +111,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
-    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, reset-to-factory refactoring, authentikey mgmt, transient AES session keys, removal of ParseTransaction/SignTransaction, ...)
+    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, reset-to-factory refactoring, authentikey mgmt, transient AES session keys, removal of ParseTransaction/SignTransaction/signMessage, ...)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -486,10 +486,7 @@ public class CardEdge extends javacard.framework.Applet {
      *        Other data instances               *
      *********************************************/
     
-    // Message signing
-    private static final byte[] BITCOIN_SIGNED_MESSAGE_HEADER = {0x18,'B','i','t','c','o','i','n',' ','S','i','g','n','e','d',' ','M','e','s','s','a','g','e',':','\n'}; //"Bitcoin Signed Message:\n";
     private MessageDigest sha256;  
-    private boolean sign_flag= false;
     
     //2FA data
     private boolean needs_2FA= false;
@@ -509,7 +506,6 @@ public class CardEdge extends javacard.framework.Applet {
      * - ECkey reset (ResetKey):             [ 32b coordx  | 32-byte (0x20^key_nb)-padding ] 
      * - Seed reset (resetBIP32Seed):        [ 32b authentikey-coordx  | 32-byte 0xFF-padding ] 
      * - 2FA reset (reset2FAKey):            [ 20b 2FA_ID  | 44-byte 0xAA-padding ]  
-     * - Msg signing (signMessage):          [ 32b SHA256(btcHeader+msg) | 32-byte 0xBB-padding ]
      * - Hash signing (SignTransactionHash): [ 32b Hash | 32-byte 0xCC-padding ]
      * - Schnorr hash (SignSchnorrHash):     [ 32b Hash | 32-byte 0xDD-padding ]
      * - MuSig2 sign (Musig2SignHash):       [ 32b nonce coefficient b | 32-byte 0xEE-padding ]
@@ -903,8 +899,9 @@ public class CardEdge extends javacard.framework.Applet {
             sizeout= getBIP32LiquidMasterBlindingKey(apdu, buffer);
             break;
         // Signatures
-        case INS_SIGN_MESSAGE:  
-            sizeout= signMessage(apdu, buffer);
+        case INS_SIGN_MESSAGE:
+            // deprecated: use SignTransactionHash (0x7A) with the message hash instead
+            ISOException.throwIt(SW_INS_DEPRECATED);
             break;
         case INS_SIGN_SHORT_MESSAGE:    
             //sizeout= signShortMessage(apdu, buffer);
@@ -2438,136 +2435,6 @@ public class CardEdge extends javacard.framework.Applet {
         return buffer_offset;
     }
 
-    /**
-     * This function signs Bitcoin message using std or Bip32 extended key
-     *
-     * ins: 0x6E
-     * p1: key number or 0xFF for the last derived Bip32 extended key 
-     * p2: Init-Update-Finalize
-     * data(init): [ full_msg_size(4b) | (option)altcoinSize(1b)-altcoin]
-     * data(update): [chunk_size(2b) | chunk_data]
-     * data(finalize): [chunk_size(2b) | chunk_data | (option)HMAC-2FA(20b)]
-     *  
-     * returns(init/update): none
-     * return(finalize): [sig]
-     *
-     */
-    private short signMessage(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
-        
-        byte key_nb = buffer[ISO7816.OFFSET_P1];
-        if ( (key_nb!=(byte)0xFF) && ((key_nb < 0)||(key_nb >= MAX_NUM_KEYS)) )
-            ISOException.throwIt(SW_INCORRECT_P1);
-        
-        byte p2= buffer[ISO7816.OFFSET_P2];
-        if (p2 <= (byte) 0x00 || p2 > (byte) 0x03)
-            ISOException.throwIt(SW_INCORRECT_P2);
-        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-        
-        // check whether the seed is initialized
-        if (key_nb==(byte)0xFF && !bip32_seeded)
-            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
-        
-        short chunk_size, offset, recvOffset;
-        switch(p2){
-            // initialization
-            case OP_INIT: 
-                recvOffset=0;
-                if (bytesLeft<(short)4){
-                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);}
-                else if (bytesLeft==(short)4){
-                    // copy Btc message header to tmp buffer
-                    Util.arrayCopyNonAtomic(BITCOIN_SIGNED_MESSAGE_HEADER, (short)0, recvBuffer, (short)0, (short)BITCOIN_SIGNED_MESSAGE_HEADER.length);
-                    recvOffset= (short)BITCOIN_SIGNED_MESSAGE_HEADER.length;
-                }
-                else {
-                    //Altcoin msg header from buffer
-                    offset= (short)ISO7816.OFFSET_CDATA;
-                    offset+=4;
-                    byte altcoinSize= buffer[offset];
-                    offset++;
-                    if (bytesLeft!=(short)(5+altcoinSize))
-                        ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                    recvBuffer[0]= (byte) (altcoinSize+17);
-                    Util.arrayCopyNonAtomic(buffer, offset, recvBuffer, (short)1, (short)altcoinSize);
-                    Util.arrayCopyNonAtomic(BITCOIN_SIGNED_MESSAGE_HEADER, (short)8, recvBuffer, (short)(1+altcoinSize), (short)17); //' Signed Message:\n'
-                    recvOffset= (short) (18+altcoinSize);
-                }
-                
-                // buffer data = [4-byte msg_size]
-                offset= (short)ISO7816.OFFSET_CDATA;
-                recvOffset+= Biginteger.encodeVarInt(buffer, offset, recvBuffer, recvOffset);
-                offset+=4;
-                sha256.reset();
-                sha256.update(recvBuffer, (short) 0, recvOffset);
-                sign_flag= true; // set flag
-                return (short)0;
-            
-            // update (optionnal)
-            case OP_PROCESS: 
-                if (!sign_flag)
-                    ISOException.throwIt(SW_INCORRECT_INITIALIZATION);
-                    
-                // buffer data = [2-byte chunk_size | n-byte message to sign]
-                if (bytesLeft < (short)2)
-                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                offset= (short)ISO7816.OFFSET_CDATA;
-                chunk_size=Util.getShort(buffer, offset);
-                offset+=2;
-                bytesLeft-=2;
-                // check that chunk_size does not exceed the data actually received
-                if (chunk_size < 0 || chunk_size > bytesLeft)
-                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                sha256.update(buffer, offset, chunk_size);
-                return (short)0;
-            
-            // final
-            case OP_FINALIZE: 
-                if (!sign_flag)
-                    ISOException.throwIt(SW_INCORRECT_INITIALIZATION);
-                
-                // buffer data = [2-byte chunk_size | n-byte message to sign]
-                if (bytesLeft < (short)2)
-                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                offset= (short)ISO7816.OFFSET_CDATA;
-                chunk_size=Util.getShort(buffer, offset);
-                offset+=2;
-                bytesLeft-=2;
-                // check that chunk_size does not exceed the data actually received
-                if (chunk_size < 0 || chunk_size > bytesLeft)
-                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                sha256.doFinal(buffer, offset, chunk_size, recvBuffer, (short) 0);
-                sign_flag= false;// reset flag
-                offset+=chunk_size;
-                bytesLeft-=chunk_size;
-                
-                // check 2FA if required
-                if(needs_2FA){
-                    if (bytesLeft<(short)20)
-                        ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                    // hmac of 64-bytes msg: (sha256(btcheader+msg) | 32bytes 0xBB-padding)
-                    Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0xBB);
-                    HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
-                    if (!arrayCompareConstantTime(buffer, offset, recvBuffer, (short)64, (short)20))
-                        ISOException.throwIt(SW_SIGNATURE_INVALID);
-                }
-                
-                // set key & sign
-                if (key_nb==(byte)0xFF)
-                    sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
-                else{
-                    sigECDSA.init(getInitializedECKey(key_nb), Signature.MODE_SIGN);
-                }
-                short sign_size= sigECDSA.sign(recvBuffer, (short)0, (short)32, buffer, (short)0);
-                return sign_size;
-                
-        } //end switch  
-        
-        return (short)0;
-    }
-     
     /**
      * This function signs a given transaction hash with a std or the last extended key
      * If 2FA is enabled, a HMAC must be provided as an additional security layer. 

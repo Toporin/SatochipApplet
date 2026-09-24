@@ -69,6 +69,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Remove the ParseTransaction (0x71) and SignTransaction (0x6F) commands: they are deprecated and now return SW_INS_DEPRECATED (0x9C26) when invoked. Clients should use SignTransactionHash (0x7A) to sign transaction hashes (the client computes the sighash itself) and perform any transaction parsing off-card. Related code and objects are also removed: the Transaction.java parser class, the transactionData state (cached tx hash and cumulative amount for the 2FA limit), the PARSE_STD/PARSE_SEGWIT constants, the SW_INCORRECT_TXHASH status word, the "Tx approval" 2FA code entry, and the now-unused Biginteger methods swap/getLSB/subtract1_carry. The 2FA amount_limit field is still accepted in setup for protocol compatibility but is now deprecated and unused.
 
+* Remove the signMessage (0x6E) command: it is deprecated and now returns SW_INS_DEPRECATED (0x9C26) when invoked. Clients should use SignTransactionHash (0x7A) to sign the (double-hashed) message hash instead, computing the message hash off-card. Related code and objects are also removed: the signMessage() function, the BITCOIN_SIGNED_MESSAGE_HEADER constant, the sign_flag multi-chunk state, the "Msg signing" 2FA code entry, and the Biginteger VarInt helpers (encodeVarInt, encodeShortToVarInt, isStrictlyLessThanUnsigned) as well as the dead Shift1bit/setZero/setByte methods (the latter already unused).
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.

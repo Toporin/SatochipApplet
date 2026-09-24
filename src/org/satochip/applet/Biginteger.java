@@ -198,17 +198,6 @@ public class Biginteger {
     }
     
     /**
-     * Compare unsigned byte/short in java
-     * http://www.javamex.com/java_equivalents/unsigned_arithmetic.shtml 
-     */
-    public static boolean isStrictlyLessThanUnsigned(byte n1, byte n2) {
-        return (n1 < n2) ^ ((n1 < 0) != (n2 < 0));
-    }
-    public static boolean isStrictlyLessThanUnsigned(short n1, short n2) {
-        return (n1 < n2) ^ ((n1 < 0) != (n2 < 0));
-    }
-    
-    /**
     * Check whether x is strictly equal to 0 
     * operands are stored Most Significant Byte First (big-endian)
     * size is the size in bytes of the operand 
@@ -220,76 +209,6 @@ public class Biginteger {
             if(x[i] != 0) return false;
         }
         return true;
-    }
-    
-    public static void Shift1bit(byte[] src, short srcOffset, short size){
-        short rightShifts=(short)1;
-        short leftShifts = (short)7;
-        short mask= 0x00FF;
-         
-        byte previousByte = src[srcOffset]; // keep the byte before modification
-        src[srcOffset]= (byte) (((src[srcOffset]&mask)>>rightShifts)&mask);
-        for(short i = (short)(srcOffset+1); i < (short)(srcOffset+size); i++) {
-            byte tmp = src[i];
-            src[i]= (byte) ( (((src[i]&mask)>>rightShifts)&mask) | ((previousByte&mask)<<leftShifts) );
-            previousByte= tmp;
-        }    
-    }
-    
-    /**
-     * For a Biginteger bi of given size stored in a given byte array at given offset, 
-     * the function sets the Biginteger to zero*/
-    public static void setZero(byte[] x, short offsetx, short size) {
-        Util.arrayFillNonAtomic(x, offsetx, size, (byte)0x00);
-    }
-    
-    /**
-     * For a Biginteger bi of given size stored in a given byte array at given offset, 
-     * the function sets the Biginteger LSB to value*/
-    public static void setByte(byte[] x, short offsetx, short size, byte value) {
-        setZero(x, offsetx, size);
-        x[(short)(offsetx+size-1)] = value; 
-    }
-    
-    // VarInt
-    /* Encode a short into Bitcoin's VarInt format and return number of byte set */
-    public static short encodeShortToVarInt(short value, byte[] buffer, short offset) {
-        // todo: make it time constant?
-        //if (value<((short)253)) { // signed comparison!!
-        if (Biginteger.isStrictlyLessThanUnsigned(value,(short)253)){
-            buffer[offset]=(byte)(value & 0xFF);
-            return (short)1;
-        } else {
-            buffer[offset++]= (byte)253;
-            buffer[offset++]= (byte)(value & 0xff);
-            buffer[offset++]= (byte)(value>>>8);
-            return (short)3; 
-        } 
-    }
-    
-    /* Encode a 4-byte int into Bitcoin's VarInt format and return number of byte set */
-    public static short encodeVarInt(byte[] src, short src_offset, byte[] dst, short dst_offset) {
-        // todo: make it time constant?
-        if (src[src_offset]!=0 | 
-            src[(short)(src_offset+1)]!=0){ // 4-bytes integer
-            dst[dst_offset]= (byte)0xfe;
-            dst[(short)(dst_offset+1)]= src[(short)(src_offset+3)]; // little endian
-            dst[(short)(dst_offset+2)]= src[(short)(src_offset+2)]; 
-            dst[(short)(dst_offset+3)]= src[(short)(src_offset+1)]; 
-            dst[(short)(dst_offset+4)]= src[src_offset]; 
-            return (short)5;
-        }
-        else if (src[(short)(src_offset+2)]!=0 | 
-                 (src[(short)(src_offset+3)] & 0xff)>=0xfd){ // short integer
-            dst[dst_offset]= (byte)0xfd;
-            dst[(short)(dst_offset+1)]= src[(short)(src_offset+3)]; // little endian
-            dst[(short)(dst_offset+2)]= src[(short)(src_offset+2)]; 
-            return (short)3;
-        }
-        else{
-            dst[dst_offset]=src[(short)(src_offset+3)];
-            return (short)1;
-        }
     }
     
     /**
