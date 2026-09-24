@@ -178,26 +178,6 @@ public class Biginteger {
     }
     
     /**
-     * compute x= x-1
-     * operands are stored Most Significant Byte First
-     * size is the size in bytes of the operand x
-     */
-    public static boolean subtract1_carry(byte[] x, short offsetx, short size) {
-        
-        short subtraction_result = 0;
-        short carry = 1;  // first carry set to 1 for decrement
-
-        short i = (short)(offsetx+size-1);
-        for(; i >= offsetx; i--) {
-            subtraction_result = (short) ((x[i] & digit_mask) - carry);
-            x[i] = (byte)(subtraction_result & digit_mask);
-            carry = (short)(subtraction_result < 0 ? 1 : 0);
-        }
-
-        return carry > 0;
-    }
-    
-    /**
      * Check whether (unsigned)x is strictly smaller than (unsigned)y 
      * operands are stored Most Significant Byte First
      * size is the size in bytes of the operands (should be same size, padded with 0..0 if needed) 
@@ -269,26 +249,6 @@ public class Biginteger {
     public static void setByte(byte[] x, short offsetx, short size, byte value) {
         setZero(x, offsetx, size);
         x[(short)(offsetx+size-1)] = value; 
-    }
-    
-    /**
-     * For a Biginteger bi of given size stored in a given byte array at given offset, 
-     * the function returns the least significant byte lsb if (bi==lsb) or Ox00ff otherwise*/
-    public static short getLSB(byte[] x, short offsetx, short size) {
-        // todo: make it time constant!
-        for (short i= offsetx; i<(short)(offsetx+size-1); i++){
-            if (x[i]!=0)
-                return (short)0xff;
-        }
-        return (short)(x[(short)(offsetx+size-1)] & digit_mask);
-    }
-    
-    /**
-     * This function swaps the bytes of Biginteger in x to Biginteger in y*/
-    public static void swap(byte[] x, short offsetx, byte[] y, short offsety, short size) {
-        for (short i= 0; i<size; i++){
-            y[(short)(offsety+size-i-1)]=x[(short)(offsetx+i)];
-        }
     }
     
     // VarInt

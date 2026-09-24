@@ -111,7 +111,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
-    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, reset-to-factory refactoring, authentikey mgmt, transient AES session keys, ...)
+    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, reset-to-factory refactoring, authentikey mgmt, transient AES session keys, removal of ParseTransaction/SignTransaction, ...)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -262,8 +262,8 @@ public class CardEdge extends javacard.framework.Applet {
     private final static short SW_BIP32_INITIALIZED_SEED = (short) 0x9C17;
     //** DEPRECATED - Bip32 authentikey pubkey is not initialized*/
     //private final static short SW_BIP32_UNINITIALIZED_AUTHENTIKEY_PUBKEY= (short) 0x9C16;
-    /** Incorrect transaction hash */
-    private final static short SW_INCORRECT_TXHASH = (short) 0x9C15;
+    //** DEPRECATED - Incorrect transaction hash */
+    //private final static short SW_INCORRECT_TXHASH = (short) 0x9C15;
     
     /** 2FA already initialized*/
     private final static short SW_2FA_INITIALIZED_KEY = (short) 0x9C18;
@@ -491,25 +491,13 @@ public class CardEdge extends javacard.framework.Applet {
     private MessageDigest sha256;  
     private boolean sign_flag= false;
     
-    // transaction signing
-    private byte[] transactionData;
-    private static final byte OFFSET_TRANSACTION_HASH=0;
-    private static final byte OFFSET_TRANSACTION_AMOUNT=OFFSET_TRANSACTION_HASH+32;
-    private static final byte OFFSET_TRANSACTION_TOTAL=OFFSET_TRANSACTION_AMOUNT+8;
-    private static final byte OFFSET_TRANSACTION_SIZE=OFFSET_TRANSACTION_TOTAL+8;
-    
-    // tx parsing
-    private static final byte PARSE_STD=0x00;
-    private static final byte PARSE_SEGWIT=0x01;
-    
     //2FA data
     private boolean needs_2FA= false;
     //private boolean done_once_2FA= false;
     private byte[] data2FA;
     private static final byte OFFSET_2FA_HMACKEY=0;
     private static final byte OFFSET_2FA_ID=OFFSET_2FA_HMACKEY+20;
-    private static final byte OFFSET_2FA_LIMIT=OFFSET_2FA_ID+20; // TODO deprecate
-    private static final byte OFFSET_2FA_SIZE=OFFSET_2FA_LIMIT+8;
+    private static final byte OFFSET_2FA_SIZE=OFFSET_2FA_ID+20;
     private static final short HMAC_CHALRESP_2FA=(short)0x8000;
     /**
      * 2FA codes: each 2FA-protected operation requires an HMAC-SHA1 (computed with the
@@ -517,7 +505,6 @@ public class CardEdge extends javacard.framework.Applet {
      * value followed by a 32-byte padding constant. The padding byte provides domain
      * separation between operations, so a 2FA approval for one operation cannot be
      * reused for another operation:
-     * - Tx approval (SignTransaction):      [ 32b TX hash | 32-byte 0x00-padding ]
      * - ECkey import (ImportKey):           [ 32b coordx  | 32-byte (0x10^key_nb)-padding ]
      * - ECkey reset (ResetKey):             [ 32b coordx  | 32-byte (0x20^key_nb)-padding ] 
      * - Seed reset (resetBIP32Seed):        [ 32b authentikey-coordx  | 32-byte 0xFF-padding ] 
@@ -695,10 +682,6 @@ public class CardEdge extends javacard.framework.Applet {
 
         // private key array
         eckeys = new Key[MAX_NUM_KEYS];
-        
-        // Transaction signing
-        Transaction.init();
-        transactionData= new byte[OFFSET_TRANSACTION_SIZE];
         
         // Schnorr signatures
         taproot_tweakedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
@@ -928,7 +911,8 @@ public class CardEdge extends javacard.framework.Applet {
             ISOException.throwIt(SW_INS_DEPRECATED);
             break;
         case INS_SIGN_TRANSACTION:
-            sizeout= SignTransaction(apdu, buffer);
+            // deprecated: use SignTransactionHash (0x7A) instead
+            ISOException.throwIt(SW_INS_DEPRECATED);
             break;
         case INS_SIGN_TRANSACTION_HASH:
             sizeout= SignTransactionHash(apdu, buffer);
@@ -940,7 +924,7 @@ public class CardEdge extends javacard.framework.Applet {
             sizeout= TaprootTweakPrivateKey(apdu, buffer);
             break;
         case INS_PARSE_TRANSACTION:
-            sizeout= ParseTransaction(apdu, buffer);
+            ISOException.throwIt(SW_INS_DEPRECATED);
             break;
         // MuSig2
         case INS_MUSIG2_GENERATE_NONCE:
@@ -1048,7 +1032,7 @@ public class CardEdge extends javacard.framework.Applet {
      *      RFU(option_flags) - deprecated: flags to define up to 16 additional options:
      *          bit15 set: second factor authentication using hmac-sha1 challenge-response (v0.2-0.1)
      *          hmacsha1_key: 20-byte hmac key used for transaction authorization
-     *          amount_limit: max amount (in satoshis) allowed without confirmation (this includes change value)
+     *          amount_limit: (deprecated, unused since the removal of SignTransaction) max amount (in satoshis) allowed without confirmation
      *  
      * return: none
      */
@@ -2585,181 +2569,6 @@ public class CardEdge extends javacard.framework.Applet {
     }
      
     /**
-     * This function parses a raw transaction and returns the corresponding double SHA-256
-     * If the Bip32 seed is initialized, the hash is signed with the authentikey.
-     * 
-     * ins: 0x71
-     * p1: Init or Process 
-     * p2: PARSE_STD ou PARSE_SEGWIT
-     * data: [raw_tx]
-     * 
-     * return: [hash(32b) | needs_confirm(1b) | sig_size(2b) | sig ]
-     *
-     * where:
-     *      needs_confirm is 0x01 if a hmac-sha1 of the hash must be provided for tx signing 
-     */
-    private short ParseTransaction(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);                                       
-  
-        byte p1 = buffer[ISO7816.OFFSET_P1];
-        byte p2 = buffer[ISO7816.OFFSET_P2];
-        short dataOffset = ISO7816.OFFSET_CDATA;
-        short dataRemaining = (short)(buffer[ISO7816.OFFSET_LC] & 0xff);
-        
-        if (p1== OP_INIT){
-            // initialize transaction object
-            Transaction.resetTransaction();
-        }
-        
-        // parse the transaction
-        byte result = Transaction.RESULT_ERROR;
-        if (p2== PARSE_STD){
-             result= Transaction.parseTransaction(buffer, dataOffset, dataRemaining);
-        }else if (p2== PARSE_SEGWIT){
-            result = Transaction.parseSegwitTransaction(buffer, dataOffset, dataRemaining);
-        }
-        if (result == Transaction.RESULT_ERROR) {
-            Transaction.resetTransaction();
-            ISOException.throwIt(ISO7816.SW_WRONG_DATA);
-        }
-        else if (result == Transaction.RESULT_MORE) {
-            
-            short offset = 0;
-            // Transaction context
-            Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_CURRENT_I, buffer, offset, Transaction.SIZEOF_U32);
-            offset += 4;
-            Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_CURRENT_O, buffer, offset, Transaction.SIZEOF_U32);
-            offset += 4;
-            Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_SCRIPT_COORD, buffer, offset, Transaction.SIZEOF_U32);
-            offset += 4;
-            Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_AMOUNT, buffer, offset, Transaction.SIZEOF_AMOUNT);
-            offset += Transaction.SIZEOF_AMOUNT;
-            
-            return offset;
-        }
-        else if (result == Transaction.RESULT_FINISHED) {
-            
-            // check whether 2fa is required (hmac-sha1 of tx hash)
-            short need2fa=(short)0x0000;
-            Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_AMOUNT, transactionData, OFFSET_TRANSACTION_AMOUNT, (short)8);
-            Biginteger.add_carry(transactionData, OFFSET_TRANSACTION_AMOUNT, transactionData, OFFSET_TRANSACTION_TOTAL, (short)8);
-            if (needs_2FA){
-                if (Biginteger.lessThan(data2FA, OFFSET_2FA_LIMIT, transactionData, OFFSET_TRANSACTION_AMOUNT, (short)8)){
-                    need2fa^= HMAC_CHALRESP_2FA; // set msb 
-                }
-            }
-            
-            // store transaction hash (single hash!) in memory 
-            Transaction.digestFull.doFinal(transactionData, (short)0, (short)0, transactionData, OFFSET_TRANSACTION_HASH);
-            // return transaction hash (double hash!) 
-            // the msb bit of hash_size is set to 1 if a Hmac confirmation is required for the tx signature
-            sha256.reset();
-            short hash_size=sha256.doFinal(transactionData, OFFSET_TRANSACTION_HASH, (short)32, buffer, (short)2);
-            Util.setShort(buffer, (short)0, (short)(hash_size+2));
-            Util.setShort(buffer, (short)(2+hash_size), need2fa);
-            short offset = (short)(2+hash_size+2);
-            
-            // hash signed by authentikey
-            sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
-            short sign_size= sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
-            Util.setShort(buffer, offset, sign_size);
-            offset+=(short)(2+sign_size); 
-            
-            // Transaction context 
-            //todo: put this context in other method
-            Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_CURRENT_I, buffer, offset, Transaction.SIZEOF_U32);
-            offset += 4;
-            Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_CURRENT_O, buffer, offset, Transaction.SIZEOF_U32);
-            offset += 4;
-            Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_SCRIPT_COORD, buffer, offset, Transaction.SIZEOF_U32);
-            offset += 4;
-            Util.arrayCopyNonAtomic(Transaction.ctx, Transaction.TX_AMOUNT, buffer, offset, Transaction.SIZEOF_AMOUNT);
-            offset += Transaction.SIZEOF_AMOUNT;
-            
-            // reset data and send result
-            // buffer= [tx_hash(32) | sign_size(2) | signature | tx context(20 - 46)] //deprecated
-            // buffer= [(hash_size+2)(2b) | tx_hash(32b) | need2fa(2b) | sig_size(2b) | sig(sig_size) | txcontext]
-            Transaction.resetTransaction();
-            return offset;
-        }
-        
-        return 0; //should not happen!
-    }
-    
-    /**
-     * This function signs the current hash transaction with a std or the last extended key
-     * The hash provided in the APDU is compared to the version stored inside the chip.
-     * Depending of the total amount in the transaction and the predefined limit, 
-     * a HMAC must be provided as an additional security layer. 
-     * 
-     * ins: 0x6F
-     * p1: key number or 0xFF for the last derived Bip32 extended key  
-     * p2: 0x00
-     * data: [hash(32b) | option: 2FA-flag(2b)|hmac(20b)]
-     * 
-     * return: [sig ]
-     *
-     */
-    private short SignTransaction(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
-        
-        byte key_nb = buffer[ISO7816.OFFSET_P1];
-        if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
-            ISOException.throwIt(SW_INCORRECT_P1);
-        
-        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-        if (bytesLeft<MessageDigest.LENGTH_SHA_256)
-            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        
-        // check whether the seed is initialized
-        if (key_nb==(byte)0xFF && !bip32_seeded)
-            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
-        
-        // check doublehash value in buffer with cached singlehash value
-        sha256.reset();
-        sha256.doFinal(transactionData, OFFSET_TRANSACTION_HASH, MessageDigest.LENGTH_SHA_256, recvBuffer, (short)0);
-        if ((byte)0 != Util.arrayCompare(buffer, ISO7816.OFFSET_CDATA, recvBuffer, (short)0, MessageDigest.LENGTH_SHA_256))
-            ISOException.throwIt(SW_INCORRECT_TXHASH);
-        
-        // check challenge-response answer if necessary
-        if(needs_2FA){
-            if( Biginteger.lessThan(data2FA, OFFSET_2FA_LIMIT, transactionData, OFFSET_TRANSACTION_AMOUNT, (short)8)){
-                if (bytesLeft<MessageDigest.LENGTH_SHA_256+MessageDigest.LENGTH_SHA+(short)2)
-                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                // check flag for 2fa_hmac_chalresp
-                short hmac_flags= Util.getShort(buffer, (short)(ISO7816.OFFSET_CDATA+32));
-                if (hmac_flags!=HMAC_CHALRESP_2FA)
-                    ISOException.throwIt(SW_INCORRECT_ALG);
-                // hmac of 64-bytes msg: (doublesha256(raw_tx) | 32bytes zero-padding)
-                Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0x00);
-                HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
-                if (!arrayCompareConstantTime(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20))
-                    ISOException.throwIt(SW_SIGNATURE_INVALID);
-                // reset total amount
-                Util.arrayFillNonAtomic(transactionData, OFFSET_TRANSACTION_TOTAL, (short)8, (byte)0x00);
-            }
-            else{                   
-                //update total amount
-                Util.arrayCopyNonAtomic(transactionData, OFFSET_TRANSACTION_AMOUNT, transactionData, OFFSET_TRANSACTION_TOTAL, (short)8);
-            }
-        }
-        
-        // hash+sign singlehash
-        if (key_nb==(byte)0xFF)
-            sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
-        else{
-            sigECDSA.init(getInitializedECKey(key_nb), Signature.MODE_SIGN);
-        }
-        short sign_size= sigECDSA.sign(transactionData, OFFSET_TRANSACTION_HASH, (short)32, buffer, (short)0);
-        return sign_size;
-    }
-    
-    
-    /**
      * This function signs a given transaction hash with a std or the last extended key
      * If 2FA is enabled, a HMAC must be provided as an additional security layer. 
      * 
@@ -3668,7 +3477,7 @@ public class CardEdge extends javacard.framework.Applet {
      *  ins: 0x79
      *  p1: 0x00
      *  p2: 0x00
-     *  data: [hmacsha1_key(20b) | amount_limit(8b)]
+     *  data: [hmacsha1_key(20b) | RFU-DEPRECATED-amount_limit(8b)]
      *  return: (none)
      */
     private short set2FAKey(APDU apdu, byte[] buffer){
@@ -3687,7 +3496,7 @@ public class CardEdge extends javacard.framework.Applet {
         short offset= ISO7816.OFFSET_CDATA;
         Util.arrayCopyNonAtomic(buffer, offset, data2FA, OFFSET_2FA_HMACKEY, (short)20); 
         offset+=(short)20;
-        Util.arrayCopyNonAtomic(buffer, offset, data2FA, OFFSET_2FA_LIMIT, (short)8); 
+        // deprecated & ignored: 8-byte amount-limit for 2FA
         offset+=(short)8;
         // hmac derivation for id_2FA & key_2FA
         HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, CST_2FA, (short)0, (short)6, data2FA, OFFSET_2FA_ID);
