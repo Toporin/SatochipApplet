@@ -111,7 +111,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
-    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, reset-to-factory refactoring, authentikey mgmt, transient AES session keys, removal of ParseTransaction/SignTransaction/signMessage, add GET_RANDOM, ...)
+    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, reset-to-factory refactoring, authentikey mgmt, transient AES session keys, removal of ParseTransaction/SignTransaction/signMessage, add GET_RANDOM, single PIN/PUK mgmt, ...)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -119,8 +119,6 @@ public class CardEdge extends javacard.framework.Applet {
 
     // Maximum number of keys handled by the Cardlet
     private final static byte MAX_NUM_KEYS = (byte) 16;
-    // Maximum number of PIN codes
-    private final static byte MAX_NUM_PINS = (byte) 8; // TODO: set to 2?
 
     // Maximum size for the extended APDU buffer 
     private final static short EXT_APDU_BUFFER_SIZE = (short) 268;
@@ -130,8 +128,6 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte PIN_MIN_SIZE = (byte) 4;
     // Maximum PIN size
     private final static byte PIN_MAX_SIZE = (byte) 16;// TODO: increase size?
-    // PIN[0] initial value...
-    private final static byte[] PIN_INIT_VALUE={(byte)'M',(byte)'u',(byte)'s',(byte)'c',(byte)'l',(byte)'e',(byte)'0',(byte)'0'};
 
     // code of CLA byte in the command APDU header
     private final static byte CardEdge_CLA = (byte) 0xB0;
@@ -348,8 +344,8 @@ public class CardEdge extends javacard.framework.Applet {
     private Key[] eckeys;
     short eckeys_flag=0x0000; //flag bit set to 1 when corresponding key is initialised 
     
-    // PIN and PUK objects, allocated on demand
-    private OwnerPIN[] pins, ublk_pins;
+    // PIN and PUK objects, allocated in the constructor (PIN) and during setup (PUK)
+    private OwnerPIN pin, puk;
     
     // card label
     private final static byte MAX_CARD_LABEL_SIZE = (byte) 64;
@@ -359,12 +355,6 @@ public class CardEdge extends javacard.framework.Applet {
     // Buffer for storing extended APDUs
     private byte[] recvBuffer;
     private byte[] tmpBuffer;
-
-    /*
-     * Logged identities: this is used for faster access control, so we don't
-     * have to ping each PIN object
-     */
-    private short logged_ids;
 
     /* For the setup function - should only be called once */
     private boolean setupDone = false;
@@ -577,19 +567,10 @@ public class CardEdge extends javacard.framework.Applet {
      ****************************************/
 
     private CardEdge(byte[] bArray, short bOffset, byte bLength) {
-        // FIXED: something should be done already here, not only with setup APDU
-        
-        /* If init pin code does not satisfy policies, internal error */
-        if (!CheckPINPolicy(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length))
-            ISOException.throwIt(SW_INTERNAL_ERROR);
 
-        ublk_pins = new OwnerPIN[MAX_NUM_PINS];
-        pins = new OwnerPIN[MAX_NUM_PINS];
-
-        // DONE: pass in starting PIN setting with instantiation
-        /* Setting initial PIN n.0 value */
-        pins[0] = new OwnerPIN((byte) 3, (byte) PIN_INIT_VALUE.length);
-        pins[0].update(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length);
+        // The PIN is not set in the constructor: it is created during setup().
+        // Before setup, the PIN is null and operations requiring it are handled accordingly.
+        pin = null;
         
         // Temporary working arrays
         try {
@@ -856,7 +837,7 @@ public class CardEdge extends javacard.framework.Applet {
             sizeout= VerifyPIN(apdu, buffer);
             break;
         case INS_CREATE_PIN:
-            sizeout= CreatePIN(apdu, buffer);
+            ISOException.throwIt(SW_INS_DEPRECATED);
             break;
         case INS_CHANGE_PIN:
             sizeout= ChangePIN(apdu, buffer);
@@ -868,7 +849,7 @@ public class CardEdge extends javacard.framework.Applet {
             sizeout= LogOutAll();
             break;
         case INS_LIST_PINS:
-            sizeout= ListPINs(apdu, buffer);
+            ISOException.throwIt(SW_INS_DEPRECATED);
             break;
         case INS_GET_STATUS:
             sizeout= GetStatus(apdu, buffer);
@@ -1029,9 +1010,11 @@ public class CardEdge extends javacard.framework.Applet {
      *        RFU(2b) | (option): RFU(20b) | RFU(8b)
      *        ]
      * where: 
-     *      default_pin: {0x4D, 0x75, 0x73, 0x63, 0x6C, 0x65, 0x30, 0x30};
+     *      default_pin: deprecated, the provided value is ignored (but still parsed for backward compatibility)
+     *                   before v0.16: {0x4D, 0x75, 0x73, 0x63, 0x6C, 0x65, 0x30, 0x30}
      *      pin_tries: max number of PIN try allowed before the corresponding PIN is blocked
      *      ublk_tries:  max number of UBLK(unblock) try allowed before the PUK is blocked
+     *      pin1/ublk1: deprecated, the provided values are ignored (but still parsed for backward compatibility)
      *      RFU(secmemsize) - deprecated: number of bytes reserved for internal memory (storage of Bip32 objects)
      *      RFU(memsize) - deprecated: number of bytes reserved for memory with external access
      *      RFU(ACL) - deprecated: creation rights for objects - Key - PIN
@@ -1050,17 +1033,7 @@ public class CardEdge extends javacard.framework.Applet {
         byte numBytes = buffer[base++];
         bytesLeft--;
 
-        OwnerPIN pin = pins[0];
-
-        if (!CheckPINPolicy(buffer, base, numBytes))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        
-        byte triesRemaining = pin.getTriesRemaining();
-        if (triesRemaining == (byte) 0x00)
-            ISOException.throwIt(SW_IDENTITY_BLOCKED);
-        if (!pin.check(buffer, base, numBytes))
-            ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
-        
+        // default PIN is deprecated, the provided value is ignored (but still parsed for backward compatibility)
         base += numBytes;
         bytesLeft-=numBytes;
 
@@ -1072,8 +1045,9 @@ public class CardEdge extends javacard.framework.Applet {
         if (!CheckPINPolicy(buffer, base, numBytes))
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
-        pins[0] = new OwnerPIN(pin_tries, PIN_MAX_SIZE);//TODO: new pin or update pin?
-        pins[0].update(buffer, base, numBytes);
+        if (pin == null)
+            pin = new OwnerPIN(pin_tries, PIN_MAX_SIZE);
+        pin.update(buffer, base, numBytes);
         
         base += numBytes;
         bytesLeft-=numBytes;
@@ -1083,9 +1057,9 @@ public class CardEdge extends javacard.framework.Applet {
         if (!CheckPINPolicy(buffer, base, numBytes))
             ISOException.throwIt(SW_INVALID_PARAMETER);
         
-        if (ublk_pins[0]==null)
-            ublk_pins[0] = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
-        ublk_pins[0].update(buffer, base, numBytes);
+        if (puk==null)
+            puk = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
+        puk.update(buffer, base, numBytes);
         
         base += numBytes;
         bytesLeft-=numBytes;
@@ -1095,24 +1069,13 @@ public class CardEdge extends javacard.framework.Applet {
         numBytes = buffer[base++];
         bytesLeft-=3;
         
-        if (!CheckPINPolicy(buffer, base, numBytes))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        
-        if (pins[1]==null)
-            pins[1] = new OwnerPIN(pin_tries, PIN_MAX_SIZE);
-        pins[1].update(buffer, base, numBytes);
-
+        // PIN1 is deprecated, the provided value is ignored (but still parsed for backward compatibility)
         base += numBytes;
         bytesLeft-=numBytes;
         numBytes = buffer[base++];
         bytesLeft--;
         
-        if (!CheckPINPolicy(buffer, base, numBytes))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-
-        if (ublk_pins[1]==null)
-            ublk_pins[1] = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
-        ublk_pins[1].update(buffer, base, numBytes);
+        // PUK1 is deprecated, the provided value is ignored (but still parsed for backward compatibility)
         base += numBytes;
         bytesLeft-=numBytes;
         
@@ -1126,8 +1089,6 @@ public class CardEdge extends javacard.framework.Applet {
         RFU = buffer[base++]; //create_key_ACL deprecated => RFU
         RFU = buffer[base++]; //create_pin_ACL deprecated => RFU
         bytesLeft-=3;
-        
-        logged_ids = 0x0000; // No identities logged in
             
         // bip32 material
         bip32_seeded= false;
@@ -1191,18 +1152,14 @@ public class CardEdge extends javacard.framework.Applet {
         card_label_size=0;
         Util.arrayFillNonAtomic(card_label, (short)0, (short)card_label.length, (byte)0);
 
-        // PINs & PUKs: reset try counters and unblock them, so that the card can be
+        // PIN & PUK: reset try counters and unblock them, so that the card can be
         // set up and used again (PIN/PUK values are set again during setup).
-        // Note: OwnerPIN.update() does not reset the try counter, hence this loop.
-        for (byte nb_pin=(byte)0; nb_pin<MAX_NUM_PINS; nb_pin++){
-            if (pins[nb_pin] != null)
-                pins[nb_pin].resetAndUnblock();
-            if (ublk_pins[nb_pin] != null)
-                ublk_pins[nb_pin].resetAndUnblock();
-        }
+        if (pin != null)
+            pin.resetAndUnblock();
+        if (puk != null)
+            puk.resetAndUnblock();
 
         // setup
-        pins[0].update(PIN_INIT_VALUE, (short) 0, (byte) PIN_INIT_VALUE.length);
         setupDone=false;
 
         return (short)0;
@@ -1269,14 +1226,6 @@ public class CardEdge extends javacard.framework.Applet {
         if(!Secp256k1.checkCurveParameters((ECPrivateKey)key, tmpBuffer, (short)0))
             ISOException.throwIt(SW_INCORRECT_ALG);
         return (ECPrivateKey) key;
-    }
-
-    /**
-     * Registers logout of an identity. This must be called anycase when a PIN
-     * verification or external authentication fail
-     */
-    private void LogoutIdentity(byte id_nb) {
-        logged_ids &= (short) ~(0x0001 << id_nb);
     }
 
     /** Checks if PIN policies are satisfied for a PIN code */
@@ -1369,8 +1318,8 @@ public class CardEdge extends javacard.framework.Applet {
      * return: none
      */
     private short ImportKey(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
@@ -1463,8 +1412,8 @@ public class CardEdge extends javacard.framework.Applet {
      * return: none
      */
     private short ResetKey(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
@@ -1512,8 +1461,8 @@ public class CardEdge extends javacard.framework.Applet {
      * return(SECP256K1): [coordx_size(2b) | pubkey_coordx | sig_size(2b) | sig]
      */
     private short getPublicKeyFromPrivate(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
@@ -1542,91 +1491,34 @@ public class CardEdge extends javacard.framework.Applet {
     }       
 
     /** 
-     * This function creates a PIN with parameters specified by the P1, P2 and DATA
-     * values. P2 specifies the maximum number of consecutive unsuccessful
-     * verifications before the PIN blocks. PIN can be created only if one of the logged identities
-     * allows it. 
-     * 
-     * ins: 0x40
-     * p1: PIN number (0x00-0x07)
-     * p2: max attempt number
-     * data: [PIN_size(1b) | PIN | UBLK_size(1b) | UBLK] 
-     * return: none
-     */
-    private short CreatePIN(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
-        
-        byte pin_nb = buffer[ISO7816.OFFSET_P1];
-        byte num_tries = buffer[ISO7816.OFFSET_P2];
-        
-        if ((pin_nb < 0) || (pin_nb >= MAX_NUM_PINS) || (pins[pin_nb] != null))
-            ISOException.throwIt(SW_INCORRECT_P1);
-        /* Allow pin lengths > 127 (useful at all ?) */
-        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-        // At least 1 character for PIN and 1 for unblock code (+ lengths)
-        if (bytesLeft < 4)
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        byte pin_size = buffer[ISO7816.OFFSET_CDATA];
-        if (bytesLeft < (short) (1 + pin_size + 1))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        if (!CheckPINPolicy(buffer, (short) (ISO7816.OFFSET_CDATA + 1), pin_size))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        byte ucode_size = buffer[(short) (ISO7816.OFFSET_CDATA + 1 + pin_size)];
-        if (bytesLeft != (short) (1 + pin_size + 1 + ucode_size))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        if (!CheckPINPolicy(buffer, (short) (ISO7816.OFFSET_CDATA + 1 + pin_size + 1), ucode_size))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        pins[pin_nb] = new OwnerPIN(num_tries, PIN_MAX_SIZE);
-        pins[pin_nb].update(buffer, (short) (ISO7816.OFFSET_CDATA + 1), pin_size);
-        ublk_pins[pin_nb] = new OwnerPIN((byte) 3, PIN_MAX_SIZE);
-        // Recycle variable pin_size
-        pin_size = (byte) (ISO7816.OFFSET_CDATA + 1 + pin_size + 1);
-        ublk_pins[pin_nb].update(buffer, pin_size, ucode_size);
-        
-        return (short)0;
-    }
-
-    /** 
      * This function verifies a PIN number sent by the DATA portion. The length of
      * this PIN is specified by the value contained in P3.
      * Multiple consecutive unsuccessful PIN verifications will block the PIN. If a PIN
      * blocks, then an UnblockPIN command can be issued.
      * 
      * ins: 0x42
-     * p1: PIN number (0x00-0x07)
+     * p1: 0x00 (PIN number)
      * p2: 0x00
      * data: [PIN] 
      * return: none (throws an exception in case of wrong PIN)
      */
     private short VerifyPIN(APDU apdu, byte[] buffer) {
         byte pin_nb = buffer[ISO7816.OFFSET_P1];
-        if ((pin_nb < 0) || (pin_nb >= MAX_NUM_PINS))
-            ISOException.throwIt(SW_INCORRECT_P1);
-        OwnerPIN pin = pins[pin_nb];
-        if (pin == null)
+        if (pin_nb != 0)
             ISOException.throwIt(SW_INCORRECT_P1);
         if (buffer[ISO7816.OFFSET_P2] != 0x00)
             ISOException.throwIt(SW_INCORRECT_P2);
+        // before setup, no PIN is set: verification trivially succeeds
+        if (pin == null)
+            return (short)0;
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-        /*
-         * Here I suppose the PIN code is small enough to enter in the buffer
-         * TODO: Verify the assumption and eventually adjust code to support
-         * reading PIN in multiple read()s
-         */
         if (!CheckPINPolicy(buffer, ISO7816.OFFSET_CDATA, (byte) bytesLeft))
             ISOException.throwIt(SW_INVALID_PARAMETER);
         byte triesRemaining = pin.getTriesRemaining();
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
-        if (!pin.check(buffer, (short) ISO7816.OFFSET_CDATA, (byte) bytesLeft)) {
-            LogoutIdentity(pin_nb);
+        if (!pin.check(buffer, (short) ISO7816.OFFSET_CDATA, (byte) bytesLeft))
             ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
-        }
-        
-        // Actually register that PIN has been successfully verified.
-        logged_ids |= (short) (0x0001 << pin_nb);
         
         return (short)0;
     }
@@ -1637,22 +1529,15 @@ public class CardEdge extends javacard.framework.Applet {
      * the new PIN codes. 
      * 
      * ins: 0x44
-     * p1: PIN number (0x00-0x07)
+     * p1: 0x00 (PIN number)
      * p2: 0x00
      * data: [PIN_size(1b) | old_PIN | PIN_size(1b) | new_PIN ] 
      * return: none (throws an exception in case of wrong PIN)
      */
     private short ChangePIN(APDU apdu, byte[] buffer) {
-        /*
-         * Here I suppose the PIN code is small enough that 2 of them enter in
-         * the buffer TODO: Verify the assumption and eventually adjust code to
-         * support reading PINs in multiple read()s
-         */
+
         byte pin_nb = buffer[ISO7816.OFFSET_P1];
-        if ((pin_nb < 0) || (pin_nb >= MAX_NUM_PINS))
-            ISOException.throwIt(SW_INCORRECT_P1);
-        OwnerPIN pin = pins[pin_nb];
-        if (pin == null)
+        if (pin_nb != 0)
             ISOException.throwIt(SW_INCORRECT_P1);
         if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
             ISOException.throwIt(SW_INCORRECT_P2);
@@ -1675,13 +1560,10 @@ public class CardEdge extends javacard.framework.Applet {
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!pin.check(buffer, (short) (ISO7816.OFFSET_CDATA + 1), pin_size)) {
-            LogoutIdentity(pin_nb);
             ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
         }
         
         pin.update(buffer, (short) (ISO7816.OFFSET_CDATA + 1 + pin_size + 1), new_pin_size);
-        // JC specifies this resets the validated flag. So we do.
-        logged_ids &= (short) ((short) 0xFFFF ^ (0x01 << pin_nb));
         
         return (short)0;
     }
@@ -1696,20 +1578,16 @@ public class CardEdge extends javacard.framework.Applet {
      * breaking change: on v0.15 and lower, only [PUK] (without size prefix) was provided.
      *
      * ins: 0x46
-     * p1: PIN number (0x00-0x07)
+     * p1: 0x00 (PUK number)
      * p2: 0x00
      * data: [PUK_size(1b) | PUK | (optional) PIN_size(1b) | (optional) PIN]
      * return: none (throws an exception in case of wrong PUK)
      */
     private short UnblockPIN(APDU apdu, byte[] buffer) {
         byte pin_nb = buffer[ISO7816.OFFSET_P1];
-        if ((pin_nb < 0) || (pin_nb >= MAX_NUM_PINS))
+        if (pin_nb != 0)
             ISOException.throwIt(SW_INCORRECT_P1);
-        OwnerPIN pin = pins[pin_nb];
-        OwnerPIN ublk_pin = ublk_pins[pin_nb];
-        if (pin == null)
-            ISOException.throwIt(SW_INCORRECT_P1);
-        if (ublk_pin == null)
+        if (puk == null)
             ISOException.throwIt(SW_INTERNAL_ERROR);
         // If the PIN is not blocked, the call is inconsistent
         if (pin.getTriesRemaining() != 0)
@@ -1746,15 +1624,15 @@ public class CardEdge extends javacard.framework.Applet {
         }
 
         // check PUK (exact length)
-        byte triesRemaining = ublk_pin.getTriesRemaining();
+        byte triesRemaining = puk.getTriesRemaining();
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
-        if (!ublk_pin.check(buffer, buffer_offset, puk_size))
+        if (!puk.check(buffer, buffer_offset, puk_size))
             ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
 
         // PUK is correct: unblock the PIN and restore try counters
         pin.resetAndUnblock();
-        ublk_pin.reset();
+        puk.reset();
 
         // set the new PIN if one was provided
         if (pin_size > (byte)0)
@@ -1763,48 +1641,10 @@ public class CardEdge extends javacard.framework.Applet {
     }
 
     private short LogOutAll() {
-        logged_ids = (short) 0x0000; // Nobody is logged in
-        byte i;
-        for (i = (byte) 0; i < MAX_NUM_PINS; i++)
-            if (pins[i] != null)
-                pins[i].reset();
+        if (pin != null)
+            pin.reset();
         
         return (short)0;
-    }
-    
-    /**
-     * This function returns a 2 byte bit mask of the available PINs that are currently in
-     * use. Each set bit corresponds to an active PIN.
-     * 
-     *  ins: 0x48
-     *  p1: 0x00
-     *  p2: 0x00
-     *  data: none
-     *  return: [RFU(1b) | PIN_mask(1b)]
-     */
-    private short ListPINs(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
-        
-        // Checking P1 & P2
-        if (buffer[ISO7816.OFFSET_P1] != (byte) 0x00)
-            ISOException.throwIt(SW_INCORRECT_P1);
-        if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
-            ISOException.throwIt(SW_INCORRECT_P2);
-        byte expectedBytes = buffer[ISO7816.OFFSET_LC];
-        if (expectedBytes != (short) 2)
-            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        // Build the PIN bit mask
-        short mask = (short) 0x00;
-        short b;
-        for (b = (short) 0; b < MAX_NUM_PINS; b++)
-            if (pins[b] != null)
-                mask |= (short) (((short) 0x01) << b);
-        // Fill the buffer
-        Util.setShort(buffer, (short) 0, mask);
-        // Send response
-        return (short)2;
     }
     
     /**
@@ -1821,10 +1661,7 @@ public class CardEdge extends javacard.framework.Applet {
      *           nfc_policy(1b) | schnorr_policy(1b) | nostr_policy(1b) | liquid_policy(1b) | musig2_policy(1b) | random_policy(1b)]
      */
     private short GetStatus(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        //if (!pins[0].isValidated())
-        //  ISOException.throwIt(SW_UNAUTHORIZED);
-        
+
         // note: P1/P2 are not checked, since this function is also called on card
         // selection, where the SELECT command carries its own parameters (P1=0x04)
         
@@ -1836,10 +1673,10 @@ public class CardEdge extends javacard.framework.Applet {
         buffer[pos++] = APPLET_MINOR_VERSION; // Minor Applet version n.
         // PIN/PUK remaining tries available
         if (setupDone){
-            buffer[pos++] = pins[0].getTriesRemaining();
-            buffer[pos++] = ublk_pins[0].getTriesRemaining();
-            buffer[pos++] = pins[1].getTriesRemaining();
-            buffer[pos++] = ublk_pins[1].getTriesRemaining();
+            buffer[pos++] = pin.getTriesRemaining();
+            buffer[pos++] = puk.getTriesRemaining();
+            buffer[pos++] = (byte) 0; // deprecated: pins[1].getTriesRemaining()
+            buffer[pos++] = (byte) 0; // deprecated: ublk_pins[1].getTriesRemaining()
         } else {
             buffer[pos++] = (byte) 0;
             buffer[pos++] = (byte) 0;
@@ -1885,8 +1722,8 @@ public class CardEdge extends javacard.framework.Applet {
      * return: [label_size(1b) | label ] if p2==0x01 else (none)
      */
     private short cardLabel(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
         byte op = buffer[ISO7816.OFFSET_P2];
@@ -1944,8 +1781,8 @@ public class CardEdge extends javacard.framework.Applet {
      *  return: (none)
      */
     private short setNfcPolicy(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
         // check that the contact interface is used
@@ -1985,8 +1822,8 @@ public class CardEdge extends javacard.framework.Applet {
      *  return: (none)
      */
     private short setFeaturePolicy(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
         // get the feature id from P1
@@ -2043,8 +1880,8 @@ public class CardEdge extends javacard.framework.Applet {
      *  return: [random bytes (p1)]
      */
     private short getRandom(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
         // check that feature is enabled
@@ -2075,8 +1912,8 @@ public class CardEdge extends javacard.framework.Applet {
      *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
      */
     private short importBIP32Seed(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
             ISOException.throwIt(SW_INCORRECT_P2);
@@ -2144,7 +1981,6 @@ public class CardEdge extends javacard.framework.Applet {
         
         // check provided PIN
         byte pin_size= buffer[ISO7816.OFFSET_P1];
-        OwnerPIN pin = pins[0];
         if (bytesLeft < pin_size)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         if (!CheckPINPolicy(buffer, ISO7816.OFFSET_CDATA, pin_size))
@@ -2154,7 +1990,6 @@ public class CardEdge extends javacard.framework.Applet {
         if (triesRemaining == (byte) 0x00)
             ISOException.throwIt(SW_IDENTITY_BLOCKED);
         if (!pin.check(buffer, (short) ISO7816.OFFSET_CDATA, pin_size)) {
-            LogoutIdentity((byte)0x00);
             ISOException.throwIt((short)(SW_PIN_FAILED + triesRemaining - 1));
         }
         
@@ -2202,8 +2037,8 @@ public class CardEdge extends javacard.framework.Applet {
      *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
      */
     private short getBIP32AuthentiKey(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         // check whether the seed is initialized
@@ -2268,8 +2103,8 @@ public class CardEdge extends javacard.framework.Applet {
      * return: none
      */
     private short setBIP32AuthentikeyPubkey(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         short pos=0;
@@ -2300,7 +2135,7 @@ public class CardEdge extends javacard.framework.Applet {
      **/
     private short getBIP32ExtendedKey(APDU apdu, byte[] buffer){
         // check that PIN has been entered previously
-        if (!pins[0].isValidated())
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
         // check whether the seed is seed is initialized
@@ -2428,8 +2263,8 @@ public class CardEdge extends javacard.framework.Applet {
      *  return: none
      */
     private short setBIP32ExtendedPubkey(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         short pos=0;
@@ -2456,8 +2291,8 @@ public class CardEdge extends javacard.framework.Applet {
      * returns: [blinding_key_size(2b) | blinding_key | sig_size(2b) | authentikey_sig]
      */
     private short getBIP32LiquidMasterBlindingKey(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
         // check whether the seed is seed is initialized
@@ -2496,8 +2331,8 @@ public class CardEdge extends javacard.framework.Applet {
      */
     private short SignTransactionHash(APDU apdu, byte[] buffer){
         
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         byte key_nb = buffer[ISO7816.OFFSET_P1];
@@ -2583,8 +2418,8 @@ public class CardEdge extends javacard.framework.Applet {
      */
     private short TaprootTweakPrivateKey(APDU apdu, byte[] buffer){
 
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
         // P1 defines which privkey is used to derive Taproot tweaked privkey 
@@ -2725,8 +2560,8 @@ public class CardEdge extends javacard.framework.Applet {
      */
     private short SignSchnorrHash(APDU apdu, byte[] buffer){
         
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
         // check that feature is enabled
@@ -2904,8 +2739,8 @@ public class CardEdge extends javacard.framework.Applet {
      */
     private short Musig2GenerateNonce(APDU apdu, byte[] buffer) {
 
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
         // check that feature is enabled
@@ -3176,8 +3011,8 @@ public class CardEdge extends javacard.framework.Applet {
      */
     private short Musig2SignHash(APDU apdu, byte[] buffer) {
 
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
         // check that feature is enabled
@@ -3395,8 +3230,8 @@ public class CardEdge extends javacard.framework.Applet {
      *  return: (none)
      */
     private short set2FAKey(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         // cannot modify an existing 2FA!
         if (needs_2FA)
@@ -3431,8 +3266,8 @@ public class CardEdge extends javacard.framework.Applet {
      *  return: (none)
      */
     private short reset2FAKey(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         // check length
@@ -3482,8 +3317,8 @@ public class CardEdge extends javacard.framework.Applet {
      *
      */
     private short CryptTransaction2FA(APDU apdu, byte[] buffer){
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
         // check that 2FA is enabled
@@ -3555,8 +3390,8 @@ public class CardEdge extends javacard.framework.Applet {
      * 
      */
     private short importTrustedPubkey(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         // if already seeded, must call resetBIP32Seed first!
         if (bip32_seeded)
@@ -3602,8 +3437,8 @@ public class CardEdge extends javacard.framework.Applet {
      * 
      */
     private short exportTrustedPubkey(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         // check that a trusted_pubkey has been defined
         if (!is_trusted_pubkey)
@@ -3633,8 +3468,8 @@ public class CardEdge extends javacard.framework.Applet {
      * return: (see importBip32Seed() or set2FAKey())
      */
     private short importEncryptedSecret(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously
+        if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         // authentikey used for import (and decryption) must be known in advance
         if (!is_trusted_pubkey)
@@ -3914,8 +3749,8 @@ public class CardEdge extends javacard.framework.Applet {
      *  return: [signature]
      */
     private short sign_PKI_CSR(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously (not required before setup, when the PIN is not set yet)
+        if (pin != null && !pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         if (personalizationDone)
             ISOException.throwIt(SW_PKI_ALREADY_LOCKED);
@@ -3940,8 +3775,8 @@ public class CardEdge extends javacard.framework.Applet {
      *  return: [none]
      */
     private short import_PKI_certificate(APDU apdu, byte[] buffer) {
-        // check that PIN[0] has been entered previously
-        if (!pins[0].isValidated())
+        // check that PIN has been entered previously (not required before setup, when the PIN is not set yet)
+        if (pin != null && !pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         if (personalizationDone)
             ISOException.throwIt(SW_PKI_ALREADY_LOCKED);
@@ -4046,7 +3881,7 @@ public class CardEdge extends javacard.framework.Applet {
      *  return: [none]
      */
     private short lock_PKI(APDU apdu, byte[] buffer) {
-        if (!pins[0].isValidated())
+        if (pin != null && !pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         personalizationDone=true;
         return (short)0;
