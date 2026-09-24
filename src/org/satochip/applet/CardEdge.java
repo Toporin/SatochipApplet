@@ -508,7 +508,7 @@ public class CardEdge extends javacard.framework.Applet {
     private byte[] data2FA;
     private static final byte OFFSET_2FA_HMACKEY=0;
     private static final byte OFFSET_2FA_ID=OFFSET_2FA_HMACKEY+20;
-    private static final byte OFFSET_2FA_LIMIT=OFFSET_2FA_ID+20;
+    private static final byte OFFSET_2FA_LIMIT=OFFSET_2FA_ID+20; // TODO deprecate
     private static final byte OFFSET_2FA_SIZE=OFFSET_2FA_LIMIT+8;
     private static final short HMAC_CHALRESP_2FA=(short)0x8000;
     /**
@@ -564,9 +564,6 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte PUBKEY_SIZE = (byte) 65; 
     private final static byte SECRET_TYPE_MASTER_SEED = (byte) 0x10;
     private final static byte SECRET_TYPE_2FA= (byte) 0xB0;
-    
-    // additional options
-    private short option_flags;
     
     // NFC policy
     private static final byte NFC_ENABLED=0;
@@ -1039,8 +1036,7 @@ public class CardEdge extends javacard.framework.Applet {
      *        pin_tries0(1b) | ublk_tries0(1b) | pin0_length(1b) | pin0 | ublk0_length(1b) | ublk0 | 
      *        pin_tries1(1b) | ublk_tries1(1b) | pin1_length(1b) | pin1 | ublk1_length(1b) | ublk1 | 
      *        RFU(2b) | RFU(2b) | RFU(3b) |
-     *        option_flags(2b) | 
-     *        (option): hmacsha1_key(20b) | amount_limit(8b)
+     *        RFU(2b) | (option): RFU(20b) | RFU(8b)
      *        ]
      * where: 
      *      default_pin: {0x4D, 0x75, 0x73, 0x63, 0x6C, 0x65, 0x30, 0x30};
@@ -1049,8 +1045,8 @@ public class CardEdge extends javacard.framework.Applet {
      *      RFU(secmemsize) - deprecated: number of bytes reserved for internal memory (storage of Bip32 objects)
      *      RFU(memsize) - deprecated: number of bytes reserved for memory with external access
      *      RFU(ACL) - deprecated: creation rights for objects - Key - PIN
-     *      option_flags: flags to define up to 16 additional options:
-     *      bit15 set: second factor authentication using hmac-sha1 challenge-response (v0.2-0.1)
+     *      RFU(option_flags) - deprecated: flags to define up to 16 additional options:
+     *          bit15 set: second factor authentication using hmac-sha1 challenge-response (v0.2-0.1)
      *          hmacsha1_key: 20-byte hmac key used for transaction authorization
      *          amount_limit: max amount (in satoshis) allowed without confirmation (this includes change value)
      *  
@@ -1148,29 +1144,7 @@ public class CardEdge extends javacard.framework.Applet {
         Secp256k1.setCommonCurveParameters(bip32_extendedkey);
         // taproot tweaked privkey
         Secp256k1.setCommonCurveParameters(taproot_tweakedkey);
-                
-        // parse options
-        option_flags=0;
-        if (bytesLeft>=2){
-            option_flags = Util.getShort(buffer, base);
-            base+=(short)2;
-            bytesLeft-=(short)2;
-            // 2FA: transaction confirmation based on hmacsha160
-            if ((option_flags & HMAC_CHALRESP_2FA)==HMAC_CHALRESP_2FA){
-                Util.arrayCopyNonAtomic(buffer, base, data2FA, OFFSET_2FA_HMACKEY, (short)20); 
-                base+=(short)20;
-                bytesLeft-=(short)20;
-                Util.arrayCopyNonAtomic(buffer, base, data2FA, OFFSET_2FA_LIMIT, (short)8); 
-                base+=(short)8;
-                bytesLeft-=(short)8;
-                // hmac derivation for id_2FA & key_2FA
-                HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, CST_2FA, (short)0, (short)6, data2FA, OFFSET_2FA_ID);
-                HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, CST_2FA, (short)6, (short)7, recvBuffer, (short)0);
-                key_2FA.setKey(recvBuffer,(short)0); // AES-128: 16-bytes key!!
-                needs_2FA= true;
-            }
-        }
-        
+
         setupDone = true;
         return (short)0;//nothing to return
     }
@@ -1212,9 +1186,6 @@ public class CardEdge extends javacard.framework.Applet {
         // secure channel session key
         sc_sessionkey.clearKey();
         initialized_secure_channel=false;
-
-        // option flags
-        option_flags=(short)0;
 
         // reset NFC policy to enabled
         nfc_policy = NFC_ENABLED;
@@ -3712,14 +3683,6 @@ public class CardEdge extends javacard.framework.Applet {
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         if (bytesLeft < (short)(20+8))
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        
-//        if (!done_once_2FA){
-//            data2FA= new byte[OFFSET_2FA_SIZE];
-//            randomData = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
-//            aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
-//            key_2FA= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
-//            done_once_2FA= true;
-//        }
         
         short offset= ISO7816.OFFSET_CDATA;
         Util.arrayCopyNonAtomic(buffer, offset, data2FA, OFFSET_2FA_HMACKEY, (short)20); 
