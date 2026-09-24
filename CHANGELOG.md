@@ -71,6 +71,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Remove the signMessage (0x6E) command: it is deprecated and now returns SW_INS_DEPRECATED (0x9C26) when invoked. Clients should use SignTransactionHash (0x7A) to sign the (double-hashed) message hash instead, computing the message hash off-card. Related code and objects are also removed: the signMessage() function, the BITCOIN_SIGNED_MESSAGE_HEADER constant, the sign_flag multi-chunk state, the "Msg signing" 2FA code entry, and the Biginteger VarInt helpers (encodeVarInt, encodeShortToVarInt, isStrictlyLessThanUnsigned) as well as the dead Shift1bit/setZero/setByte methods (the latter already unused).
 
+* Add GET_RANDOM (0x30) command: returns 1 to 64 random bytes per call generated on-card by the platform's secure random number generator, for use as additional entropy (seeds, encryption keys, passwords, ...). The command requires PIN validation and returns the bytes through the secure channel (encrypted); random bytes are generated directly into the APDU buffer to avoid any leakage of sensitive data held in shared working buffers. The command is gated by a new FEATURE_ID_RANDOM (4) feature policy (enabled by default; can be disabled or permanently blocked with setFeaturePolicy and reset by factory reset). GetStatus() now also returns the random feature policy as an additional byte (offset 17).
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.

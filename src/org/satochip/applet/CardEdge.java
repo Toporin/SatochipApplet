@@ -111,7 +111,7 @@ public class CardEdge extends javacard.framework.Applet {
     // 0.14-0.5: add policy to enable/disable various optional features
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
-    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, reset-to-factory refactoring, authentikey mgmt, transient AES session keys, removal of ParseTransaction/SignTransaction/signMessage, ...)
+    // 0.16-0.0: work-in-progress version (NOT for production): security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, reset-to-factory refactoring, authentikey mgmt, transient AES session keys, removal of ParseTransaction/SignTransaction/signMessage, add GET_RANDOM, ...)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
@@ -161,6 +161,7 @@ public class CardEdge extends javacard.framework.Applet {
     private final static byte INS_CARD_LABEL = (byte) 0x3D;
     private final static byte INS_SET_NFC_POLICY = (byte) 0x3E;
     private final static byte INS_SET_FEATURE_POLICY = (byte) 0x3A;
+    private final static byte INS_GET_RANDOM = (byte) 0x30;
     
     // HD wallet
     private final static byte INS_BIP32_IMPORT_SEED= (byte) 0x6C;
@@ -561,10 +562,15 @@ public class CardEdge extends javacard.framework.Applet {
     private static final byte FEATURE_ID_NOSTR=1;
     private static final byte FEATURE_ID_LIQUID=2;
     private static final byte FEATURE_ID_MUSIG2=3;
+    private static final byte FEATURE_ID_RANDOM=4;
     private byte feature_schnorr_policy = FEATURE_ENABLED; // schnorr signature
     private byte feature_nostr_policy = FEATURE_ENABLED; // nostr event signing
     private byte feature_liquid_policy = FEATURE_ENABLED; // Liquid-Bitcoin
     private byte feature_musig2_policy = FEATURE_ENABLED; // musig2 signature
+    private byte feature_random_policy = FEATURE_ENABLED; // random bytes export
+    
+    // maximum number of random bytes that can be exported per GET_RANDOM call
+    private final static byte RANDOM_MAX_SIZE = (byte) 64;
 
     /****************************************
      *                Methods               *
@@ -876,6 +882,9 @@ public class CardEdge extends javacard.framework.Applet {
         case INS_SET_FEATURE_POLICY:
             sizeout= setFeaturePolicy(apdu, buffer);
             break;
+        case INS_GET_RANDOM:
+            sizeout= getRandom(apdu, buffer);
+            break;
         // BIP32
         case INS_BIP32_IMPORT_SEED:
             sizeout= importBIP32Seed(apdu, buffer);
@@ -1176,6 +1185,7 @@ public class CardEdge extends javacard.framework.Applet {
         feature_nostr_policy = FEATURE_ENABLED;
         feature_liquid_policy = FEATURE_ENABLED;
         feature_musig2_policy = FEATURE_ENABLED;
+        feature_random_policy = FEATURE_ENABLED;
 
         // reset card label
         card_label_size=0;
@@ -1808,7 +1818,7 @@ public class CardEdge extends javacard.framework.Applet {
      *  data: none
      *  return: [versions(4b) | PIN0-PUK0-PIN1-PUK1 tries (4b) |
      *           needs2FA (1b) | is_seeded(1b) | setupDone(1b) | needs_secure_channel(1b) |
-     *           nfc_policy(1b) | taproot_policy(1b) | nostr_policy(1b) | liquid_policy(1b) | musig2_policy(1b)]
+     *           nfc_policy(1b) | schnorr_policy(1b) | nostr_policy(1b) | liquid_policy(1b) | musig2_policy(1b) | random_policy(1b)]
      */
     private short GetStatus(APDU apdu, byte[] buffer) {
         // check that PIN[0] has been entered previously
@@ -1855,11 +1865,12 @@ public class CardEdge extends javacard.framework.Applet {
         buffer[pos++] = (byte)0x01; // always enabled
         // NFC policy (offset 12)
         buffer[pos++] = nfc_policy;
-        // Optional features policy (offset 13-15)
+        // Optional features policy (offset 13-17)
         buffer[pos++] = feature_schnorr_policy;
         buffer[pos++] = feature_nostr_policy;
         buffer[pos++] = feature_liquid_policy;
         buffer[pos++] = feature_musig2_policy;
+        buffer[pos++] = feature_random_policy;
 
         return pos;
     }
@@ -2009,9 +2020,45 @@ public class CardEdge extends javacard.framework.Applet {
                     ISOException.throwIt(SW_FEATURE_BLOCKED);
                 feature_musig2_policy = feature_policy;
                 break;
+            case FEATURE_ID_RANDOM:
+                if (feature_random_policy == FEATURE_BLOCKED)
+                    ISOException.throwIt(SW_FEATURE_BLOCKED);
+                feature_random_policy = feature_policy;
+                break;
         }// end switch
 
         return (short)0;
+    }
+
+    /**
+     * This function returns random bytes generated on-card by the platform's
+     * secure random number generator. They can be used as additional entropy to
+     * generate seeds, encryption keys, passwords, ...
+     * The random bytes are generated directly into the APDU buffer.
+     *
+     *  ins: 0x30
+     *  p1: number of random bytes to generate (1 to 64)
+     *  p2: 0x00 (RFU)
+     *  data: (none)
+     *  return: [random bytes (p1)]
+     */
+    private short getRandom(APDU apdu, byte[] buffer){
+        // check that PIN[0] has been entered previously
+        if (!pins[0].isValidated())
+            ISOException.throwIt(SW_UNAUTHORIZED);
+
+        // check that feature is enabled
+        if (feature_random_policy != FEATURE_ENABLED)
+            ISOException.throwIt(SW_FEATURE_DISABLED);
+
+        // get the number of random bytes to generate
+        byte nb_bytes = buffer[ISO7816.OFFSET_P1];
+        if (nb_bytes < (byte)1 || nb_bytes > RANDOM_MAX_SIZE)
+            ISOException.throwIt(SW_INCORRECT_P1);
+
+        // generate random bytes directly into the APDU buffer
+        randomData.generateData(buffer, (short)0, (short)nb_bytes);
+        return (short) nb_bytes;
     }
 
     /**
