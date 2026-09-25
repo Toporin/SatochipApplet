@@ -62,9 +62,9 @@ Available for purchase [here](https://www.motechno.com/product/j3d081-dual-inter
 
 You can build the javacard CAP files or use the lastest [built version](https://github.com/Toporin/SatochipApplet/releases).
 
-To generate the CAP file from the sources, you can use the [ant-javacard](https://github.com/martinpaljak/ant-javacard) Ant task (see the instruction on the ant-javacard github repository).
+There are two ways to generate the CAP file from the sources: the [Gradle](#building-using-gradle) build (recommended, builds both applets of the package and can install them on a card), or the legacy [Ant](#building-using-ant-legacy) build using the [ant-javacard](https://github.com/martinpaljak/ant-javacard) task (builds the `CardEdge` applet only).
 
-## Building on Ubuntu
+## Building using Ant (legacy)
 
 * Clone Satochip applet repository:
 ```
@@ -95,6 +95,119 @@ git submodule add https://github.com/martinpaljak/oracle_javacard_sdks sdks
 ```ant```
 
 The .cap file should build in the SatochipApplet folder.
+
+## Building using Gradle
+
+The Gradle build is the recommended one: it builds **both** applets contained in the package
+(`CardEdge` and `NDEFApplet`) and can also install them on a card without GlobalPlatformPro.
+The Ant build above is kept as the legacy path and only builds `CardEdge`.
+
+### Requirements
+
+* **OpenJDK 11**, with `JAVA_HOME` pointing at it. The build uses Gradle 4.10 with
+  `sourceCompatibility 1.6`, which requires a JDK no newer than 11. JDK 8 is *not* enough either,
+  because some build dependencies are compiled for Java 11.
+```
+sudo apt install openjdk-11-jdk
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+```
+
+* The JavaCard SDKs, which come in as a git submodule. Clone with:
+```
+git clone --recurse-submodules https://github.com/Toporin/SatochipApplet.git
+```
+or, for an existing clone:
+```
+git submodule update --init
+```
+
+Gradle itself is downloaded by the wrapper, so nothing else has to be installed.
+
+### Building
+
+```
+./gradlew convertJavacard
+```
+
+The CAP file is written to `build/javacard/org/satochip/applet/javacard/applet.cap`. It contains
+both the `CardEdge` applet (AID `5361746F4368697000`) and the `NDEFApplet` (AID
+`5361746F4368697001`). You can check its content with:
+
+```
+java -jar gp.jar --info --cap build/javacard/org/satochip/applet/javacard/applet.cap
+```
+
+### Installing on a card
+
+```
+./gradlew install
+```
+
+This loads the package and installs both applet instances over a GlobalPlatform SCP02 secure
+channel. It requires a card that:
+
+* uses the T=1 protocol and SCP02, and
+* still has either the GlobalPlatform default key `404142434445464748494a4b4c4d4e4f` or the Keycard
+  development key `c212e073ff8b4bbfaff4de8ab655221f`.
+
+The card keys are never rewritten by this task. If your card uses different keys, use
+[GlobalPlatformPro](https://github.com/martinpaljak/GlobalPlatformPro) (`gp.jar`) instead.
+
+Keep **only one reader connected**: the task picks the first reader that has a card in it.
+
+### Optional local settings
+
+`gradle.properties` is deliberately *not* committed (the SDK path is set in `build.gradle`), so you
+can use it for local-only settings. On a slow network, or if the build fails with
+`Java heap space`, you may want:
+
+```
+systemProp.org.gradle.internal.http.connectionTimeout=180000
+systemProp.org.gradle.internal.http.socketTimeout=180000
+org.gradle.jvmargs=-Xmx2g
+```
+
+## NDEF tag
+
+The package contains a small second applet, `NDEFApplet`, installed under the standard NFC Forum
+Type 4 tag AID `D2760000850101`. It serves a single NDEF record, so that tapping the card on a
+phone opens a link even if no app is installed.
+
+The default record is a universal link to <https://satochip.io/quick-start/satochip/>, which works
+on both Android and iOS.
+
+The record can be changed in two ways:
+
+* **at install time**, through the NDEF applet's install parameters (see `NDEF_TAG` in
+  `buildSrc/src/main/java/org/satochip/build/InstallTask.java`, empty by default, which keeps the
+  record compiled into `SharedMemory.java`);
+* **at any time afterwards**, with the `SET_NDEF` command (`INS 0x3F`, `P2=0x00` to set, `P2=0x01`
+  to get). Like every other Satochip command, it requires the secure channel, a completed setup and
+  a validated PIN.
+
+The record is at most 224 bytes and is stored as `[size (1b) | NLEN (2b) | NDEF record]`.
+
+## Locking a card (DESTRUCTIVE)
+
+> :warning: **`./gradlew lock` is irreversible. Read this before running it.**
+>
+> The task replaces the card's GlobalPlatform keys with **random keys that are never displayed nor
+> saved anywhere**, and then moves the card to the `SECURED` state.
+>
+> Afterwards **nobody — including you, the card owner — can delete, update or reinstall the applet,
+> or load any other applet on that card. There is no way to undo this.**
+>
+> Data stored in the applet is *not* affected, and the applet-level factory reset
+> (`INS_RESET_TO_FACTORY`) keeps working, so the card remains fully usable as a Satochip.
+>
+> This is intended only for production cards, after all testing is finished. Never run it on a
+> development card.
+
+Because of this, the task refuses to run unless you confirm explicitly:
+
+```
+./gradlew lock -PconfirmLock=YES
+```
 
 # Test
 
