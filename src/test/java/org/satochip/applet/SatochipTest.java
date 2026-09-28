@@ -70,6 +70,7 @@ public class SatochipTest {
   static final int SW_UNAUTHORIZED = 0x9C06;
   static final int SW_SETUP_ALREADY_DONE = 0x9C07;
   static final int SW_INVALID_PARAMETER = 0x9C0F;
+  static final int SW_IDENTITY_BLOCKED = 0x9C0C;
   static final int SW_INCORRECT_P1 = 0x9C10;
   static final int SW_INCORRECT_P2 = 0x9C11;
   static final int SW_SECURE_CHANNEL_REQUIRED = 0x9C20;
@@ -288,13 +289,16 @@ public class SatochipTest {
 
   @Test
   @DisplayName("Replaying an encrypted command is rejected")
-  void secureChannelReplayTest() {
+  void secureChannelReplayTest() throws Exception {
     APDUCommand encrypted = cmdSet.encrypt(INS_GET_RANDOM, 8, 0x00, new byte[0]);
     assertEquals(SW_OK, cmdSet.replay(encrypted).getSw(), "the original command should succeed");
     // The secure channel IV advances with each command, so the same bytes must not pass twice.
     assertNotEquals(SW_OK, cmdSet.replay(encrypted).getSw(),
         "a replayed encrypted APDU must not be accepted");
-    cmdSet.forgetSecureChannel();
+
+    // The rejected replay leaves the applet's session in an error state; re-select to clear it
+    // on the card as well as in the client, so the next test starts clean.
+    resetSession();
   }
 
   @Test
@@ -332,20 +336,69 @@ public class SatochipTest {
   }
 
   @Test
-  @DisplayName("UNBLOCK PIN uses the v0.16 [size|PUK|size|PIN] format")
-  void unblockPinFormatTest() {
-    // The pre-v0.16 format was a bare PUK with no length prefix; it must now be rejected rather
-    // than silently misparsed. The SDK still sends the old shape, which is why this goes raw.
-    APDUResponse legacy = cmdSet.sendRawSecure(INS_UNBLOCK_PIN, 0x00, 0x00, PUK);
-    assertNotEquals(SW_OK, legacy.getSw(),
-        "the pre-v0.16 bare-PUK format must not be accepted any more");
+  @DisplayName("UNBLOCK PIN unblocks a blocked PIN, and can replace it")
+  void unblockPinTest() throws Exception {
+    // Blocking the PIN is the one thing in this suite that can poison the rest of the run under
+    // the shared-card model, so every path out of here goes through the finally block.
+    try {
+      blockPin();
+      assertEquals(SW_IDENTITY_BLOCKED, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw(),
+          "even the correct PIN must be refused once blocked");
 
-    // A well-formed request against a PIN that is not blocked is also refused, without
-    // consuming a PUK try: this asserts the parse succeeds but the precondition is enforced.
-    byte[] wellFormed = concat(new byte[]{(byte) PUK.length}, PUK);
-    APDUResponse r = cmdSet.sendRawSecure(INS_UNBLOCK_PIN, 0x00, 0x00, wellFormed);
-    assertNotEquals(SW_INVALID_PARAMETER, r.getSw(),
-        "a correctly framed PUK should get past input validation");
+      // The pre-v0.16 format was a bare PUK with no length prefix. It must be rejected on parse,
+      // before the PUK is checked, so it does not burn a PUK try.
+      byte puk0Before = cmdSet.cardGetStatus().getData()[5];
+      assertEquals(SW_INVALID_PARAMETER,
+          cmdSet.sendRawSecure(INS_UNBLOCK_PIN, 0x00, 0x00, PUK).getSw(),
+          "the pre-v0.16 bare-PUK format must not be accepted any more");
+      assertEquals(puk0Before, cmdSet.cardGetStatus().getData()[5],
+          "a malformed unblock must not consume a PUK try");
+
+      // v0.16 format, PUK only: the PIN is unblocked and keeps its value.
+      assertEquals(SW_OK,
+          cmdSet.sendRawSecure(INS_UNBLOCK_PIN, 0x00, 0x00,
+              concat(new byte[]{(byte) PUK.length}, PUK)).getSw());
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw(),
+          "the original PIN should work again after unblocking");
+      assertEquals(5, cmdSet.cardGetStatus().getData()[4], "the PIN try counter should be restored");
+
+      // v0.16 format, PUK + new PIN: unblock and replace in one command.
+      byte[] tempPin = "5678".getBytes();
+      blockPin();
+      assertEquals(SW_OK,
+          cmdSet.sendRawSecure(INS_UNBLOCK_PIN, 0x00, 0x00,
+              concat(new byte[]{(byte) PUK.length}, PUK,
+                     new byte[]{(byte) tempPin.length}, tempPin)).getSw());
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, tempPin).getSw(),
+          "the replacement PIN should be active");
+
+      byte[] back = concat(new byte[]{(byte) tempPin.length}, tempPin,
+                           new byte[]{(byte) PIN.length}, PIN);
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_CHANGE_PIN, 0x00, 0x00, back).getSw());
+    } finally {
+      restoreBaselinePin();
+    }
+  }
+
+  @Test
+  @DisplayName("The SDK picks the UNBLOCK PIN format matching the applet version")
+  void unblockPinViaSdkTest() throws Exception {
+    // Satochip-Java >= 0.2.6 selects the v0.16 length-prefixed payload from the applet type and
+    // the protocol version in GET STATUS. This checks the library and the applet agree.
+    assertEquals("satochip", cmdSet.getCardType());
+    cmdSet.cardGetStatus();   // populates the cached ApplicationStatus the SDK branches on
+    assertTrue(cmdSet.getApplicationStatus().getProtocolVersion() >= 0x0010,
+        "this suite targets applet v0.16 or later");
+
+    try {
+      blockPin();
+      assertEquals(SW_OK, cmdSet.cardUnblockPin(PUK).getSw(),
+          "the SDK should unblock a v0.16 Satochip");
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw());
+      assertEquals(5, cmdSet.cardGetStatus().getData()[4]);
+    } finally {
+      restoreBaselinePin();
+    }
   }
 
   @Test
@@ -660,6 +713,35 @@ public class SatochipTest {
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
+  }
+
+  /** Re-selects the applet and re-authenticates, clearing any session state on the card. */
+  private void resetSession() throws Exception {
+    cmdSet.cardSelect().checkOK();
+    cmdSet.forgetSecureChannel();
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw());
+  }
+
+  /** Exhausts the PIN try counter so the PIN ends up blocked. */
+  private void blockPin() {
+    byte[] wrong = "9999".getBytes();
+    for (int i = 0; i < 8 && cmdSet.cardGetStatus().getData()[4] != 0; i++) {
+      cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, wrong);
+    }
+    assertEquals(0, cmdSet.cardGetStatus().getData()[4], "the PIN should now be blocked");
+  }
+
+  /**
+   * Brings the card back to the baseline PIN whatever state a test left it in. Called from a
+   * finally block, so it must not throw before it has had a chance to repair things.
+   */
+  private void restoreBaselinePin() {
+    if (cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw() == SW_OK) {
+      return;
+    }
+    // Blocked, or set to something else: the PUK recovers both at once.
+    cmdSet.sendRawSecure(INS_UNBLOCK_PIN, 0x00, 0x00,
+        concat(new byte[]{(byte) PUK.length}, PUK, new byte[]{(byte) PIN.length}, PIN));
   }
 
   private static byte[] concat(byte[]... parts) {
