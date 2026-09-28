@@ -211,9 +211,76 @@ Because of this, the task refuses to run unless you confirm explicitly:
 
 # Test
 
-This repository has no test suite of its own: the applet is tested from the client side, over the APDU interface, by the [pysatochip](https://github.com/Toporin/pysatochip) library. It provides both offline tests, which check the client and pin a BIP340/BIP341 reference implementation to the official Bitcoin test vectors, and hardware tests, which run the applet's BIP32 derivation, message signing, taproot/schnorr and MuSig2 commands against a card and compare the results to those vectors.
+The applet has a JUnit suite in `src/test/java/org/satochip/applet/`. It drives the applet purely
+over APDUs, exactly as a client would, so the same tests run either against a simulator or against
+a real card.
 
-See the [Running the Tests](https://github.com/Toporin/pysatochip#running-the-tests) section of the pysatochip README for the test list and how to run them. Note that the hardware tests are destructive: only run them against a development card.
+### Requirements
+
+Two JDKs, because neither can do the other's job:
+
+* **JDK 11** builds the applet (the JavaCard 3.0.4 converter only accepts Java 6 class files, and
+  JDK 11 is the last javac that accepts `-source 6`). This is the JDK Gradle itself runs on.
+* **JDK 17** runs the tests, because the [JCardEngine](https://github.com/martinpaljak/JCardEngine)
+  simulator is compiled for Java 17.
+
+Point the build at the second one with `JAVA17_HOME`, or `-Porg.satochip.test.jdk17=...`:
+
+```
+export JAVA17_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+```
+
+### Running
+
+```
+./gradlew test
+```
+
+The default target is **`card`**: this builds the CAP, installs it on the card in the reader (so
+the usual `install` requirements apply) and then runs the suite against it. As with
+`./gradlew install`, keep only one reader connected.
+
+> :warning: `./gradlew test` **reinstalls the applet**, which erases the seed, keys and PIN on the
+> card in the reader. Only run it against a development card.
+
+To run without hardware, against the simulator:
+
+```
+./gradlew test -Porg.satochip.test.target=simulator
+```
+
+This is what CI uses. Test reports land in `build/reports/tests/test/`.
+
+### What is covered
+
+Security boundaries first: the secure channel is mandatory and replay-protected, PIN/PUK try
+counters, the v0.16 `UnblockPIN` format, setup-runs-once, feature policies (a disabled feature
+rejects its command and can be re-enabled), and the removed commands reporting
+`SW_INS_DEPRECATED`. Then the crypto: BIP32 derivation against the specification's test vectors
+and cross-checked with bitcoinj, ECDSA signatures verified with BouncyCastle, and BIP340 Schnorr
+signatures verified against a verifier written out from the specification — including a regression
+test for the v0.16 bug where the tweaked private key did not survive the first signature. The NDEF
+applet is covered too, including that a record written with `INS_SET_NDEF` is served over the
+Type 4 interface.
+
+The suite uses a **shared card**: it is set up once and reused, because a factory reset on applet
+versions before v0.16 needed the card to be physically removed and reinserted. Every test restores
+the baseline state it found, and nothing ever sets a policy to BLOCKED or blocks the PUK, since
+those are irreversible without a factory reset.
+
+Some tests are skipped rather than failed when the target lacks a capability — notably Schnorr,
+which needs the card's RSA engine for `Biginteger.mult_rsa_trick()`. On the simulator that
+currently requires a one-line JCardEngine patch (see `jcardengine-pr.md`); without it the Schnorr
+test reports as skipped.
+
+### Client-side tests
+
+Complementing this, the [pysatochip](https://github.com/Toporin/pysatochip) library tests the
+applet from the client side: offline tests that pin a BIP340/BIP341 reference implementation to
+the official Bitcoin test vectors, and hardware tests that run BIP32 derivation, signing,
+taproot/schnorr and MuSig2 against a card. See
+[Running the Tests](https://github.com/Toporin/pysatochip#running-the-tests). Those hardware tests
+are destructive too: development cards only.
 
 # Install
 

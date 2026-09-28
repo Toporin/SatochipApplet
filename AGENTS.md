@@ -18,50 +18,62 @@ Main features (see `CHANGELOG.md` for the full history):
 - PIN/PUK access control, optional 2FA (HMAC-SHA1 challenge via an external device), mandatory secure channel, SeedKeeper secure seed import, personalization PKI, NFC policy and feature policy (features can be enabled/disabled/blocked).
 - Reset to factory settings.
 
-**Versioning** (`CHANGELOG.md`, constants in `CardEdge.java`): full versions are `vX.Y-Z.W` where `X.Y` is the PROTOCOL VERSION (client-compatibility impacting) and `Z.W` the applet version (no client impact). Current version: **0.15-0.1**.
+**Versioning** (`CHANGELOG.md`, constants in `CardEdge.java`): full versions are `vX.Y-Z.W` where `X.Y` is the PROTOCOL VERSION (client-compatibility impacting) and `Z.W` the applet version (no client impact). Current version: **0.16-0.0** (work in progress).
 
 ## Repository layout
 
 ```
-build.xml                 Ant build script (the only build entry point)
+build.gradle              Gradle build (canonical): CAP, install, lock, test
+buildSrc/                 InstallTask / LockTask (GlobalPlatform over SCP02)
+build.xml                 Ant build script (legacy; builds CardEdge only)
 lib/ant-javacard.jar      ant-javacard Ant task (github.com/martinpaljak/ant-javacard)
 sdks/                     Git submodule: Oracle JavaCard SDKs (2.1.1 .. 3.2.0)
-src/org/satochip/applet/  All applet sources (7 Java files, ~6k lines total)
+src/main/java/org/satochip/applet/   Applet sources (CardEdge, NDEFApplet, SharedMemory, helpers)
+src/test/java/org/satochip/applet/   JUnit 5 APDU test suite
+.github/workflows/        CI: builds the CAP and runs the suite on the simulator
 gp.jar, gp.exe            Vendored GlobalPlatformPro for loading CAPs onto cards
 SatoChip-v*.cap           Pre-built CAP artifacts in the worktree (untracked, ignored)
 .classpath, .project      Eclipse project files (JCDK 2.2.2 + eclipse-jcde plugin)
 .idea/                    Minimal IntelliJ config
 ```
 
-There are no other config files (no Maven/Gradle, no CI, no test directory).
+### Source files (`src/main/java/org/satochip/applet/`)
 
-### Source files (`src/org/satochip/applet/`)
-
-- `CardEdge.java` (~4300 lines) — the main and only applet class (`extends javacard.framework.Applet`). Contains the APDU dispatcher (`process()`), all instruction handlers, PIN management, secure channel, 2FA, BIP32 derivation, Schnorr/Taproot, MuSig2, feature/NFC policies, PKI personalization. Derived from the MUSCLE framework.
-- `Transaction.java` — Bitcoin transaction parser (derived from Ledger's btchipJC).
-- `Secp256k1.java` — secp256k1 domain parameters and EC key initialization helpers.
-- `Biginteger.java` — big-integer arithmetic on byte arrays (based on the OV-chip 2.0 project, Radboud University), optionally accelerated via the card's RSA engine.
-- `Bip32ObjectManager.java` — fixed-array memory manager for the BIP32 derivation cache.
+- `CardEdge.java` (~4300 lines) — the main applet class (`extends javacard.framework.Applet`). Contains the APDU dispatcher (`process()`), all instruction handlers, PIN management, secure channel, 2FA, BIP32 derivation, Schnorr/Taproot, MuSig2, feature/NFC policies, PKI personalization. Derived from the MUSCLE framework.
+- `NDEFApplet.java` — second applet in the package, installed under the NFC Forum Type 4 AID `D2760000850101`; serves a single NDEF record so tapping the card opens a link.
+- `SharedMemory.java` — the 224-byte NDEF record buffer, shared between the two applet instances.
+- `Secp256k1.java` — secp256k1 domain parameters, EC key initialization helpers and on-curve validation.
+- `Biginteger.java` — big-integer arithmetic on byte arrays (based on the OV-chip 2.0 project, Radboud University), optionally accelerated via the card's RSA engine (`mult_rsa_trick`).
 - `HmacSha512.java`, `HmacSha160.java` — minimal HMAC implementations on top of `javacard.security.MessageDigest`.
+
+`Transaction.java` and `Bip32ObjectManager.java` were removed in v0.16 along with the ParseTransaction/SignTransaction commands and the BIP32 cache.
 
 ## Technology stack and build
 
 - **Language**: JavaCard — a strict subset of Java (no `int`/`long` arithmetic assumed, no garbage collection guarantees, no recursion in practice, `short` everywhere). Target API: JavaCard Classic 3.0.4 (some code paths were originally written against 2.2.2, hence local constant redefinitions in `Secp256k1.java`).
-- **Build tool**: Apache Ant + the `ant-javacard` task (`lib/ant-javacard.jar`).
+- **Build tool**: Gradle 4.10 (wrapper included) with the `com.fidesmo:gradle-javacard` plugin. The Ant build (`ant build`) is kept as a legacy path and produces `SatoChip-3.0.4.cap` with CardEdge only.
 - **SDKs**: `sdks/` is a git submodule (https://github.com/martinpaljak/oracle_javacard_sdks). After cloning: `git submodule update --init --recursive`.
 
-### Build command
+### Java versions (this trips people up)
+
+- **JDK 11** compiles the applet. The JavaCard 3.0.4 converter only accepts class file v50 (Java 6), and JDK 11 is the last javac that accepts `-source 6`. `sourceCompatibility = 1.6` is a converter requirement, not a style choice.
+- **JDK 17** runs the tests (JCardEngine is built for Java 17). Set `JAVA17_HOME`.
+- JDK 21 cannot build this applet at all: it rejects `-source 7`, and no SDK in `sdks/` accepts Java 8 bytecode.
+
+### Build commands
 
 ```sh
-ant build
+./gradlew convertJavacard   # -> build/javacard/org/satochip/applet/javacard/applet.cap
+./gradlew install           # load + install both applets over SCP02
+./gradlew test              # default target 'card'; -Porg.satochip.test.target=simulator for CI
+ant build                   # legacy, CardEdge only
 ```
 
-`build.xml` compiles `src/org/satochip/applet` against `sdks/jc304_kit` and produces `SatoChip-3.0.4.cap` (output name is hardcoded in `build.xml`). Build identifiers:
+Build identifiers:
 
 - Package AID: `5361746F43686970` ("SatoChip" in ASCII)
 - Applet AID: `5361746F4368697000`, main class `org.satochip.applet.CardEdge`
-
-The Eclipse IDE with the eclipse-jcde plugin can also be used (see `.classpath`/`.project`), but Ant is the canonical headless path.
+- NDEF applet AID: `5361746F4368697001`, instance AID `D2760000850101`
 
 ### Deployment (loading onto a card)
 
@@ -75,13 +87,16 @@ gp -uninstall SatoChip-3.0.4.cap        # remove it
 
 ## Testing
 
-- There is **no automated test suite in this repository** (the README's mention of a "test package run during build" is outdated — `build.xml` has no test target).
-- Verification is done externally: the MuSig2 code was validated against the official BIP327 test vectors by the maintainers; functional testing happens through client software (see below). When changing crypto logic, state clearly that on-card/client-side verification is still needed — do not claim it was tested here.
-- Compiling with `ant build` is the minimum check for any change.
+- `src/test/java/org/satochip/applet/` holds a JUnit 5 suite that drives the applet over APDUs. It runs against the JCardEngine simulator (`-Porg.satochip.test.target=simulator`, no hardware, what CI uses) or a real card (the default). See the README's Test section.
+- The suite uses a **shared card**: it is set up once and reused, so every test must restore the baseline it found (PIN `1234`, all feature policies enabled). Never set a policy to BLOCKED or block the PUK in a test — those are irreversible without a factory reset.
+- Negative tests must go through `TestSatochipCommandSet.sendRawSecure`/`sendRawPlain`, never `cardTransmit`: the production `cardTransmit` silently reopens the secure channel and re-verifies the PIN on 0x9C06, which turns an authorization failure into a success.
+- A simulator is not a card. Green tests do not prove hardware behaviour: timing, transient-memory limits and EEPROM tearing all differ. Keep running the card target and the pysatochip hardware tests before a release.
+- Complementary client-side coverage lives in [pysatochip](https://github.com/Toporin/pysatochip).
+- `./gradlew convertJavacard` (or `ant build`) is the minimum check for any change; `./gradlew test -Porg.satochip.test.target=simulator` is the next one.
 
 ## Runtime architecture
 
-- All communication is via **APDUs** with CLA byte `0xB0`. Instruction (INS) codes and status words (SW) are declared as constants at the top of `CardEdge.java` — extend these lists when adding commands.
+- All communication is via **APDUs** with CLA byte `0xB0` (the NDEF applet uses CLA `0x00`). Instruction (INS) codes and status words (SW) are declared as constants at the top of `CardEdge.java` — extend these lists when adding commands.
 - **Secure channel is mandatory** (`needs_secure_channel = true`): in plaintext only `GET_STATUS` (0x3C), `INIT_SECURE_CHANNEL` (0x81) and `PROCESS_SECURE_CHANNEL` (0x82) are accepted; everything else must be wrapped through the secure channel or the card throws `SW_SECURE_CHANNEL_REQUIRED`.
 - Setup flow: before `INS_SETUP` completes, only personalization-PKI commands are allowed; `INS_SETUP` can run only once (unless factory reset).
 - Sensitive operations require prior PIN verification; several additionally require 2FA HMAC when a 2FA key is configured.

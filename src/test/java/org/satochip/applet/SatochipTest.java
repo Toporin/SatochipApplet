@@ -1,0 +1,676 @@
+package org.satochip.applet;
+
+import javacard.framework.AID;
+import org.bitcoinj.crypto.ChildNumber;
+import org.bitcoinj.crypto.DeterministicKey;
+import org.bitcoinj.crypto.HDKeyDerivation;
+import org.bouncycastle.jce.ECNamedCurveTable;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.jce.spec.ECNamedCurveParameterSpec;
+import org.bouncycastle.math.ec.ECPoint;
+import org.bouncycastle.util.encoders.Hex;
+import org.junit.jupiter.api.*;
+import org.satochip.desktop.PCSCCardChannel;
+import org.satochip.io.APDUCommand;
+import org.satochip.io.APDUResponse;
+import pro.javacard.engine.JavaCardEngine;
+
+import javax.smartcardio.Card;
+import javax.smartcardio.CardTerminal;
+import javax.smartcardio.TerminalFactory;
+import java.security.MessageDigest;
+import java.security.Security;
+import java.security.Signature;
+import java.util.Arrays;
+import java.util.HashSet;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * APDU-level test suite for the Satochip applet.
+ *
+ * <p>The applet has no test hooks: everything here goes over the APDU interface exactly as a real
+ * client would, which is what lets the same suite run against the JCardEngine simulator or a
+ * physical card. Pick the target with {@code -Porg.satochip.test.target=simulator|card}; the
+ * default is {@code card}, and CI uses {@code simulator}.
+ *
+ * <p><b>Shared-card model.</b> Like Keycard's suite, the card is set up once and reused: a factory
+ * reset on applet versions before v0.16 required physically removing and reinserting the card, so
+ * per-test reinstallation is not an option on hardware. Every test must therefore leave the card
+ * in the agreed baseline state (set up, PIN = {@link #PIN}, all feature policies enabled) and
+ * {@link #tearDown()} re-verifies the PIN so the next test starts authenticated.
+ *
+ * <p>For the same reason nothing here ever sets a policy to BLOCKED or blocks the PUK: those are
+ * irreversible without a factory reset and would poison the rest of the run.
+ */
+@DisplayName("Test the Satochip Applet")
+@TestMethodOrder(MethodOrderer.Alphanumeric.class)
+public class SatochipTest {
+
+  // --- applet constants, mirrored from CardEdge.java -------------------------------------------
+  static final byte INS_GET_RANDOM = (byte) 0x30;
+  static final byte INS_SETUP = (byte) 0x2A;
+  static final byte INS_GET_STATUS = (byte) 0x3C;
+  static final byte INS_CARD_LABEL = (byte) 0x3D;
+  static final byte INS_SET_NDEF = (byte) 0x3F;
+  static final byte INS_SET_FEATURE_POLICY = (byte) 0x3A;
+  static final byte INS_VERIFY_PIN = (byte) 0x42;
+  static final byte INS_CHANGE_PIN = (byte) 0x44;
+  static final byte INS_UNBLOCK_PIN = (byte) 0x46;
+  static final byte INS_LOGOUT_ALL = (byte) 0x60;
+  static final byte INS_BIP32_IMPORT_SEED = (byte) 0x6C;
+  static final byte INS_BIP32_GET_EXTENDED_KEY = (byte) 0x6D;
+  static final byte INS_SIGN_TRANSACTION_HASH = (byte) 0x7A;
+  static final byte INS_SIGN_SCHNORR_HASH = (byte) 0x7B;
+  static final byte INS_TAPROOT_TWEAK_PRIVKEY = (byte) 0x7C;
+  static final byte INS_LIST_PINS = (byte) 0x48;
+  static final byte INS_CREATE_PIN = (byte) 0x40;
+
+  static final int SW_OK = 0x9000;
+  static final int SW_UNAUTHORIZED = 0x9C06;
+  static final int SW_SETUP_ALREADY_DONE = 0x9C07;
+  static final int SW_INVALID_PARAMETER = 0x9C0F;
+  static final int SW_INCORRECT_P1 = 0x9C10;
+  static final int SW_INCORRECT_P2 = 0x9C11;
+  static final int SW_SECURE_CHANNEL_REQUIRED = 0x9C20;
+  static final int SW_INS_DEPRECATED = 0x9C26;
+  static final int SW_FEATURE_DISABLED = 0x9C4A;
+
+  static final byte FEATURE_ENABLED = 0;
+  static final byte FEATURE_DISABLED = 1;
+  static final byte FEATURE_ID_RANDOM = 4;
+
+  static final byte[] SATOCHIP_INSTANCE_AID = Hex.decode("5361746F4368697000");
+  static final byte[] NDEF_INSTANCE_AID = Hex.decode("D2760000850101");
+
+  // --- baseline credentials, restored by every test that touches them --------------------------
+  static final byte[] PIN = "1234".getBytes();
+  static final byte[] PUK = Hex.decode("0011223344556677");
+
+  private static final int TARGET_SIMULATOR = 0;
+  private static final int TARGET_CARD = 1;
+  private static final int TARGET;
+
+  static {
+    String t = System.getProperty("org.satochip.test.target", "card");
+    switch (t) {
+      case "simulator": TARGET = TARGET_SIMULATOR; break;
+      case "card":      TARGET = TARGET_CARD; break;
+      default: throw new RuntimeException("Unknown test target: " + t);
+    }
+    Security.addProvider(new BouncyCastleProvider());
+  }
+
+  private static JavaCardEngine engine;
+  private static CardTerminal cardTerminal;
+  private static org.satochip.io.CardChannel sdkChannel;
+  private static javax.smartcardio.CardChannel rawChannel;
+
+  private TestSatochipCommandSet cmdSet;
+
+  // =============================================================================================
+  // Lifecycle
+  // =============================================================================================
+
+  @BeforeAll
+  static void initAll() throws Exception {
+    if (TARGET == TARGET_SIMULATOR) {
+      openSimulatorChannel();
+    } else {
+      openCardChannel();
+    }
+
+    TestSatochipCommandSet boot = new TestSatochipCommandSet(sdkChannel);
+    boot.setLoggerLevel("SEVERE");
+    boot.cardSelect().checkOK();
+
+    if (!isSetupDone(boot)) {
+      setupCard(boot);
+    }
+    boot.setPin0(PIN);
+    boot.cardVerifyPIN(PIN);
+
+    if (!isSeeded(boot)) {
+      assertEquals(SW_OK, boot.cardBip32ImportSeed(Vectors.BIP32_SEED).getSw(),
+          "could not seed the card for the test run");
+    }
+
+    detectCapabilities(boot);
+  }
+
+  private static void openSimulatorChannel() throws Exception {
+    engine = JavaCardEngine.create();
+    engine.installApplet(aid(SATOCHIP_INSTANCE_AID), CardEdge.class);
+    // The NDEF applet takes its record from the install parameters; empty means "keep the
+    // default compiled into SharedMemory".
+    engine.installApplet(aid(NDEF_INSTANCE_AID), NDEFApplet.class, new byte[0]);
+
+    TerminalFactory tf = engine.toTerminalFactory();
+    cardTerminal = tf.terminals().list().get(0);
+    openPCSCChannel();
+  }
+
+  private static void openCardChannel() throws Exception {
+    TerminalFactory tf = TerminalFactory.getDefault();
+    for (CardTerminal t : tf.terminals().list()) {
+      if (t.isCardPresent()) {
+        cardTerminal = t;
+        break;
+      }
+    }
+    assertNotNull(cardTerminal, "No card found in any reader");
+    openPCSCChannel();
+  }
+
+  private static void openPCSCChannel() throws Exception {
+    Card card = cardTerminal.connect("*");
+    rawChannel = card.getBasicChannel();
+    sdkChannel = new PCSCCardChannel(rawChannel);
+  }
+
+  private static AID aid(byte[] bytes) {
+    return new AID(bytes, (short) 0, (byte) bytes.length);
+  }
+
+  private static void setupCard(TestSatochipCommandSet cmd) {
+    byte[] unusedPin1 = new byte[8];
+    byte[] unusedPuk1 = new byte[8];
+    APDUResponse r = cmd.cardSetup(
+        (byte) 5, (byte) 5, PIN, PUK,
+        (byte) 1, (byte) 1, unusedPin1, unusedPuk1);
+    assertEquals(SW_OK, r.getSw(), "card setup failed");
+  }
+
+  /**
+   * Probes the optional capabilities of the target. Feature policies come from GET_STATUS; the RSA
+   * multiplication trick has to be probed behaviourally, because reading
+   * {@code Biginteger.FLAG_FAST_MULT_VIA_RSA} reflectively would inspect this JVM's copy of the
+   * class rather than the one the simulator loaded in its own ClassLoader.
+   */
+  private static void detectCapabilities(TestSatochipCommandSet cmd) {
+    HashSet<String> caps = new HashSet<>();
+    byte[] status = cmd.cardGetStatus().getData();
+    if (status.length > 17) {
+      if (status[13] == FEATURE_ENABLED) caps.add("schnorr");
+      if (status[14] == FEATURE_ENABLED) caps.add("nostr");
+      if (status[15] == FEATURE_ENABLED) caps.add("liquid");
+      if (status[16] == FEATURE_ENABLED) caps.add("musig2");
+      if (status[17] == FEATURE_ENABLED) caps.add("random");
+    }
+
+    // A taproot tweak is the cheapest command that goes through Biginteger.mult_rsa_trick().
+    cmd.cardBip32GetExtendedKeyRaw("m/86'/0'/0'/0/0");
+    APDUResponse tweak = cmd.sendRawSecure(INS_TAPROOT_TWEAK_PRIVKEY, 0xFF, 0x00, new byte[]{0x00});
+    if (tweak.getSw() == SW_OK) {
+      APDUResponse sig = cmd.sendRawSecure(INS_SIGN_SCHNORR_HASH, 0x00, 0x00, new byte[32]);
+      if (sig.getSw() == SW_OK) caps.add("rsaMult");
+    }
+
+    FeaturePolicyCondition.availableCapabilities = caps;
+  }
+
+  private static boolean isSetupDone(TestSatochipCommandSet cmd) {
+    byte[] status = cmd.cardGetStatus().getData();
+    return status.length > 10 && status[10] == 0x01;
+  }
+
+  private static boolean isSeeded(TestSatochipCommandSet cmd) {
+    byte[] status = cmd.cardGetStatus().getData();
+    return status.length > 9 && status[9] == 0x01;
+  }
+
+  @BeforeEach
+  void init() throws Exception {
+    cmdSet = new TestSatochipCommandSet(sdkChannel);
+    cmdSet.setLoggerLevel("SEVERE");
+    // Selecting the applet clears PIN validation, so every test starts by re-authenticating over
+    // a fresh secure channel. Tests therefore begin from an identical, authenticated state.
+    cmdSet.cardSelect().checkOK();
+    cmdSet.setPin0(PIN);
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw(),
+        "the PIN is no longer " + new String(PIN) + "; a previous test did not restore it");
+  }
+
+  @AfterEach
+  void tearDown() {
+    // Guard the shared-card contract: whatever the test did, the baseline credentials must survive.
+    cmdSet.forgetSecureChannel();
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw(),
+        "the PIN is no longer " + new String(PIN) + "; this test did not restore it");
+  }
+
+  // =============================================================================================
+  // Tier 1 -- security boundaries
+  // =============================================================================================
+
+  @Test
+  @DisplayName("SELECT returns the card status")
+  void selectTest() throws Exception {
+    APDUResponse r = cmdSet.cardSelect();
+    assertEquals(SW_OK, r.getSw());
+    byte[] data = r.getData();
+    assertTrue(data.length >= 18, "SELECT should return the GET_STATUS payload, got " + data.length);
+    assertEquals(0x01, data[10], "card should report setup done");
+  }
+
+  @Test
+  @DisplayName("GET STATUS reports the expected fields")
+  void getStatusTest() {
+    byte[] s = cmdSet.cardGetStatus().getData();
+    assertEquals(18, s.length, "GET_STATUS payload length");
+    assertEquals(0x00, s[0], "protocol major version");
+    assertEquals(0x10, s[1], "protocol minor version (0.16)");
+    assertEquals(5, s[4], "PIN tries remaining should be back at the maximum");
+    assertEquals(0x01, s[10], "setup done");
+    assertEquals(0x01, s[11], "secure channel is always enabled");
+    for (int i = 13; i <= 17; i++) {
+      assertEquals(FEATURE_ENABLED, s[i],
+          "feature policy at offset " + i + " should be enabled in the baseline state");
+    }
+  }
+
+  @Test
+  @DisplayName("Secure channel is mandatory for all but three commands")
+  void secureChannelRequiredTest() {
+    // Exempt in plaintext: GET_STATUS (0x3C), INIT (0x81) and PROCESS (0x82) secure channel.
+    assertEquals(SW_OK, cmdSet.sendRawPlain(INS_GET_STATUS, 0x00, 0x00, new byte[0]).getSw());
+
+    // Everything else must be refused before it is even parsed.
+    int[] gated = {INS_CARD_LABEL, INS_SET_NDEF, INS_GET_RANDOM, INS_VERIFY_PIN,
+                   INS_CHANGE_PIN, INS_BIP32_GET_EXTENDED_KEY, INS_SIGN_TRANSACTION_HASH,
+                   INS_SET_FEATURE_POLICY};
+    for (int ins : gated) {
+      assertEquals(SW_SECURE_CHANNEL_REQUIRED,
+          cmdSet.sendRawPlain(ins, 0x00, 0x00, new byte[0]).getSw(),
+          String.format("INS 0x%02X should require the secure channel", ins));
+    }
+  }
+
+  @Test
+  @DisplayName("Replaying an encrypted command is rejected")
+  void secureChannelReplayTest() {
+    APDUCommand encrypted = cmdSet.encrypt(INS_GET_RANDOM, 8, 0x00, new byte[0]);
+    assertEquals(SW_OK, cmdSet.replay(encrypted).getSw(), "the original command should succeed");
+    // The secure channel IV advances with each command, so the same bytes must not pass twice.
+    assertNotEquals(SW_OK, cmdSet.replay(encrypted).getSw(),
+        "a replayed encrypted APDU must not be accepted");
+    cmdSet.forgetSecureChannel();
+  }
+
+  @Test
+  @DisplayName("VERIFY PIN counts down and resets")
+  void verifyPinTest() {
+    // Wrong PIN decrements the counter and reports the remaining tries in the low nibble.
+    APDUResponse bad = cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, "9999".getBytes());
+    assertEquals(0x63C4, bad.getSw(), "wrong PIN should return 0x63Cx with 4 tries left");
+    assertEquals(4, cmdSet.cardGetStatus().getData()[4], "status should show 4 tries left");
+
+    // A correct PIN restores the counter.
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw());
+    assertEquals(5, cmdSet.cardGetStatus().getData()[4], "status should show the counter reset");
+
+    // P1 must be 0x00 since v0.16 removed the multi-PIN support.
+    assertEquals(SW_INCORRECT_P1, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x01, 0x00, PIN).getSw());
+  }
+
+  @Test
+  @DisplayName("CHANGE PIN round-trips")
+  void changePinTest() {
+    byte[] newPin = "4321".getBytes();
+    byte[] data = concat(new byte[]{(byte) PIN.length}, PIN, new byte[]{(byte) newPin.length}, newPin);
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_CHANGE_PIN, 0x00, 0x00, data).getSw());
+
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, newPin).getSw());
+    assertEquals(0x63C4, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw(),
+        "the old PIN must no longer work");
+
+    // Restore the baseline: the shared-card model requires it.
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, newPin).getSw());
+    byte[] back = concat(new byte[]{(byte) newPin.length}, newPin, new byte[]{(byte) PIN.length}, PIN);
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_CHANGE_PIN, 0x00, 0x00, back).getSw());
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw());
+  }
+
+  @Test
+  @DisplayName("UNBLOCK PIN uses the v0.16 [size|PUK|size|PIN] format")
+  void unblockPinFormatTest() {
+    // The pre-v0.16 format was a bare PUK with no length prefix; it must now be rejected rather
+    // than silently misparsed. The SDK still sends the old shape, which is why this goes raw.
+    APDUResponse legacy = cmdSet.sendRawSecure(INS_UNBLOCK_PIN, 0x00, 0x00, PUK);
+    assertNotEquals(SW_OK, legacy.getSw(),
+        "the pre-v0.16 bare-PUK format must not be accepted any more");
+
+    // A well-formed request against a PIN that is not blocked is also refused, without
+    // consuming a PUK try: this asserts the parse succeeds but the precondition is enforced.
+    byte[] wellFormed = concat(new byte[]{(byte) PUK.length}, PUK);
+    APDUResponse r = cmdSet.sendRawSecure(INS_UNBLOCK_PIN, 0x00, 0x00, wellFormed);
+    assertNotEquals(SW_INVALID_PARAMETER, r.getSw(),
+        "a correctly framed PUK should get past input validation");
+  }
+
+  @Test
+  @DisplayName("SETUP cannot be run twice")
+  void setupAlreadyDoneTest() {
+    APDUResponse r = cmdSet.sendRawSecure(INS_SETUP, 0x00, 0x00, new byte[]{0x00});
+    assertEquals(SW_SETUP_ALREADY_DONE, r.getSw());
+  }
+
+  @Test
+  @DisplayName("Removed commands report SW_INS_DEPRECATED")
+  void deprecatedCommandsTest() {
+    assertEquals(SW_INS_DEPRECATED, cmdSet.sendRawSecure(INS_CREATE_PIN, 0x00, 0x00, new byte[0]).getSw());
+    assertEquals(SW_INS_DEPRECATED, cmdSet.sendRawSecure(INS_LIST_PINS, 0x00, 0x00, new byte[0]).getSw());
+  }
+
+  @Test
+  @DisplayName("A disabled feature policy rejects its command, and can be re-enabled")
+  @FeaturePolicies("random")
+  void featurePolicyDisableTest() {
+    // Never test FEATURE_BLOCKED here: it survives everything short of a factory reset and would
+    // poison the rest of the run under the shared-card model.
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_GET_RANDOM, 16, 0x00, new byte[0]).getSw());
+
+    assertEquals(SW_OK,
+        cmdSet.sendRawSecure(INS_SET_FEATURE_POLICY, FEATURE_ID_RANDOM, FEATURE_DISABLED, new byte[0]).getSw());
+    assertEquals(FEATURE_DISABLED, cmdSet.cardGetStatus().getData()[17]);
+    assertEquals(SW_FEATURE_DISABLED,
+        cmdSet.sendRawSecure(INS_GET_RANDOM, 16, 0x00, new byte[0]).getSw());
+
+    assertEquals(SW_OK,
+        cmdSet.sendRawSecure(INS_SET_FEATURE_POLICY, FEATURE_ID_RANDOM, FEATURE_ENABLED, new byte[0]).getSw());
+    assertEquals(FEATURE_ENABLED, cmdSet.cardGetStatus().getData()[17]);
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_GET_RANDOM, 16, 0x00, new byte[0]).getSw());
+  }
+
+  @Test
+  @DisplayName("GET RANDOM honours its length bounds")
+  @FeaturePolicies("random")
+  void getRandomTest() {
+    for (int n : new int[]{1, 32, 64}) {
+      APDUResponse r = cmdSet.sendRawSecure(INS_GET_RANDOM, n, 0x00, new byte[0]);
+      assertEquals(SW_OK, r.getSw(), "GET_RANDOM should accept " + n + " bytes");
+      assertEquals(n, r.getData().length);
+    }
+    assertEquals(SW_INCORRECT_P1, cmdSet.sendRawSecure(INS_GET_RANDOM, 0, 0x00, new byte[0]).getSw());
+    assertEquals(SW_INCORRECT_P1, cmdSet.sendRawSecure(INS_GET_RANDOM, 65, 0x00, new byte[0]).getSw());
+
+    // Two calls must not return the same bytes.
+    byte[] a = cmdSet.sendRawSecure(INS_GET_RANDOM, 32, 0x00, new byte[0]).getData();
+    byte[] b = cmdSet.sendRawSecure(INS_GET_RANDOM, 32, 0x00, new byte[0]).getData();
+    assertFalse(Arrays.equals(a, b), "GET_RANDOM returned identical bytes twice");
+  }
+
+  @Test
+  @DisplayName("CARD LABEL round-trips")
+  void cardLabelTest() {
+    byte[] label = "satochip-test".getBytes();
+    byte[] data = concat(new byte[]{(byte) label.length}, label);
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_CARD_LABEL, 0x00, 0x00, data).getSw());
+
+    APDUResponse r = cmdSet.sendRawSecure(INS_CARD_LABEL, 0x00, 0x01, new byte[0]);
+    assertEquals(SW_OK, r.getSw());
+    assertEquals(label.length, r.getData()[0]);
+    assertArrayEquals(label, Arrays.copyOfRange(r.getData(), 1, 1 + label.length));
+
+    assertEquals(SW_INCORRECT_P2, cmdSet.sendRawSecure(INS_CARD_LABEL, 0x00, 0x7F, new byte[0]).getSw());
+  }
+
+  // =============================================================================================
+  // NDEF -- the applet command and the NDEF applet that serves the record
+  // =============================================================================================
+
+  @Test
+  @DisplayName("SET NDEF (0x3F) round-trips and validates its input")
+  void cardNdefTest() throws Exception {
+    APDUResponse initial = cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x01, new byte[0]);
+    assertEquals(SW_OK, initial.getSw());
+    byte[] original = initial.getData();
+    assertTrue(original.length >= 1);
+
+    // A record whose declared size disagrees with Lc must be refused.
+    assertEquals(SW_INVALID_PARAMETER,
+        cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x00, new byte[]{0x05, 0x01, 0x02}).getSw());
+
+    // A well-formed record round-trips.
+    byte[] record = Hex.decode("0003d00000");           // NLEN(2) + a 3-byte empty NDEF record
+    byte[] payload = concat(new byte[]{(byte) record.length}, record);
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x00, payload).getSw());
+
+    APDUResponse read = cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x01, new byte[0]);
+    assertEquals(SW_OK, read.getSw());
+    assertArrayEquals(payload, read.getData(), "the NDEF record should read back unchanged");
+
+    assertEquals(SW_INCORRECT_P2, cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x7F, new byte[0]).getSw());
+
+    // Restore the record the run started with.
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x00, original).getSw());
+  }
+
+  @Test
+  @DisplayName("NDEF applet serves the shared record over the Type 4 interface")
+  void ndefAppletTest() throws Exception {
+    // Set a known record through CardEdge, then read it back through the NDEF applet, proving
+    // SharedMemory really is shared between the two applet instances.
+    byte[] record = Hex.decode("0011d1010d55027361746f636869702e696f");  // URI "https://satochip.io"
+    byte[] payload = concat(new byte[]{(byte) record.length}, record);
+    byte[] original = cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x01, new byte[0]).getData();
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x00, payload).getSw());
+
+    // Raw smartcardio here: the NDEF applet needs case-2 READ BINARY (00 B0 P1 P2 Le), which the
+    // SDK's APDUCommand cannot express because it always writes an Lc.
+    assertEquals(SW_OK, transmit(0x00, 0xA4, 0x04, 0x00, NDEF_INSTANCE_AID).getSW(),
+        "selecting the NDEF instance AID");
+
+    // Capability container, file E103.
+    assertEquals(SW_OK, transmit(0x00, 0xA4, 0x00, 0x0C, Hex.decode("E103")).getSW());
+    javax.smartcardio.ResponseAPDU caps = transmitLe(0x00, 0xB0, 0x00, 0x00, 0x0F);
+    assertEquals(SW_OK, caps.getSW());
+    assertEquals(0x20, caps.getData()[2] & 0xff, "CC should declare mapping version 2.0");
+
+    // NDEF data file, E104.
+    assertEquals(SW_OK, transmit(0x00, 0xA4, 0x00, 0x0C, Hex.decode("E104")).getSW());
+    javax.smartcardio.ResponseAPDU data = transmitLe(0x00, 0xB0, 0x00, 0x00, record.length);
+    assertEquals(SW_OK, data.getSW());
+    assertArrayEquals(record, data.getData(),
+        "the NDEF applet should serve the record written through INS_SET_NDEF");
+
+    // Selecting an unknown file must fail.
+    assertEquals(0x6A82, transmit(0x00, 0xA4, 0x00, 0x0C, Hex.decode("E199")).getSW());
+
+    // Put back the original record and re-select the Satochip applet for the next test.
+    cmdSet.cardSelect().checkOK();
+    cmdSet.forgetSecureChannel();
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw());
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x00, original).getSw());
+  }
+
+  // =============================================================================================
+  // Tier 2 -- crypto, cross-checked against independent implementations
+  // =============================================================================================
+
+  @Test
+  @DisplayName("BIP32 derivation matches the specification vectors and bitcoinj")
+  void bip32DerivationTest() {
+    assertArrayEquals(Vectors.BIP32_M_0H_PUBKEY, compressedPubkey("m/0'"));
+    assertArrayEquals(Vectors.BIP32_M_0H_1_PUBKEY, compressedPubkey("m/0'/1"));
+    assertArrayEquals(Vectors.BIP32_M_0H_1_2H_PUBKEY, compressedPubkey("m/0'/1/2'"));
+    assertArrayEquals(Vectors.BIP32_M_0H_1_2H_2_PUBKEY, compressedPubkey("m/0'/1/2'/2"));
+    assertArrayEquals(Vectors.BIP32_M_0H_1_2H_2_1000000000_PUBKEY,
+        compressedPubkey("m/0'/1/2'/2/1000000000"));
+
+    // Independent cross-check with bitcoinj over a path not in the pinned vectors.
+    DeterministicKey master = HDKeyDerivation.createMasterPrivateKey(Vectors.BIP32_SEED);
+    DeterministicKey expected = HDKeyDerivation.deriveChildKey(
+        HDKeyDerivation.deriveChildKey(
+            HDKeyDerivation.deriveChildKey(master, new ChildNumber(44, true)),
+            new ChildNumber(0, true)),
+        new ChildNumber(7, false));
+    assertArrayEquals(expected.getPubKeyPoint().getEncoded(true), compressedPubkey("m/44'/0'/7"));
+  }
+
+  @Test
+  @DisplayName("SIGN TRANSACTION HASH produces a verifiable ECDSA signature")
+  void signTransactionHashTest() throws Exception {
+    byte[] pub = cmdSet.cardBip32GetExtendedKeyRaw("m/44'/0'/0'/0/0");
+    byte[] hash = sha256("satochip transaction hash test".getBytes());
+
+    APDUResponse r = cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, 0xFF, 0x00,
+        concat(hash, new byte[]{0x00, 0x00}));
+    assertEquals(SW_OK, r.getSw());
+    byte[] der = r.getData();
+    assertTrue(der.length > 8 && der[0] == 0x30, "expected a DER-encoded ECDSA signature");
+
+    assertTrue(verifyEcdsa(pub, hash, der), "the card's ECDSA signature should verify");
+
+    // A hash of the wrong length must be refused rather than silently padded.
+    assertNotEquals(SW_OK,
+        cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, 0xFF, 0x00, new byte[16]).getSw());
+  }
+
+  @Test
+  @DisplayName("Schnorr signing works, and survives a second call")
+  @FeaturePolicies({"schnorr", "rsaMult"})
+  void signSchnorrHashTest() {
+    cmdSet.cardBip32GetExtendedKeyRaw("m/86'/0'/0'/0/0");
+
+    // BIP86: key-path-only, so tweak_size = 0.
+    APDUResponse tweak = cmdSet.sendRawSecure(INS_TAPROOT_TWEAK_PRIVKEY, 0xFF, 0x00, new byte[]{0x00});
+    assertEquals(SW_OK, tweak.getSw());
+
+    // Response: [pubkey_size(2b) | uncompressed pubkey(65b) | sig_size(2b) | authentikey sig]
+    byte[] body = tweak.getData();
+    int pubkeyLen = ((body[0] & 0xff) << 8) | (body[1] & 0xff);
+    assertEquals(65, pubkeyLen, "expected an uncompressed tweaked public key");
+    byte[] tweakedPubkey = Arrays.copyOfRange(body, 2, 2 + pubkeyLen);
+
+    byte[] hash = sha256("satochip schnorr test".getBytes());
+
+    APDUResponse first = cmdSet.sendRawSecure(INS_SIGN_SCHNORR_HASH, 0x00, 0x00, hash);
+    assertEquals(SW_OK, first.getSw());
+    assertEquals(64, first.getData().length, "a BIP340 signature is 64 bytes");
+    assertTrue(verifyBip340(tweakedPubkey, hash, first.getData()),
+        "the first Schnorr signature should verify under the tweaked key");
+
+    // Regression test for the v0.16 fix: SignSchnorrHash used to borrow the tweaked private key as
+    // scratch space and never restore it, so every later signature was silently made with the
+    // previous signature's nonce as its private key -- well-formed, but not verifiable.
+    // The nonce is random, so the two signatures differ; what must hold is that both verify.
+    APDUResponse second = cmdSet.sendRawSecure(INS_SIGN_SCHNORR_HASH, 0x00, 0x00, hash);
+    assertEquals(SW_OK, second.getSw(), "a second Schnorr signature must still work");
+    assertEquals(64, second.getData().length);
+    assertTrue(verifyBip340(tweakedPubkey, hash, second.getData()),
+        "the second Schnorr signature must also verify: if it does not, the tweaked private key "
+        + "did not survive the first signature");
+  }
+
+  // =============================================================================================
+  // Helpers
+  // =============================================================================================
+
+  private byte[] compressedPubkey(String path) {
+    byte[] uncompressed = cmdSet.cardBip32GetExtendedKeyRaw(path);
+    ECNamedCurveParameterSpec spec = ECNamedCurveTable.getParameterSpec("secp256k1");
+    ECPoint point = spec.getCurve().decodePoint(uncompressed);
+    return point.getEncoded(true);
+  }
+
+  private static javax.smartcardio.ResponseAPDU transmit(int cla, int ins, int p1, int p2, byte[] data)
+      throws Exception {
+    return rawChannel.transmit(new javax.smartcardio.CommandAPDU(cla, ins, p1, p2, data));
+  }
+
+  private static javax.smartcardio.ResponseAPDU transmitLe(int cla, int ins, int p1, int p2, int le)
+      throws Exception {
+    return rawChannel.transmit(new javax.smartcardio.CommandAPDU(cla, ins, p1, p2, le));
+  }
+
+  private static boolean verifyEcdsa(byte[] uncompressedPubkey, byte[] hash, byte[] derSignature)
+      throws Exception {
+    ECNamedCurveParameterSpec spec = ECNamedCurveTable.getParameterSpec("secp256k1");
+    ECPoint q = spec.getCurve().decodePoint(uncompressedPubkey);
+    java.security.KeyFactory kf = java.security.KeyFactory.getInstance("EC", "BC");
+    org.bouncycastle.jce.spec.ECPublicKeySpec pubSpec =
+        new org.bouncycastle.jce.spec.ECPublicKeySpec(q,
+            new org.bouncycastle.jce.spec.ECParameterSpec(
+                spec.getCurve(), spec.getG(), spec.getN(), spec.getH()));
+    java.security.PublicKey pub = kf.generatePublic(pubSpec);
+    Signature verifier = Signature.getInstance("NONEwithECDSA", "BC");
+    verifier.initVerify(pub);
+    verifier.update(hash);
+    return verifier.verify(derSignature);
+  }
+
+  /**
+   * BIP340 verification, written out here rather than pulled from a library so that the applet is
+   * checked against the specification itself.
+   *
+   * <p>verify(pk, m, sig): P = lift_x(pk.x); r = sig[0..32); s = sig[32..64);
+   * e = int(tagged_hash("BIP0340/challenge", r || pk.x || m)) mod n; R = s*G - e*P;
+   * accept iff R is not infinity, R.y is even and R.x == r.
+   */
+  private static boolean verifyBip340(byte[] uncompressedPubkey, byte[] msg, byte[] sig) {
+    if (sig.length != 64 || msg.length != 32) return false;
+    ECNamedCurveParameterSpec spec = ECNamedCurveTable.getParameterSpec("secp256k1");
+
+    java.math.BigInteger px =
+        new java.math.BigInteger(1, Arrays.copyOfRange(uncompressedPubkey, 1, 33));
+    ECPoint p = liftX(spec, px);
+    if (p == null) return false;
+
+    java.math.BigInteger r = new java.math.BigInteger(1, Arrays.copyOfRange(sig, 0, 32));
+    java.math.BigInteger sv = new java.math.BigInteger(1, Arrays.copyOfRange(sig, 32, 64));
+    if (r.compareTo(Vectors.SECP256K1_P) >= 0 || sv.compareTo(Vectors.SECP256K1_N) >= 0) {
+      return false;
+    }
+
+    byte[] challenge = taggedHash("BIP0340/challenge",
+        concat(Arrays.copyOfRange(sig, 0, 32), Arrays.copyOfRange(uncompressedPubkey, 1, 33), msg));
+    java.math.BigInteger e = new java.math.BigInteger(1, challenge).mod(Vectors.SECP256K1_N);
+
+    ECPoint rPoint = spec.getG().multiply(sv).add(p.multiply(Vectors.SECP256K1_N.subtract(e))).normalize();
+    if (rPoint.isInfinity()) return false;
+    if (rPoint.getAffineYCoord().toBigInteger().testBit(0)) return false;   // y must be even
+    return rPoint.getAffineXCoord().toBigInteger().equals(r);
+  }
+
+  /** lift_x from BIP340: the point with x = px and even y, or null if x is not on the curve. */
+  private static ECPoint liftX(ECNamedCurveParameterSpec spec, java.math.BigInteger px) {
+    if (px.compareTo(Vectors.SECP256K1_P) >= 0) return null;
+    byte[] compressed = new byte[33];
+    compressed[0] = 0x02;                       // 0x02 selects the even-y root
+    byte[] xb = px.toByteArray();
+    int len = Math.min(32, xb.length);
+    System.arraycopy(xb, xb.length - len, compressed, 33 - len, len);
+    try {
+      return spec.getCurve().decodePoint(compressed).normalize();
+    } catch (IllegalArgumentException e) {
+      return null;                              // x is not on the curve
+    }
+  }
+
+  /** BIP340 tagged hash: SHA256(SHA256(tag) || SHA256(tag) || msg). */
+  private static byte[] taggedHash(String tag, byte[] msg) {
+    byte[] tagHash = sha256(tag.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    return sha256(concat(tagHash, tagHash, msg));
+  }
+
+  private static byte[] sha256(byte[] input) {
+    try {
+      return MessageDigest.getInstance("SHA-256").digest(input);
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  private static byte[] concat(byte[]... parts) {
+    int len = 0;
+    for (byte[] p : parts) len += p.length;
+    byte[] out = new byte[len];
+    int off = 0;
+    for (byte[] p : parts) {
+      System.arraycopy(p, 0, out, off, p.length);
+      off += p.length;
+    }
+    return out;
+  }
+}

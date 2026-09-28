@@ -1,0 +1,77 @@
+name: build and test
+
+on:
+  push:
+    branches: [ master, code-refactoring ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive   # sdks/ holds the JavaCard SDK used by the converter
+
+      # Two JDKs are needed and neither can replace the other:
+      #  - JDK 11 builds the applet. The JavaCard 3.0.4 converter only accepts class file v50,
+      #    and JDK 11 is the last javac that accepts -source 6.
+      #  - JDK 17 runs the tests, because JCardEngine is compiled for Java 17.
+      # setup-java leaves JAVA_HOME pointing at the last JDK installed, so install 17 first
+      # and keep its path, then install 11 as the build JDK.
+      - name: Set up JDK 17 (tests)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Remember JDK 17
+        run: echo "JAVA17_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+
+      - name: Set up JDK 11 (applet build)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.m2/repository
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Build the CAP
+        run: ./gradlew --no-daemon convertJavacard
+
+      - name: Show CAP contents
+        run: java -jar gp.jar --info --cap build/javacard/org/satochip/applet/javacard/applet.cap
+
+      # 'simulator' rather than the default 'card': CI has no reader, and the card target would
+      # reflash whatever card were present.
+      - name: Test against the JCardEngine simulator
+        run: ./gradlew --no-daemon test -Porg.satochip.test.target=simulator
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: build/reports/tests/test
+          if-no-files-found: ignore
+
+  # The legacy Ant build only produces the CardEdge applet; keep it compiling.
+  ant-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+      - run: sudo apt-get update && sudo apt-get install -y ant
+      - run: ant build

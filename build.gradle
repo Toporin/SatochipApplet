@@ -34,12 +34,40 @@ javacard {
 }
 
 repositories {
+  mavenLocal()  // lets a locally published Satochip-Java be used before it is tagged on JitPack
   mavenCentral()
   maven { url 'https://jitpack.io' }
   maven { url 'https://mvn.javacard.pro/maven/' }
+  maven {
+    url 'https://mvn.javacard.pro/public-snapshots/'
+    // JCardEngine only publishes snapshots so far; an exact timestamped version is pinned below.
+  }
+}
+
+// Test target: 'card' (default, like Keycard: builds the CAP, installs it, then tests the card)
+// or 'simulator' (JCardEngine, no hardware; what CI uses).
+def testTarget = project.properties['org.satochip.test.target'] ?: 'card'
+
+// JCardEngine is compiled for Java 17, but the applet must be compiled by JDK 11 (the JavaCard
+// 3.0.4 converter only accepts class file v50, and JDK 11 is the last javac accepting -source 6).
+// So the test compiler and test JVM are forked onto a second JDK.
+def jdk17 = project.properties['org.satochip.test.jdk17'] ?: System.getenv('JAVA17_HOME')
+
+// BouncyCastle jars are signed, and two of them exposing the same packages make the JVM throw
+// "signer information does not match". jcardengine, bitcoinj and satochip-lib each pull a
+// different flavour, so collapse them onto the single one jcardengine needs.
+configurations.all {
+  exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
+  exclude group: 'org.bouncycastle', module: 'bcprov-jdk15to18'
 }
 
 dependencies {
+  testCompile 'pro.javacard:jcardengine:26.09.15-20260928.050453-6'
+  testCompile 'com.github.Toporin.Satochip-Java:satochip-desktop:0.3.1'
+  testCompile 'org.bouncycastle:bcprov-jdk18on:1.85'
+  testCompile 'org.bitcoinj:bitcoinj-core:0.16.2'
+  testCompile 'org.junit.jupiter:junit-jupiter-api:5.4.2'
+  testRuntime 'org.junit.jupiter:junit-jupiter-engine:5.4.2'
 }
 
 task install (type: org.satochip.build.InstallTask)
@@ -52,4 +80,43 @@ task lock (type: org.satochip.build.LockTask)
 compileJava {
   sourceCompatibility = 1.6
   targetCompatibility = 1.6
+}
+
+compileTestJava {
+  // Ordinary Java, not JavaCard: no 1.6 restriction here.
+  sourceCompatibility = 1.8
+  targetCompatibility = 1.8
+  if (jdk17) {
+    options.fork = true
+    options.forkOptions.executable = "${jdk17}/bin/javac"
+  }
+}
+
+test {
+  // api_classic.jar holds the JavaCard API *stubs*; the simulator provides real implementations.
+  // If the stubs win on the classpath every API call throws, so drop them.
+  classpath = sourceSets.test.runtimeClasspath.filter { f -> f.name != "api_classic.jar" }
+  useJUnitPlatform { excludeTags 'manual' }
+  testLogging { events 'passed', 'skipped', 'failed'; showStandardStreams = false }
+  if (jdk17) {
+    executable = "${jdk17}/bin/java"
+  }
+  // No -noverify needed: JCardEngine runs target-1.6 applet classes on JDK 17 as-is,
+  // and -Xverify:none has been a no-op since JDK 13.
+  systemProperty 'org.satochip.test.target', testTarget
+}
+
+if (testTarget == 'card') {
+  // Like Keycard: build the CAP and flash the card before running the suite.
+  tasks.test.dependsOn(install)
+}
+
+gradle.taskGraph.whenReady { graph ->
+  if (graph.hasTask(tasks.test) && !jdk17) {
+    throw new GradleException(
+      "The test suite needs a JDK 17 (JCardEngine is built for Java 17), while the applet itself\n" +
+      "must be built by this JDK 11 Gradle. Point the build at a JDK 17 with either:\n" +
+      "  export JAVA17_HOME=/usr/lib/jvm/java-17-openjdk-amd64\n" +
+      "  ./gradlew test -Porg.satochip.test.jdk17=/usr/lib/jvm/java-17-openjdk-amd64")
+  }
 }
