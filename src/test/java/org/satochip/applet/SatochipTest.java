@@ -616,6 +616,41 @@ public class SatochipTest {
         + "did not survive the first signature");
   }
 
+  @Test
+  @DisplayName("SDK taproot tweak: BIP86 (tweak_size=0) and script-path both verify")
+  @FeaturePolicies({"schnorr", "rsaMult"})
+  void taprootTweakViaSdkTest() throws Exception {
+    cmdSet.cardBip32GetExtendedKeyRaw("m/86'/0'/0'/0/0");
+    byte[] hash = sha256("satochip taproot sdk test".getBytes());
+
+    // BIP86, key-path-only: tweak_size must be 0. A null tweak expresses that in the SDK from
+    // 0.3.3; before that the SDK forced 32 bytes and BIP86 was simply not reachable.
+    byte[] bip86Pubkey = cmdSet.cardTaprootTweakPrivateKey(0xFF, null, false);
+    assertEquals(65, bip86Pubkey.length);
+    byte[] bip86Sig = cmdSet.cardSignSchnorrHash(hash, null);
+    assertTrue(verifyBip340(bip86Pubkey, hash, bip86Sig),
+        "the BIP86 key-path signature should verify under the tweaked key");
+
+    // Script path: a 32-byte merkle root.
+    byte[] merkleRoot = sha256("some merkle root".getBytes());
+    byte[] scriptPubkey = cmdSet.cardTaprootTweakPrivateKey(0xFF, merkleRoot, false);
+    assertTrue(verifyBip340(scriptPubkey, hash, cmdSet.cardSignSchnorrHash(hash, null)),
+        "the script-path signature should verify under the tweaked key");
+    assertFalse(Arrays.equals(bip86Pubkey, scriptPubkey),
+        "a script-path tweak must produce a different output key than BIP86");
+
+    // BIP341 hashes x(P) alone for tweak_size=0 but x(P) || 32 zero bytes for an all-zero
+    // 32-byte tweak, so the two are different keys. A client that sent zeros meaning "no script
+    // tree" would derive the wrong address, which is why the SDK must be able to send size 0.
+    byte[] zeroTweakPubkey = cmdSet.cardTaprootTweakPrivateKey(0xFF, new byte[32], false);
+    assertFalse(Arrays.equals(bip86Pubkey, zeroTweakPubkey),
+        "an all-zero 32-byte tweak is not equivalent to tweak_size=0");
+
+    // Lengths other than 0 or 32 are refused client-side, before reaching the card.
+    assertThrows(IllegalArgumentException.class,
+        () -> cmdSet.cardTaprootTweakPrivateKey(0xFF, new byte[16], false));
+  }
+
   // =============================================================================================
   // Helpers
   // =============================================================================================

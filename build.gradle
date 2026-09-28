@@ -63,7 +63,7 @@ configurations.all {
 
 dependencies {
   testCompile 'pro.javacard:jcardengine:26.09.15-20260928.050453-6'
-  testCompile 'com.github.Toporin.Satochip-Java:satochip-desktop:0.2.6'
+  testCompile 'com.github.Toporin.Satochip-Java:satochip-desktop:0.3.3'
   testCompile 'org.bouncycastle:bcprov-jdk18on:1.85'
   testCompile 'org.bitcoinj:bitcoinj-core:0.16.2'
   testCompile 'org.junit.jupiter:junit-jupiter-api:5.4.2'
