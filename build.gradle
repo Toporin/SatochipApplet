@@ -54,8 +54,9 @@ def testTarget = project.properties['org.satochip.test.target'] ?: 'card'
 def jdk17 = project.properties['org.satochip.test.jdk17'] ?: System.getenv('JAVA17_HOME')
 
 // BouncyCastle jars are signed, and two of them exposing the same packages make the JVM throw
-// "signer information does not match". jcardengine, bitcoinj and satochip-lib each pull a
-// different flavour, so collapse them onto the single one jcardengine needs.
+// "signer information does not match". Satochip-Java 0.3.4 settled on bcprov-jdk18on and excludes
+// bitcoinj's copy, but bitcoinj is declared directly below (for its own transitive dependencies),
+// so its BouncyCastle has to be excluded here too.
 configurations.all {
   exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
   exclude group: 'org.bouncycastle', module: 'bcprov-jdk15to18'
@@ -63,8 +64,8 @@ configurations.all {
 
 dependencies {
   testCompile 'pro.javacard:jcardengine:26.09.15-20260928.050453-6'
-  testCompile 'com.github.Toporin.Satochip-Java:satochip-desktop:0.3.3'
-  testCompile 'org.bouncycastle:bcprov-jdk18on:1.85'
+  // brings satochip-lib, and bcprov-jdk18on with it (an `api` dependency of the library)
+  testCompile 'com.github.Toporin.Satochip-Java:satochip-desktop:0.3.4'
   testCompile 'org.bitcoinj:bitcoinj-core:0.16.2'
   testCompile 'org.junit.jupiter:junit-jupiter-api:5.4.2'
   testRuntime 'org.junit.jupiter:junit-jupiter-engine:5.4.2'
