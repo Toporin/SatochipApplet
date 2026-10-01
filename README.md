@@ -39,6 +39,13 @@ Disadvantages:
 # Supported hardware
 
 To support Bitcoin signatures, the javacard must support ALG_ECDSA_SHA_256, which in practice requires a javacard compliant with the JavaCard 3.0.1 specification. Note that this is a necessary but not sufficient condition since javacards typically implements only a subset of the specification.
+
+The card must also implement `KeyAgreement.ALG_EC_SVDP_DH_PLAIN_XY`, which is part of JavaCard
+3.0.5, so in practice a 3.0.5-capable card is required. This is a *runtime* requirement on the
+card's implementation and is independent of the CAP, which targets JavaCard 3.0.4 so that it loads
+as widely as possible — the algorithm is selected by a constant passed to a method that already
+exists in 3.0.4. [Keycard](https://github.com/keycard-tech/status-keycard) documents the same
+combination.
 A detailed list of javacard and their supported features is available [here](http://www.fi.muni.cz/~xsvenda/jcsupport.html).
 
 An interesting guide to consult before shopping can be found [here](https://github.com/martinpaljak/GlobalPlatformPro/tree/master/docs/JavaCardBuyersGuide).
@@ -103,14 +110,8 @@ both the `CardEdge` applet (AID `5361746F4368697000`) and the `NDEFApplet` (AID
 java -jar gp.jar --info --cap build/javacard/org/satochip/applet/javacard/applet.cap
 ```
 
-For named, versioned release artifacts:
-
-```
-./gradlew caps
-```
-
-which writes `build/caps/SatoChip-3.0.4.cap` and `build/caps/SatoChip-3.0.5.cap`. Both contain
-both applets.
+When cutting a release, rename that file to the applet version, as the published artifacts are
+named (for example `SatoChip-v0.16-0.0.cap`); the build itself produces only `applet.cap`.
 
 #### Why the CAP targets 3.0.4 but is built with a newer SDK
 

@@ -92,25 +92,6 @@ compileJava {
 // ---------------------------------------------------------------------------------------------
 
 def appletCap = layout.buildDirectory.file('javacard/org/satochip/applet/javacard/applet.cap')
-def capVariants = ['3.0.4', '3.0.5']
-
-/** Registers the ant-javacard task against an explicitly resolved classpath. */
-def defineJavacardTask(ant, classpath) {
-  ant.taskdef(name: 'javacard', classname: 'pro.javacard.ant.JavaCard', classpath: classpath)
-}
-
-/** Emits one <cap> element producing a CAP for the given JavaCard level. */
-def capElement(ant, String target, File output, Map aids) {
-  ant.cap(aid: aids.packageAid, version: aids.packageVer, targetsdk: target,
-          output: output.absolutePath, sources: aids.sources) {
-    applet('class': 'org.satochip.applet.CardEdge',   aid: aids.cardEdgeAid)
-    applet('class': 'org.satochip.applet.NDEFApplet', aid: aids.ndefAid)
-  }
-}
-
-def capAids = [packageAid : packageAid, packageVer: packageVer,
-               cardEdgeAid: cardEdgeAid, ndefAid   : ndefAid,
-               sources    : "$projectDir/src/main/java/org/satochip/applet"]
 
 tasks.register('convertJavacard') {
   group = 'build'
@@ -126,33 +107,28 @@ tasks.register('convertJavacard') {
   outputs.file(appletCap)
 
   doLast {
+    // Captured as locals: inside the ant.javacard closure the delegate is the AntBuilder node,
+    // so project properties are not reliably resolvable from there.
+    def out       = appletCap.get().asFile
+    def toolPath  = configurations.javacardTool.asPath
+    def kit       = jckit
+    def target    = targetSdk
+    def pkgAid    = packageAid
+    def pkgVer    = packageVer
+    def edgeAid   = cardEdgeAid
+    def tagAid    = ndefAid
+    def sourceDir = "$projectDir/src/main/java/org/satochip/applet"
+
     // ant-javacard throws NoSuchFileException if the output directory does not exist.
-    def out = appletCap.get().asFile
     out.parentFile.mkdirs()
-    defineJavacardTask(ant, configurations.javacardTool.asPath)
-    ant.javacard(jckit: jckit) { capElement(ant, targetSdk, out, capAids) }
-  }
-}
 
-// Named, versioned release artifacts. Unlike the old Ant build, both contain CardEdge *and*
-// NDEFApplet, so what is published matches what `install` puts on a card.
-tasks.register('caps') {
-  group = 'build'
-  description = 'Builds the named release CAPs for each supported JavaCard level'
-
-  inputs.dir('src/main/java').withPathSensitivity(PathSensitivity.RELATIVE)
-  inputs.files(configurations.javacardTool)
-  inputs.dir("$jckit/lib")
-  inputs.property('variants', capVariants)
-  inputs.property('packageVer', packageVer)
-  outputs.dir(layout.buildDirectory.dir('caps'))
-
-  doLast {
-    def out = layout.buildDirectory.dir('caps').get().asFile
-    out.mkdirs()
-    defineJavacardTask(ant, configurations.javacardTool.asPath)
-    ant.javacard(jckit: jckit) {
-      capVariants.each { v -> capElement(ant, v, new File(out, "SatoChip-${v}.cap"), capAids) }
+    ant.taskdef(name: 'javacard', classname: 'pro.javacard.ant.JavaCard', classpath: toolPath)
+    ant.javacard(jckit: kit) {
+      cap(aid: pkgAid, version: pkgVer, targetsdk: target,
+          output: out.absolutePath, sources: sourceDir) {
+        applet('class': 'org.satochip.applet.CardEdge',   aid: edgeAid)
+        applet('class': 'org.satochip.applet.NDEFApplet', aid: tagAid)
+      }
     }
   }
 }
