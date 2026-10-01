@@ -51,14 +51,25 @@ SatoChip-v*.cap           Pre-built CAP artifacts in the worktree (untracked, ig
 ## Technology stack and build
 
 - **Language**: JavaCard — a strict subset of Java (no `int`/`long` arithmetic assumed, no garbage collection guarantees, no recursion in practice, `short` everywhere). Target API: JavaCard Classic 3.0.4 (some code paths were originally written against 2.2.2, hence local constant redefinitions in `Secp256k1.java`).
-- **Build tool**: Gradle 4.10 (wrapper included) with the `com.fidesmo:gradle-javacard` plugin. The Ant build (`ant build`) is kept as a legacy path and produces `SatoChip-3.0.4.cap` with CardEdge only.
+- **Build tool**: Gradle 8.10 (wrapper included). There is no JavaCard Gradle plugin: `build.gradle` drives [ant-javacard](https://github.com/martinpaljak/ant-javacard) through Gradle's Ant integration, resolving it as `com.github.martinpaljak:ant-javacard` from `mvn.javacard.pro`. The legacy Ant build was removed; `./gradlew caps` produces the named release CAPs.
 - **SDKs**: `sdks/` is a git submodule (https://github.com/martinpaljak/oracle_javacard_sdks). After cloning: `git submodule update --init --recursive`.
 
-### Java versions (this trips people up)
+### Java versions and the JavaCard toolchain (this trips people up)
 
-- **JDK 11** compiles the applet. The JavaCard 3.0.4 converter only accepts class file v50 (Java 6), and JDK 11 is the last javac that accepts `-source 6`. `sourceCompatibility = 1.6` is a converter requirement, not a style choice.
-- **JDK 17** runs the tests (JCardEngine is built for Java 17). Set `JAVA17_HOME`.
-- JDK 21 cannot build this applet at all: it rejects `-source 7`, and no SDK in `sdks/` accepts Java 8 bytecode.
+- **JDK 17 or newer for everything** — build, install and test. 17 is the floor because JCardEngine
+  (the test simulator) is Java 17 bytecode; the build enforces it and fails with an explanation.
+- `sourceCompatibility = 7` is a **converter requirement**, not a style choice: the converter caps
+  at class file 51. Java 7 *language* features are still unusable on a card — switch-on-String
+  needs `String.hashCode`, try-with-resources needs `AutoCloseable`, and neither exists in the
+  JavaCard runtime. The old `1.6` setting used to rule them out by accident.
+- The CAP targets **JavaCard 3.0.4** while being built by the **v25.0** SDK: `jckit =
+  sdks/jc320v25.0_kit` with `targetsdk = "3.0.4"`. That kit carries the 3.0.4 API and its export
+  files internally. This exact pairing matters — the 3.0.4 kit is refused on JDK 17 ("converter
+  caps at 1.6"), and pointing `targetsdk` at the `jc304_kit` *directory* instead converts but then
+  fails verification. **Re-verify on a real card before changing the kit, `targetsdk` or the
+  ant-javacard version.** CI asserts the CAP still reports JavaCard 3.0.4 with v1.5 imports.
+- The Gradle **configuration cache is unsupported**: `convertJavacard` calls `Project.ant` at
+  execution time, and `InstallTask`/`LockTask` call `getProject()`. Do not enable it.
 
 ### Build commands
 
@@ -66,7 +77,7 @@ SatoChip-v*.cap           Pre-built CAP artifacts in the worktree (untracked, ig
 ./gradlew convertJavacard   # -> build/javacard/org/satochip/applet/javacard/applet.cap
 ./gradlew install           # load + install both applets over SCP02
 ./gradlew test              # default target 'card'; -Porg.satochip.test.target=simulator for CI
-ant build                   # legacy, CardEdge only
+./gradlew caps              # named release CAPs, build/caps/SatoChip-3.0.{4,5}.cap
 ```
 
 Build identifiers:
@@ -92,7 +103,7 @@ gp -uninstall SatoChip-3.0.4.cap        # remove it
 - Negative tests must go through `TestSatochipCommandSet.sendRawSecure`/`sendRawPlain`, never `cardTransmit`: the production `cardTransmit` silently reopens the secure channel and re-verifies the PIN on 0x9C06, which turns an authorization failure into a success.
 - A simulator is not a card. Green tests do not prove hardware behaviour: timing, transient-memory limits and EEPROM tearing all differ. Keep running the card target and the pysatochip hardware tests before a release.
 - Complementary client-side coverage lives in [pysatochip](https://github.com/Toporin/pysatochip).
-- `./gradlew convertJavacard` (or `ant build`) is the minimum check for any change; `./gradlew test -Porg.satochip.test.target=simulator` is the next one.
+- `./gradlew convertJavacard` is the minimum check for any change; `./gradlew test -Porg.satochip.test.target=simulator` is the next one.
 
 ## Runtime architecture
 

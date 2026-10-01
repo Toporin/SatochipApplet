@@ -14,25 +14,14 @@ jobs:
         with:
           submodules: recursive   # sdks/ holds the JavaCard SDK used by the converter
 
-      # Two JDKs are needed and neither can replace the other:
-      #  - JDK 11 builds the applet. The JavaCard 3.0.4 converter only accepts class file v50,
-      #    and JDK 11 is the last javac that accepts -source 6.
-      #  - JDK 17 runs the tests, because JCardEngine is compiled for Java 17.
-      # setup-java leaves JAVA_HOME pointing at the last JDK installed, so install 17 first
-      # and keep its path, then install 11 as the build JDK.
-      - name: Set up JDK 17 (tests)
+      # One JDK for everything. The CAP still targets JavaCard 3.0.4: the build runs the v25.0
+      # converter with targetsdk="3.0.4", so it is not tied to the 3.0.4 SDK's JDK 11 limit.
+      # 17 is the floor because JCardEngine (the test simulator) is Java 17 bytecode.
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Remember JDK 17
-        run: echo "JAVA17_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
-
-      - name: Set up JDK 11 (applet build)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '11'
 
       - uses: actions/cache@v4
         with:
@@ -49,10 +38,24 @@ jobs:
       - name: Show CAP contents
         run: java -jar gp.jar --info --cap build/javacard/org/satochip/applet/javacard/applet.cap
 
+      # Card compatibility is the thing a toolchain change could silently break, so assert it
+      # rather than eyeballing the step above.
+      - name: Assert the CAP still targets JavaCard 3.0.4 with both applets
+        run: |
+          info=$(java -jar gp.jar --info --cap build/javacard/org/satochip/applet/javacard/applet.cap)
+          echo "$info" | grep -q 'applets for JavaCard 3.0.4'          || { echo "::error::CAP no longer targets JavaCard 3.0.4"; exit 1; }
+          echo "$info" | grep -q 'v1.5 javacard.framework'             || { echo "::error::javacard.framework import is not v1.5"; exit 1; }
+          echo "$info" | grep -q 'v1.5 javacard.security'              || { echo "::error::javacard.security import is not v1.5"; exit 1; }
+          echo "$info" | grep -q '5361746F4368697000'                  || { echo "::error::CardEdge AID missing"; exit 1; }
+          echo "$info" | grep -q '5361746F4368697001'                  || { echo "::error::NDEFApplet AID missing"; exit 1; }
+
       # 'simulator' rather than the default 'card': CI has no reader, and the card target would
       # reflash whatever card were present.
       - name: Test against the JCardEngine simulator
         run: ./gradlew --no-daemon test -Porg.satochip.test.target=simulator
+
+      - name: Build the named release CAPs
+        run: ./gradlew --no-daemon caps
 
       - name: Upload test report
         if: always()
@@ -62,16 +65,10 @@ jobs:
           path: build/reports/tests/test
           if-no-files-found: ignore
 
-  # The legacy Ant build only produces the CardEdge applet; keep it compiling.
-  ant-build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - name: Upload CAPs
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          submodules: recursive
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '11'
-      - run: sudo apt-get update && sudo apt-get install -y ant
-      - run: ant build
+          name: caps
+          path: build/caps
+          if-no-files-found: ignore

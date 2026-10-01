@@ -62,54 +62,20 @@ Available for purchase [here](https://www.motechno.com/product/j3d081-dual-inter
 
 You can build the javacard CAP files or use the lastest [built version](https://github.com/Toporin/SatochipApplet/releases).
 
-There are two ways to generate the CAP file from the sources: the [Gradle](#building-using-gradle) build (recommended, builds both applets of the package and can install them on a card), or the legacy [Ant](#building-using-ant-legacy) build using the [ant-javacard](https://github.com/martinpaljak/ant-javacard) task (builds the `CardEdge` applet only).
-
-## Building using Ant (legacy)
-
-* Clone Satochip applet repository:
-```
-git clone https://github.com/Toporin/SatochipApplet.git
-```
-
-* Download Ant-Javacard [latest release](https://github.com/martinpaljak/ant-javacard) in the `lib` folder:
-```
-https://github.com/martinpaljak/ant-javacard/releases/latest/download/ant-javacard.jar
-```
-
-* Install [Apache Ant](https://ant.apache.org/srcdownload.cgi):
-```
-sudo apt install ant
-```
-
-* Use/install [recommended](https://github.com/martinpaljak/ant-javacard/wiki/JavaCard-SDK-and-JDK-version-compatibility) java JDK 8 or 11
-```
-sudo update-alternatives --config java
-```
-
-* Download javacard SDK into satochip project in `sdks` folder:
-```
-git submodule add https://github.com/martinpaljak/oracle_javacard_sdks sdks
-```
-
-* run ant:
-```ant```
-
-The .cap file should build in the SatochipApplet folder.
+CAP files are built with Gradle, which drives the [ant-javacard](https://github.com/martinpaljak/ant-javacard) converter. See [Building using Gradle](#building-using-gradle).
 
 ## Building using Gradle
 
-The Gradle build is the recommended one: it builds **both** applets contained in the package
-(`CardEdge` and `NDEFApplet`) and can also install them on a card without GlobalPlatformPro.
-The Ant build above is kept as the legacy path and only builds `CardEdge`.
+The build produces a CAP containing **both** applets of the package (`CardEdge` and
+`NDEFApplet`) and can install them on a card without GlobalPlatformPro.
 
 ### Requirements
 
-* **OpenJDK 11**, with `JAVA_HOME` pointing at it. The build uses Gradle 4.10 with
-  `sourceCompatibility 1.6`, which requires a JDK no newer than 11. JDK 8 is *not* enough either,
-  because some build dependencies are compiled for Java 11.
+* **OpenJDK 17 or newer**, with `JAVA_HOME` pointing at it. 17 is the minimum because the test
+  simulator is compiled for Java 17; there is no upper bound.
 ```
-sudo apt install openjdk-11-jdk
-export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+sudo apt install openjdk-17-jdk
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ```
 
 * The JavaCard SDKs, which come in as a git submodule. Clone with:
@@ -136,6 +102,26 @@ both the `CardEdge` applet (AID `5361746F4368697000`) and the `NDEFApplet` (AID
 ```
 java -jar gp.jar --info --cap build/javacard/org/satochip/applet/javacard/applet.cap
 ```
+
+For named, versioned release artifacts:
+
+```
+./gradlew caps
+```
+
+which writes `build/caps/SatoChip-3.0.4.cap` and `build/caps/SatoChip-3.0.5.cap`. Both contain
+both applets.
+
+#### Why the CAP targets 3.0.4 but is built with a newer SDK
+
+The applet must stay loadable on JavaCard 3.0.4 cards, but the 3.0.4 SDK's converter only accepts
+Java 6 class files and cannot run on a JDK newer than 11. The build therefore runs the **v25.0**
+converter (`sdks/jc320v25.0_kit`) with **`targetsdk = "3.0.4"`**, which emits a CAP declaring
+JavaCard 3.0.4 with `v1.5` API imports — the same thing the old JDK 11 build produced. That kit
+ships the 3.0.4 API and its export files internally, which is why it can target 3.0.4 on its own.
+The pairing is specific: pointing `targetsdk` at the `jc304_kit` *directory* instead fails
+verification, and the 3.0.4 kit itself is refused on JDK 17. Re-verify against a card before
+changing it.
 
 ### Installing on a card
 
@@ -217,18 +203,8 @@ a real card.
 
 ### Requirements
 
-Two JDKs, because neither can do the other's job:
-
-* **JDK 11** builds the applet (the JavaCard 3.0.4 converter only accepts Java 6 class files, and
-  JDK 11 is the last javac that accepts `-source 6`). This is the JDK Gradle itself runs on.
-* **JDK 17** runs the tests, because the [JCardEngine](https://github.com/martinpaljak/JCardEngine)
-  simulator is compiled for Java 17.
-
-Point the build at the second one with `JAVA17_HOME`, or `-Porg.satochip.test.jdk17=...`:
-
-```
-export JAVA17_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-```
+The same JDK 17 (or newer) as the build — nothing extra. 17 is the minimum because
+[JCardEngine](https://github.com/martinpaljak/JCardEngine), the simulator, is compiled for Java 17.
 
 ### Running
 

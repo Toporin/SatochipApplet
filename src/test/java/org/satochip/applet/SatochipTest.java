@@ -44,7 +44,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * irreversible without a factory reset and would poison the rest of the run.
  */
 @DisplayName("Test the Satochip Applet")
-@TestMethodOrder(MethodOrderer.Alphanumeric.class)
+@TestMethodOrder(MethodOrderer.MethodName.class)
 public class SatochipTest {
 
   // --- applet constants, mirrored from CardEdge.java -------------------------------------------
