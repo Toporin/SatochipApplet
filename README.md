@@ -1,5 +1,5 @@
 # SatochipApplet
-Open source javacard applet implementing a crypto-currency hardware wallet with full BIP32/BIP39 support.
+Open source javacard applet implementing a Bitcoin hardware wallet with full BIP32/BIP39 support.
 
 # Demonstration 
 
@@ -20,96 +20,63 @@ Access to private keys (creation, derivation and signature) is enforced through 
 Advantages:
 - Code is free and open source (no NDA required!)
 - Code easy to read and maintain (java card is a subset of java)
-- Multiple form factor could be supported in addition to Yubikey (e.g sim cards)
+- Multiple form factor could be supported in addition to smartcard (e.g sim cards, rings, ...)
 - Plug and play
 - Smartcards have a long experience in dealing with security and physical security in particular
-- Can be easily used or extended for other crypto-currencies
+- Compatible with other crypto-currencies
 - Critical functionalities are covered by a test suite run against the card, including the official Bitcoin BIP test vectors (see [Test](#test))
 
-Also, if used with a Yubikey:
-- Yubikey has minimal size and is practically indestructible;
-- The Yubico company is not going anywhere anytime soon;
-- Many promising functionalities: NFC, Yubikey OTP, U2F, ...;
-- Possibility to use the HMAC-SHA1 challenge-response of the Yubikey as second factor for additional security against malwares.
-
 Disadvantages:
-- Building the applet might be a bit tricky;
 - The software implementation of HMAC-SHA512 could have an potential impact on the physical security against side-channel attacks (for attackers with physical access to the chip).
 
 # Supported hardware
 
+The list of algorithms the card must or can support is as follows:
+- Must be supported and is part of JavaCard 3.0.5:
+  -  KeyAgreement.ALG_EC_SVDP_DH_PLAIN_XY
+- Must be supported and is part of JavaCard 3.0.4: 
+  - Cipher.ALG_AES_BLOCK_128_CBC_NOPAD
+  - MessageDigest.ALG_SHA_256
+  - MessageDigest.ALG_SHA_512
+  - RandomData.ALG_SECURE_RANDOM
+  - Signature.ALG_AES_MAC_128_NOPAD
+  - Signature.ALG_ECDSA_SHA_256
+
 To support Bitcoin signatures, the javacard must support ALG_ECDSA_SHA_256, which in practice requires a javacard compliant with the JavaCard 3.0.1 specification. Note that this is a necessary but not sufficient condition since javacards typically implements only a subset of the specification.
+
+The card must also implement `KeyAgreement.ALG_EC_SVDP_DH_PLAIN_XY`, which is part of JavaCard
+3.0.5, so in practice a 3.0.5-capable card is required. This is a *runtime* requirement on the
+card's implementation and is independent of the CAP, which targets JavaCard 3.0.4 so that it loads
+as widely as possible — the algorithm is selected by a constant passed to a method that already
+exists in 3.0.4.
+
 A detailed list of javacard and their supported features is available [here](http://www.fi.muni.cz/~xsvenda/jcsupport.html).
 
 An interesting guide to consult before shopping can be found [here](https://github.com/martinpaljak/GlobalPlatformPro/tree/master/docs/JavaCardBuyersGuide).
 
 ## Tested and working
 
-### Yubikey Neo
-**Important remark:** the Yubikeys currently sold by Yubico are configured for production only and it is not possible to load the applet on these dongles (see [this link](https://www.yubico.com/2014/07/yubikey-neo-updates/) for more details). Only the development Yubikeys (with serial number below 3,000,000) are suitable for our use! 
-
-### NXP JCOP J2D081
-Available for purchase [here](https://www.javacardsdk.com/product/j2d081/). (MOQ: 5 pieces).
-
-### Swissbit PS-100u VE card Secure micro SD memory card
-More info [here](http://www.swissbit.com/index.php?option=com_content&view=article&id=293&Itemid=601)
-(Note however that Swissbit does not sell its product directly to end users but only to business partners).
-
-### J3D081 JCOP v2.4.2 R2
-Available for purchase [here](https://www.motechno.com/product/j3d081-dual-interface-javacard-3-0-1/). (MOQ: 1 piece).
+* NXP JCOP4 J3R180 (recommended)
+* NXP JCOP3 J3H145
 
 # Buidl
 
 You can build the javacard CAP files or use the lastest [built version](https://github.com/Toporin/SatochipApplet/releases).
 
-There are two ways to generate the CAP file from the sources: the [Gradle](#building-using-gradle) build (recommended, builds both applets of the package and can install them on a card), or the legacy [Ant](#building-using-ant-legacy) build using the [ant-javacard](https://github.com/martinpaljak/ant-javacard) task (builds the `CardEdge` applet only).
-
-## Building using Ant (legacy)
-
-* Clone Satochip applet repository:
-```
-git clone https://github.com/Toporin/SatochipApplet.git
-```
-
-* Download Ant-Javacard [latest release](https://github.com/martinpaljak/ant-javacard) in the `lib` folder:
-```
-https://github.com/martinpaljak/ant-javacard/releases/latest/download/ant-javacard.jar
-```
-
-* Install [Apache Ant](https://ant.apache.org/srcdownload.cgi):
-```
-sudo apt install ant
-```
-
-* Use/install [recommended](https://github.com/martinpaljak/ant-javacard/wiki/JavaCard-SDK-and-JDK-version-compatibility) java JDK 8 or 11
-```
-sudo update-alternatives --config java
-```
-
-* Download javacard SDK into satochip project in `sdks` folder:
-```
-git submodule add https://github.com/martinpaljak/oracle_javacard_sdks sdks
-```
-
-* run ant:
-```ant```
-
-The .cap file should build in the SatochipApplet folder.
+CAP files are built with Gradle, which drives the [ant-javacard](https://github.com/martinpaljak/ant-javacard) converter. See [Building using Gradle](#building-using-gradle).
 
 ## Building using Gradle
 
-The Gradle build is the recommended one: it builds **both** applets contained in the package
-(`CardEdge` and `NDEFApplet`) and can also install them on a card without GlobalPlatformPro.
-The Ant build above is kept as the legacy path and only builds `CardEdge`.
+The build produces a CAP containing **both** applets of the package (`Satochip` and
+`NDEFApplet`) and can install them on a card without GlobalPlatformPro.
 
 ### Requirements
 
-* **OpenJDK 11**, with `JAVA_HOME` pointing at it. The build uses Gradle 4.10 with
-  `sourceCompatibility 1.6`, which requires a JDK no newer than 11. JDK 8 is *not* enough either,
-  because some build dependencies are compiled for Java 11.
+* **OpenJDK 17 or newer**, with `JAVA_HOME` pointing at it. 17 is the minimum because the test
+  simulator is compiled for Java 17; there is no upper bound.
 ```
-sudo apt install openjdk-11-jdk
-export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+sudo apt install openjdk-17-jdk
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ```
 
 * The JavaCard SDKs, which come in as a git submodule. Clone with:
@@ -130,12 +97,26 @@ Gradle itself is downloaded by the wrapper, so nothing else has to be installed.
 ```
 
 The CAP file is written to `build/javacard/org/satochip/applet/javacard/applet.cap`. It contains
-both the `CardEdge` applet (AID `5361746F4368697000`) and the `NDEFApplet` (AID
+both the `Satochip` applet (AID `5361746F4368697000`) and the `NDEFApplet` (AID
 `5361746F4368697001`). You can check its content with:
 
 ```
 java -jar gp.jar --info --cap build/javacard/org/satochip/applet/javacard/applet.cap
 ```
+
+When cutting a release, rename that file to the applet version, as the published artifacts are
+named (for example `SatoChip-v0.16-0.0.cap`); the build itself produces only `applet.cap`.
+
+#### Why the CAP targets 3.0.4 but is built with a newer SDK
+
+The applet must stay loadable on JavaCard 3.0.4 cards, but the 3.0.4 SDK's converter only accepts
+Java 6 class files and cannot run on a JDK newer than 11. The build therefore runs the **v25.0**
+converter (`sdks/jc320v25.0_kit`) with **`targetsdk = "3.0.4"`**, which emits a CAP declaring
+JavaCard 3.0.4 with `v1.5` API imports — the same thing the old JDK 11 build produced. That kit
+ships the 3.0.4 API and its export files internally, which is why it can target 3.0.4 on its own.
+The pairing is specific: pointing `targetsdk` at the `jc304_kit` *directory* instead fails
+verification, and the 3.0.4 kit itself is refused on JDK 17. Re-verify against a card before
+changing it.
 
 ### Installing on a card
 
@@ -211,20 +192,96 @@ Because of this, the task refuses to run unless you confirm explicitly:
 
 # Test
 
-This repository has no test suite of its own: the applet is tested from the client side, over the APDU interface, by the [pysatochip](https://github.com/Toporin/pysatochip) library. It provides both offline tests, which check the client and pin a BIP340/BIP341 reference implementation to the official Bitcoin test vectors, and hardware tests, which run the applet's BIP32 derivation, message signing, taproot/schnorr and MuSig2 commands against a card and compare the results to those vectors.
+The applet has a JUnit suite in `src/test/java/org/satochip/applet/`. It drives the applet purely
+over APDUs, exactly as a client would, so the same tests run either against a simulator or against
+a real card.
 
-See the [Running the Tests](https://github.com/Toporin/pysatochip#running-the-tests) section of the pysatochip README for the test list and how to run them. Note that the hardware tests are destructive: only run them against a development card.
+### Requirements
 
-# Install
+The same JDK 17 (or newer) as the build — nothing extra. 17 is the minimum because
+[JCardEngine](https://github.com/martinpaljak/JCardEngine), the simulator, is compiled for Java 17.
+
+### Running
+
+```
+./gradlew test
+```
+
+The default target is **`card`**: this builds the CAP, installs it on the card in the reader (so
+the usual `install` requirements apply) and then runs the suite against it. As with
+`./gradlew install`, keep only one reader connected.
+
+> :warning: `./gradlew test` **reinstalls the applet**, which erases the seed, keys and PIN on the
+> card in the reader. Only run it against a development card.
+
+To run without hardware, against the simulator:
+
+```
+./gradlew test -Porg.satochip.test.target=simulator
+```
+
+This is what CI uses. Test reports land in `build/reports/tests/test/`.
+
+Against a card the suite always re-runs: the card holds state Gradle cannot see, and the install
+step reflashes it on every invocation, so a skipped run would wipe the card without verifying
+anything. The simulator target stays incremental, so a second identical run reports
+`:test UP-TO-DATE` and prints nothing — use `--rerun-tasks` to force it.
+
+### What is covered
+
+Security boundaries first: the secure channel is mandatory and replay-protected, PIN/PUK try
+counters, the v0.16 `UnblockPIN` format, setup-runs-once, feature policies (a disabled feature
+rejects its command and can be re-enabled), and the removed commands reporting
+`SW_INS_DEPRECATED`. Then the crypto: BIP32 derivation against the specification's test vectors
+and cross-checked with bitcoinj, ECDSA signatures verified with BouncyCastle, and BIP340 Schnorr
+signatures verified against a verifier written out from the specification — including a regression
+test for the v0.16 bug where the tweaked private key did not survive the first signature. The NDEF
+applet is covered too, including that a record written with `INS_SET_NDEF` is served over the
+Type 4 interface.
+
+The suite uses a **shared card**: it is set up once and reused, because a factory reset on applet
+versions before v0.16 needed the card to be physically removed and reinserted. Every test restores
+the baseline state it found, and nothing ever sets a policy to BLOCKED or blocks the PUK, since
+those are irreversible without a factory reset.
+
+Some tests are skipped rather than failed when the target lacks a capability — notably Schnorr,
+which needs the card's RSA engine for `Biginteger.mult_rsa_trick()`. On the simulator that
+currently requires a one-line JCardEngine patch (see `jcardengine-pr.md`); without it the Schnorr
+test reports as skipped.
+
+### Client-side tests
+
+Complementing this, the [pysatochip](https://github.com/Toporin/pysatochip) library tests the
+applet from the client side: offline tests that pin a BIP340/BIP341 reference implementation to
+the official Bitcoin test vectors, and hardware tests that run BIP32 derivation, signing,
+taproot/schnorr and MuSig2 against a card. See
+[Running the Tests](https://github.com/Toporin/pysatochip#running-the-tests). Those hardware tests
+are destructive too: development cards only.
+
+# Install the CAP file with GlobalPlatformPro
 
 Once you have a CAP file, you have to download it on the chip card. You can use [GlobalPlatformPro](https://github.com/martinpaljak/GlobalPlatformPro) to do this:
 
 - Download the latest release from https://github.com/martinpaljak/GlobalPlatformPro/releases
 - (Put the CAP file in the same folder as the GPJ jar file for convenience)
 - To list the applets loaded on a smartcard: `gp.exe -l`
-- To load the SatoChip applet: `gp.exe -install .\SatoChip-0.12-05.cap`
-- To delete the SatoChip applet: `gp.exe -uninstall .\SatoChip-0.12-05.cap`
-- You can also use the gp.jar library: `java -jar gp.jar -install .\SatoChip-0.12-05.cap`
+
+```
+# 1. (Only if an older version is already on the card) remove it and its instances
+java -jar gp.jar --delete 5361746F43686970 -f
+
+# 2. Load the package (no applet instances yet)
+java -jar gp.jar --load applet.cap
+
+# 3. Create the Satochip applet instance (instance AID = applet AID)
+java -jar gp.jar --package 5361746F43686970 --applet 5361746F4368697000 --create 5361746F4368697000
+
+# 4. Create the NDEF instance under the standard NDEF AID
+java -jar gp.jar --package 5361746F43686970 --applet 5361746F4368697001 --create D2760000850101
+
+# 5. Check the result
+java -jar gp.jar --list
+```
 
 A more detailed tutorial is available on the GlobalPlatformPro [repository](https://github.com/martinpaljak/GlobalPlatformPro).
 
@@ -249,9 +306,8 @@ To use the applet, you have to connect your client application to the smartcard 
 
 # Credits
 
-- The CardEdge javacard applet is derived from the [MUSCLE framework](http://pcsclite.alioth.debian.org/musclecard.com/info.html).
-- The Bitcoin transaction parser is derived from [Btchip](https://github.com/LedgerHQ/btchipJC).
-- The BitcoinWallet application is based on ScripterRon [BitcoinWallet](https://github.com/ScripterRon/BitcoinWallet) client and [BitcoinCore](https://github.com/ScripterRon/BitcoinCore) library.
+- The Satochip javacard applet is derived from the [MUSCLE framework](http://pcsclite.alioth.debian.org/musclecard.com/info.html) (its main class was called `CardEdge` until v0.16).
+- The testing framework and the gradle build is inspired from [Keycard](https://github.com/keycard-tech/status-keycard).
 
 # License
 

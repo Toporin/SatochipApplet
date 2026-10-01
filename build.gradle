@@ -1,55 +1,168 @@
-apply plugin: 'javacard'
+apply plugin: 'java'
 
-project.ext.set("com.fidesmo.gradle.javacard.home", "./sdks/jc304_kit")
-
-buildscript {
-  repositories {
-    maven { url 'http://releases.marmeladburk.fidesmo.com/' }
-    mavenCentral()
-    maven { url 'https://jitpack.io' }
-    maven { url 'https://mvn.javacard.pro/maven/' }
-  }
-
-  dependencies {
-    classpath 'com.fidesmo:gradle-javacard:0.2.7'
-  }
+// ---------------------------------------------------------------------------------------------
+// JavaCard toolchain
+//
+// The CAP must stay loadable on JavaCard 3.0.4 cards, but the 3.0.4 SDK's converter only accepts
+// Java 6 class files and ant-javacard refuses to run it on anything newer than JDK 11. The way out
+// is `targetsdk`: run a modern converter and tell it which API level to emit imports for. The
+// jc320v25.0 kit ships the 3.0.4 API *and* its export files (embedded in tools.jar), so a single
+// kit covers both the tooling and the target.
+//
+// The exact pairing matters -- most combinations do not work:
+//   jc304_kit                              -> refused on JDK 17 ("converter caps at 1.6")
+//   jc305u4_kit + targetsdk=<jc304 path>   -> works, but caps the build at JDK 17
+//   jc320v2x    + targetsdk=<jc304 path>   -> converts, then the verifier rejects the old .exp files
+//   jc320v25.0  + targetsdk="3.0.4"        -> works, and builds on JDK 17 and 21
+// Re-verify against a card before changing any of this.
+// ---------------------------------------------------------------------------------------------
+ext {
+  jckit       = "$projectDir/sdks/jc320v25.0_kit"
+  targetSdk   = '3.0.4'                       // JavaCard level the CAP declares
+  packageAid  = '5361746F43686970'            // "SatoChip"
+  packageVer  = '0.1'
+  satochipAid = '5361746F4368697000'
+  ndefAid     = '5361746F4368697001'
+  // The 3.0.4 API stubs, for compileJava only. Deliberately the *target* level, so the classes the
+  // simulator runs are compiled against the same API the converter links against.
+  javacardApi = "$projectDir/sdks/jc320v25.0_kit/lib/api_classic-3.0.4.jar"
 }
 
-javacard {
-  sdkVersion = "3.0.4"
-
-  cap {
-    aid = '0x53:0x61:0x74:0x6F:0x43:0x68:0x69:0x70'
-    packageName = 'org.satochip.applet'
-    applet {
-      aid = '0x53:0x61:0x74:0x6F:0x43:0x68:0x69:0x70:0x00'
-      className = 'CardEdge'
-    }
-    applet {
-      aid = '0x53:0x61:0x74:0x6F:0x43:0x68:0x69:0x70:0x01'
-      className = 'NDEFApplet'
-    }
-    version = '0.1'
-  }
+// JCardEngine (the test simulator) is Java 17 bytecode, so 17 is the floor. There is no upper
+// bound: the v25.0 converter accepts class 54, so JDK 21+ works too.
+if (JavaVersion.current() < JavaVersion.VERSION_17) {
+  throw new GradleException(
+    "This build requires JDK 17 or newer (found ${JavaVersion.current()}).\n" +
+    "  export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64")
 }
 
 repositories {
+  mavenLocal()  // lets a locally published Satochip-Java be used before it is tagged on JitPack
   mavenCentral()
-  maven { url 'https://jitpack.io' }
-  maven { url 'https://mvn.javacard.pro/maven/' }
+  maven { url = uri('https://jitpack.io') }
+  maven { url = uri('https://mvn.javacard.pro/maven/') }
+  // JCardEngine only publishes snapshots so far; an exact timestamped version is pinned below.
+  maven { url = uri('https://mvn.javacard.pro/public-snapshots/') }
+}
+
+// Test target: 'card' (default, like Keycard: builds the CAP, installs it, then tests the card)
+// or 'simulator' (JCardEngine, no hardware; what CI uses).
+def testTarget = project.properties['org.satochip.test.target'] ?: 'card'
+
+// BouncyCastle jars are signed, and two of them exposing the same packages make the JVM throw
+// "signer information does not match". Satochip-Java 0.3.4 settled on bcprov-jdk18on and excludes
+// bitcoinj's copy, but bitcoinj is declared directly below (for its own transitive dependencies),
+// so its BouncyCastle has to be excluded here too.
+configurations.all {
+  exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
+  exclude group: 'org.bouncycastle', module: 'bcprov-jdk15to18'
+}
+
+configurations {
+  javacardTool   // ant-javacard, used to convert the applet to a CAP
 }
 
 dependencies {
+  javacardTool 'com.github.martinpaljak:ant-javacard:26.05.15'
+
+  // compileOnly, never implementation: these are API *stubs*. The simulator provides the real
+  // implementations, and if the stubs reach the test runtime classpath every API call throws.
+  compileOnly files(javacardApi)
+
+  testImplementation 'pro.javacard:jcardengine:26.09.15-20260928.050453-6'
+  // brings satochip-lib, and bcprov-jdk18on with it (an `api` dependency of the library)
+  testImplementation 'com.github.Toporin.Satochip-Java:satochip-desktop:0.3.4'
+  testImplementation 'org.bitcoinj:bitcoinj-core:0.16.2'
+  testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'
+  testRuntimeOnly    'org.junit.jupiter:junit-jupiter-engine:5.10.2'
+  testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
 }
 
-task install (type: org.satochip.build.InstallTask)
-tasks.install.dependsOn(convertJavacard)
+compileJava {
+  // The converter accepts class 51; this is not a style choice. Note that Java 7 *language*
+  // features are still unusable on a card (switch-on-String needs String.hashCode,
+  // try-with-resources needs AutoCloseable; neither exists in the JavaCard runtime).
+  sourceCompatibility = '7'
+  targetCompatibility = '7'
+  options.compilerArgs << '-Xlint:-options'   // silence "source 7 is obsolete" / bootclasspath
+}
+
+// ---------------------------------------------------------------------------------------------
+// CAP conversion, via ant-javacard driven through Gradle's Ant integration
+// ---------------------------------------------------------------------------------------------
+
+def appletCap = layout.buildDirectory.file('javacard/org/satochip/applet/javacard/applet.cap')
+
+tasks.register('convertJavacard') {
+  group = 'build'
+  description = "Converts the applet to a CAP targeting JavaCard ${targetSdk}"
+
+  inputs.dir('src/main/java').withPathSensitivity(PathSensitivity.RELATIVE)
+  inputs.files(configurations.javacardTool)
+  inputs.dir("$jckit/lib")
+  inputs.property('targetSdk', targetSdk)
+  inputs.property('packageAid', packageAid)
+  inputs.property('packageVer', packageVer)
+  inputs.property('applets', [satochipAid, ndefAid])
+  outputs.file(appletCap)
+
+  doLast {
+    // Captured as locals: inside the ant.javacard closure the delegate is the AntBuilder node,
+    // so project properties are not reliably resolvable from there.
+    def out       = appletCap.get().asFile
+    def toolPath  = configurations.javacardTool.asPath
+    def kit       = jckit
+    def target    = targetSdk
+    def pkgAid    = packageAid
+    def pkgVer    = packageVer
+    def satoAid   = satochipAid
+    def tagAid    = ndefAid
+    def sourceDir = "$projectDir/src/main/java/org/satochip/applet"
+
+    // ant-javacard throws NoSuchFileException if the output directory does not exist.
+    out.parentFile.mkdirs()
+
+    ant.taskdef(name: 'javacard', classname: 'pro.javacard.ant.JavaCard', classpath: toolPath)
+    ant.javacard(jckit: kit) {
+      cap(aid: pkgAid, version: pkgVer, targetsdk: target,
+          output: out.absolutePath, sources: sourceDir) {
+        applet('class': 'org.satochip.applet.Satochip',   aid: satoAid)
+        applet('class': 'org.satochip.applet.NDEFApplet', aid: tagAid)
+      }
+    }
+  }
+}
+
+tasks.named('assemble') { dependsOn 'convertJavacard' }
+
+// ---------------------------------------------------------------------------------------------
+// Card tasks
+// ---------------------------------------------------------------------------------------------
+
+tasks.register('install', org.satochip.build.InstallTask) {
+  dependsOn 'convertJavacard'
+}
 
 // DESTRUCTIVE: running this task permanently prevents deleting, updating or
 // reinstalling the applet on the card. See the README before using it.
-task lock (type: org.satochip.build.LockTask)
+tasks.register('lock', org.satochip.build.LockTask)
 
-compileJava {
-  sourceCompatibility = 1.6
-  targetCompatibility = 1.6
+test {
+  useJUnitPlatform { excludeTags 'manual' }
+  testLogging { events 'passed', 'skipped', 'failed'; showStandardStreams = false }
+  systemProperty 'org.satochip.test.target', testTarget
+
+  if (testTarget == 'card') {
+    // Never let this task be considered up to date. The card holds state that Gradle cannot see,
+    // so it is an undeclared input; and `install` below has no outputs, so it reflashes the card
+    // on every invocation. Without this, a second `./gradlew test` wipes the card and then skips
+    // the suite, reporting BUILD SUCCESSFUL without having verified anything.
+    // The simulator target is left incremental: there its inputs really are fully declared.
+    outputs.upToDateWhen { false }
+  }
+}
+
+if (testTarget == 'card') {
+  // Like Keycard: build the CAP and flash the card before running the suite.
+  tasks.named('test') { dependsOn 'install' }
 }

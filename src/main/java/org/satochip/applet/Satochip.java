@@ -70,7 +70,7 @@ import javacardx.crypto.Cipher;
 /**
  * Implements MUSCLE's Card Edge Specification.
  */
-public class CardEdge extends javacard.framework.Applet { 
+public class Satochip extends javacard.framework.Applet { 
 
     /* constants declaration */
     
@@ -331,7 +331,6 @@ public class CardEdge extends javacard.framework.Applet {
 
     // JC API 2.2.2 does not define these constants:
     private final static byte ALG_ECDSA_SHA_256= (byte) 33;
-    private final static byte ALG_EC_SVDP_DH_PLAIN= (byte) 3; //https://javacard.kenai.com/javadocs/connected/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN
     private final static byte ALG_EC_SVDP_DH_PLAIN_XY= (byte) 6; //https://docs.oracle.com/javacard/3.0.5/api/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN_XY
     private final static short LENGTH_EC_FP_256= (short) 256;
     private final static byte TYPE_AES_TRANSIENT_DESELECT = (byte) 14;
@@ -482,7 +481,6 @@ public class CardEdge extends javacard.framework.Applet {
     
     //2FA data
     private boolean needs_2FA= false;
-    //private boolean done_once_2FA= false;
     private byte[] data2FA;
     private static final byte OFFSET_2FA_HMACKEY=0;
     private static final byte OFFSET_2FA_ID=OFFSET_2FA_HMACKEY+20;
@@ -567,7 +565,7 @@ public class CardEdge extends javacard.framework.Applet {
      *                Methods               *
      ****************************************/
 
-    private CardEdge(byte[] bArray, short bOffset, byte bLength) {
+    private Satochip(byte[] bArray, short bOffset, byte bLength) {
 
         // The PIN is not set in the constructor: it is created during setup().
         // Before setup, the PIN is null and operations requiring it are handled accordingly.
@@ -713,7 +711,7 @@ public class CardEdge extends javacard.framework.Applet {
     } // end of constructor
 
     public static void install(byte[] bArray, short bOffset, byte bLength) {
-        CardEdge wal = new CardEdge(bArray, bOffset, bLength);
+        Satochip wal = new Satochip(bArray, bOffset, bLength);
     }
 
     public boolean select() {
