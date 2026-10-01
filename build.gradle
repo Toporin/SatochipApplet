@@ -151,6 +151,15 @@ test {
   useJUnitPlatform { excludeTags 'manual' }
   testLogging { events 'passed', 'skipped', 'failed'; showStandardStreams = false }
   systemProperty 'org.satochip.test.target', testTarget
+
+  if (testTarget == 'card') {
+    // Never let this task be considered up to date. The card holds state that Gradle cannot see,
+    // so it is an undeclared input; and `install` below has no outputs, so it reflashes the card
+    // on every invocation. Without this, a second `./gradlew test` wipes the card and then skips
+    // the suite, reporting BUILD SUCCESSFUL without having verified anything.
+    // The simulator target is left incremental: there its inputs really are fully declared.
+    outputs.upToDateWhen { false }
+  }
 }
 
 if (testTarget == 'card') {

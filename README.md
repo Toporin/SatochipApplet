@@ -222,6 +222,11 @@ To run without hardware, against the simulator:
 
 This is what CI uses. Test reports land in `build/reports/tests/test/`.
 
+Against a card the suite always re-runs: the card holds state Gradle cannot see, and the install
+step reflashes it on every invocation, so a skipped run would wipe the card without verifying
+anything. The simulator target stays incremental, so a second identical run reports
+`:test UP-TO-DATE` and prints nothing — use `--rerun-tasks` to force it.
+
 ### What is covered
 
 Security boundaries first: the secure channel is mandatory and replay-protected, PIN/PUK try

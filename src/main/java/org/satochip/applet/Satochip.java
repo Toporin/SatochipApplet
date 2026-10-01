@@ -481,7 +481,6 @@ public class Satochip extends javacard.framework.Applet {
     
     //2FA data
     private boolean needs_2FA= false;
-    //private boolean done_once_2FA= false;
     private byte[] data2FA;
     private static final byte OFFSET_2FA_HMACKEY=0;
     private static final byte OFFSET_2FA_ID=OFFSET_2FA_HMACKEY+20;
