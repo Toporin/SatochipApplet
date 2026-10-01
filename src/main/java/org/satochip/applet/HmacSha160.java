@@ -45,10 +45,10 @@ public class HmacSha160 {
             byte[] mac, short mac_offset){
         
         if (key_length>BLOCKSIZE || key_length<0){
-            ISOException.throwIt(CardEdge.SW_HMAC_UNSUPPORTED_KEYSIZE); // don't accept keys bigger than block size 
+            ISOException.throwIt(Satochip.SW_HMAC_UNSUPPORTED_KEYSIZE); // don't accept keys bigger than block size 
         }
         if (message_length>MAXMSGSIZE || message_length<0){
-            ISOException.throwIt(CardEdge.SW_HMAC_UNSUPPORTED_MSGSIZE); 
+            ISOException.throwIt(Satochip.SW_HMAC_UNSUPPORTED_MSGSIZE); 
         }
         
         // compute inner hash

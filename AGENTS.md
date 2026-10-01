@@ -18,17 +18,16 @@ Main features (see `CHANGELOG.md` for the full history):
 - PIN/PUK access control, optional 2FA (HMAC-SHA1 challenge via an external device), mandatory secure channel, SeedKeeper secure seed import, personalization PKI, NFC policy and feature policy (features can be enabled/disabled/blocked).
 - Reset to factory settings.
 
-**Versioning** (`CHANGELOG.md`, constants in `CardEdge.java`): full versions are `vX.Y-Z.W` where `X.Y` is the PROTOCOL VERSION (client-compatibility impacting) and `Z.W` the applet version (no client impact). Current version: **0.16-0.0** (work in progress).
+**Versioning** (`CHANGELOG.md`, constants in `Satochip.java`): full versions are `vX.Y-Z.W` where `X.Y` is the PROTOCOL VERSION (client-compatibility impacting) and `Z.W` the applet version (no client impact). Current version: **0.16-0.0** (work in progress).
 
 ## Repository layout
 
 ```
 build.gradle              Gradle build (canonical): CAP, install, lock, test
 buildSrc/                 InstallTask / LockTask (GlobalPlatform over SCP02)
-build.xml                 Ant build script (legacy; builds CardEdge only)
 lib/ant-javacard.jar      ant-javacard Ant task (github.com/martinpaljak/ant-javacard)
 sdks/                     Git submodule: Oracle JavaCard SDKs (2.1.1 .. 3.2.0)
-src/main/java/org/satochip/applet/   Applet sources (CardEdge, NDEFApplet, SharedMemory, helpers)
+src/main/java/org/satochip/applet/   Applet sources (Satochip, NDEFApplet, SharedMemory, helpers)
 src/test/java/org/satochip/applet/   JUnit 5 APDU test suite
 .github/workflows/        CI: builds the CAP and runs the suite on the simulator
 gp.jar, gp.exe            Vendored GlobalPlatformPro for loading CAPs onto cards
@@ -39,7 +38,7 @@ SatoChip-v*.cap           Pre-built CAP artifacts in the worktree (untracked, ig
 
 ### Source files (`src/main/java/org/satochip/applet/`)
 
-- `CardEdge.java` (~4300 lines) — the main applet class (`extends javacard.framework.Applet`). Contains the APDU dispatcher (`process()`), all instruction handlers, PIN management, secure channel, 2FA, BIP32 derivation, Schnorr/Taproot, MuSig2, feature/NFC policies, PKI personalization. Derived from the MUSCLE framework.
+- `Satochip.java` (~4300 lines) — the main applet class (`extends javacard.framework.Applet`). Contains the APDU dispatcher (`process()`), all instruction handlers, PIN management, secure channel, 2FA, BIP32 derivation, Schnorr/Taproot, MuSig2, feature/NFC policies, PKI personalization. Derived from the MUSCLE framework, whose `CardEdge` applet gave the class its former name; the MUSCLE attribution header and the `CardEdge_CLA` constant keep that name deliberately.
 - `NDEFApplet.java` — second applet in the package, installed under the NFC Forum Type 4 AID `D2760000850101`; serves a single NDEF record so tapping the card opens a link.
 - `SharedMemory.java` — the 224-byte NDEF record buffer, shared between the two applet instances.
 - `Secp256k1.java` — secp256k1 domain parameters, EC key initialization helpers and on-curve validation.
@@ -82,7 +81,7 @@ SatoChip-v*.cap           Pre-built CAP artifacts in the worktree (untracked, ig
 Build identifiers:
 
 - Package AID: `5361746F43686970` ("SatoChip" in ASCII)
-- Applet AID: `5361746F4368697000`, main class `org.satochip.applet.CardEdge`
+- Applet AID: `5361746F4368697000`, main class `org.satochip.applet.Satochip`
 - NDEF applet AID: `5361746F4368697001`, instance AID `D2760000850101`
 
 ### Deployment (loading onto a card)
@@ -106,7 +105,7 @@ gp -uninstall SatoChip-3.0.4.cap        # remove it
 
 ## Runtime architecture
 
-- All communication is via **APDUs** with CLA byte `0xB0` (the NDEF applet uses CLA `0x00`). Instruction (INS) codes and status words (SW) are declared as constants at the top of `CardEdge.java` — extend these lists when adding commands.
+- All communication is via **APDUs** with CLA byte `0xB0` (the NDEF applet uses CLA `0x00`). Instruction (INS) codes and status words (SW) are declared as constants at the top of `Satochip.java` — extend these lists when adding commands.
 - **Secure channel is mandatory** (`needs_secure_channel = true`): in plaintext only `GET_STATUS` (0x3C), `INIT_SECURE_CHANNEL` (0x81) and `PROCESS_SECURE_CHANNEL` (0x82) are accepted; everything else must be wrapped through the secure channel or the card throws `SW_SECURE_CHANNEL_REQUIRED`.
 - Setup flow: before `INS_SETUP` completes, only personalization-PKI commands are allowed; `INS_SETUP` can run only once (unless factory reset).
 - Sensitive operations require prior PIN verification; several additionally require 2FA HMAC when a 2FA key is configured.
@@ -115,10 +114,10 @@ gp -uninstall SatoChip-3.0.4.cap        # remove it
 
 ## Code style guidelines
 
-- Match the existing style of `CardEdge.java`: 4-space indentation, `private final static` constants in UPPER_SNAKE_CASE, handlers named after their function (`GetStatus`, `ImportKey`, `SignTransactionHash`...), cast numeric literals to `(byte)`/`(short)` explicitly.
+- Match the existing style of `Satochip.java`: 4-space indentation, `private final static` constants in UPPER_SNAKE_CASE, handlers named after their function (`GetStatus`, `ImportKey`, `SignTransactionHash`...), cast numeric literals to `(byte)`/`(short)` explicitly.
 - JavaCard subset only: no `int` literals beyond `short` range without care, no `long`, no floating point, no exceptions other than `ISOException`/`CryptoException`-style patterns already used, beware of transient vs persistent memory.
 - Every source file carries a license header; keep headers intact and note provenance for third-party-derived code (MUSCLE, BTChip, OV-chip).
-- When bumping versions, update `PROTOCOL_*_VERSION`/`APPLET_*_VERSION` in `CardEdge.java`, the version-history comment block above them, and `CHANGELOG.md` together.
+- When bumping versions, update `PROTOCOL_*_VERSION`/`APPLET_*_VERSION` in `Satochip.java`, the version-history comment block above them, and `CHANGELOG.md` together.
 
 ## Security considerations
 

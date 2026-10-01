@@ -67,7 +67,7 @@ CAP files are built with Gradle, which drives the [ant-javacard](https://github.
 
 ## Building using Gradle
 
-The build produces a CAP containing **both** applets of the package (`CardEdge` and
+The build produces a CAP containing **both** applets of the package (`Satochip` and
 `NDEFApplet`) and can install them on a card without GlobalPlatformPro.
 
 ### Requirements
@@ -97,7 +97,7 @@ Gradle itself is downloaded by the wrapper, so nothing else has to be installed.
 ```
 
 The CAP file is written to `build/javacard/org/satochip/applet/javacard/applet.cap`. It contains
-both the `CardEdge` applet (AID `5361746F4368697000`) and the `NDEFApplet` (AID
+both the `Satochip` applet (AID `5361746F4368697000`) and the `NDEFApplet` (AID
 `5361746F4368697001`). You can check its content with:
 
 ```
@@ -268,7 +268,7 @@ java -jar gp.jar --delete 5361746F43686970 -f
 # 2. Load the package (no applet instances yet)
 java -jar gp.jar --load applet.cap
 
-# 3. Create the CardEdge instance (instance AID = applet AID)
+# 3. Create the Satochip applet instance (instance AID = applet AID)
 java -jar gp.jar --package 5361746F43686970 --applet 5361746F4368697000 --create 5361746F4368697000
 
 # 4. Create the NDEF instance under the standard NDEF AID
@@ -301,7 +301,7 @@ To use the applet, you have to connect your client application to the smartcard 
 
 # Credits
 
-- The CardEdge javacard applet is derived from the [MUSCLE framework](http://pcsclite.alioth.debian.org/musclecard.com/info.html).
+- The Satochip javacard applet is derived from the [MUSCLE framework](http://pcsclite.alioth.debian.org/musclecard.com/info.html) (its main class was called `CardEdge` until v0.16).
 - The testing framework and the gradle build is inspired from [Keycard](https://github.com/keycard-tech/status-keycard).
 
 # License

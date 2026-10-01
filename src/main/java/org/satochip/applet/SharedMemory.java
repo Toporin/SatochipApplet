@@ -21,7 +21,7 @@ public class SharedMemory {
   // 0026d1012255047361746f636869702e696f2f717569636b2d73746172742f7361746f636869702f
   //
   // The record can be replaced at install time through the NDEF applet install parameters,
-  // or at any time afterwards with CardEdge's INS_SET_NDEF (0x3F) command.
+  // or at any time afterwards with the Satochip applet's INS_SET_NDEF (0x3F) command.
   static byte[] ndefDataFile = {
     (byte) 0x28, (byte) 0x00, (byte) 0x26, (byte) 0xd1, (byte) 0x01, (byte) 0x22, (byte) 0x55, (byte) 0x04,
     (byte) 0x73, (byte) 0x61, (byte) 0x74, (byte) 0x6f, (byte) 0x63, (byte) 0x68, (byte) 0x69, (byte) 0x70,

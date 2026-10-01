@@ -47,7 +47,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestMethodOrder(MethodOrderer.MethodName.class)
 public class SatochipTest {
 
-  // --- applet constants, mirrored from CardEdge.java -------------------------------------------
+  // --- applet constants, mirrored from Satochip.java -------------------------------------------
   static final byte INS_GET_RANDOM = (byte) 0x30;
   static final byte INS_SETUP = (byte) 0x2A;
   static final byte INS_GET_STATUS = (byte) 0x3C;
@@ -141,7 +141,7 @@ public class SatochipTest {
 
   private static void openSimulatorChannel() throws Exception {
     engine = JavaCardEngine.create();
-    engine.installApplet(aid(SATOCHIP_INSTANCE_AID), CardEdge.class);
+    engine.installApplet(aid(SATOCHIP_INSTANCE_AID), Satochip.class);
     // The NDEF applet takes its record from the install parameters; empty means "keep the
     // default compiled into SharedMemory".
     engine.installApplet(aid(NDEF_INSTANCE_AID), NDEFApplet.class, new byte[0]);
@@ -502,7 +502,7 @@ public class SatochipTest {
   @Test
   @DisplayName("NDEF applet serves the shared record over the Type 4 interface")
   void ndefAppletTest() throws Exception {
-    // Set a known record through CardEdge, then read it back through the NDEF applet, proving
+    // Set a known record through the Satochip applet, then read it back through NDEFApplet, proving
     // SharedMemory really is shared between the two applet instances.
     byte[] record = Hex.decode("0011d1010d55027361746f636869702e696f");  // URI "https://satochip.io"
     byte[] payload = concat(new byte[]{(byte) record.length}, record);

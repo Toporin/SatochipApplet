@@ -70,7 +70,7 @@ import javacardx.crypto.Cipher;
 /**
  * Implements MUSCLE's Card Edge Specification.
  */
-public class CardEdge extends javacard.framework.Applet { 
+public class Satochip extends javacard.framework.Applet { 
 
     /* constants declaration */
     
@@ -566,7 +566,7 @@ public class CardEdge extends javacard.framework.Applet {
      *                Methods               *
      ****************************************/
 
-    private CardEdge(byte[] bArray, short bOffset, byte bLength) {
+    private Satochip(byte[] bArray, short bOffset, byte bLength) {
 
         // The PIN is not set in the constructor: it is created during setup().
         // Before setup, the PIN is null and operations requiring it are handled accordingly.
@@ -712,7 +712,7 @@ public class CardEdge extends javacard.framework.Applet {
     } // end of constructor
 
     public static void install(byte[] bArray, short bOffset, byte bLength) {
-        CardEdge wal = new CardEdge(bArray, bOffset, bLength);
+        Satochip wal = new Satochip(bArray, bOffset, bLength);
     }
 
     public boolean select() {

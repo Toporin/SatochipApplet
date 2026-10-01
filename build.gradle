@@ -21,7 +21,7 @@ ext {
   targetSdk   = '3.0.4'                       // JavaCard level the CAP declares
   packageAid  = '5361746F43686970'            // "SatoChip"
   packageVer  = '0.1'
-  cardEdgeAid = '5361746F4368697000'
+  satochipAid = '5361746F4368697000'
   ndefAid     = '5361746F4368697001'
   // The 3.0.4 API stubs, for compileJava only. Deliberately the *target* level, so the classes the
   // simulator runs are compiled against the same API the converter links against.
@@ -103,7 +103,7 @@ tasks.register('convertJavacard') {
   inputs.property('targetSdk', targetSdk)
   inputs.property('packageAid', packageAid)
   inputs.property('packageVer', packageVer)
-  inputs.property('applets', [cardEdgeAid, ndefAid])
+  inputs.property('applets', [satochipAid, ndefAid])
   outputs.file(appletCap)
 
   doLast {
@@ -115,7 +115,7 @@ tasks.register('convertJavacard') {
     def target    = targetSdk
     def pkgAid    = packageAid
     def pkgVer    = packageVer
-    def edgeAid   = cardEdgeAid
+    def satoAid   = satochipAid
     def tagAid    = ndefAid
     def sourceDir = "$projectDir/src/main/java/org/satochip/applet"
 
@@ -126,7 +126,7 @@ tasks.register('convertJavacard') {
     ant.javacard(jckit: kit) {
       cap(aid: pkgAid, version: pkgVer, targetsdk: target,
           output: out.absolutePath, sources: sourceDir) {
-        applet('class': 'org.satochip.applet.CardEdge',   aid: edgeAid)
+        applet('class': 'org.satochip.applet.Satochip',   aid: satoAid)
         applet('class': 'org.satochip.applet.NDEFApplet', aid: tagAid)
       }
     }

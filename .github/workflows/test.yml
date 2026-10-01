@@ -46,7 +46,7 @@ jobs:
           echo "$info" | grep -q 'applets for JavaCard 3.0.4'          || { echo "::error::CAP no longer targets JavaCard 3.0.4"; exit 1; }
           echo "$info" | grep -q 'v1.5 javacard.framework'             || { echo "::error::javacard.framework import is not v1.5"; exit 1; }
           echo "$info" | grep -q 'v1.5 javacard.security'              || { echo "::error::javacard.security import is not v1.5"; exit 1; }
-          echo "$info" | grep -q '5361746F4368697000'                  || { echo "::error::CardEdge AID missing"; exit 1; }
+          echo "$info" | grep -q '5361746F4368697000'                  || { echo "::error::Satochip applet AID missing"; exit 1; }
           echo "$info" | grep -q '5361746F4368697001'                  || { echo "::error::NDEFApplet AID missing"; exit 1; }
 
       # 'simulator' rather than the default 'card': CI has no reader, and the card target would
