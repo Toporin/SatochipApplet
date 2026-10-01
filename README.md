@@ -1,5 +1,5 @@
 # SatochipApplet
-Open source javacard applet implementing a crypto-currency hardware wallet with full BIP32/BIP39 support.
+Open source javacard applet implementing a Bitcoin hardware wallet with full BIP32/BIP39 support.
 
 # Demonstration 
 
@@ -20,23 +20,27 @@ Access to private keys (creation, derivation and signature) is enforced through 
 Advantages:
 - Code is free and open source (no NDA required!)
 - Code easy to read and maintain (java card is a subset of java)
-- Multiple form factor could be supported in addition to Yubikey (e.g sim cards)
+- Multiple form factor could be supported in addition to smartcard (e.g sim cards, rings, ...)
 - Plug and play
 - Smartcards have a long experience in dealing with security and physical security in particular
-- Can be easily used or extended for other crypto-currencies
+- Compatible with other crypto-currencies
 - Critical functionalities are covered by a test suite run against the card, including the official Bitcoin BIP test vectors (see [Test](#test))
 
-Also, if used with a Yubikey:
-- Yubikey has minimal size and is practically indestructible;
-- The Yubico company is not going anywhere anytime soon;
-- Many promising functionalities: NFC, Yubikey OTP, U2F, ...;
-- Possibility to use the HMAC-SHA1 challenge-response of the Yubikey as second factor for additional security against malwares.
-
 Disadvantages:
-- Building the applet might be a bit tricky;
 - The software implementation of HMAC-SHA512 could have an potential impact on the physical security against side-channel attacks (for attackers with physical access to the chip).
 
 # Supported hardware
+
+The list of algorithms the card must or can support is as follows:
+- Must be supported and is part of JavaCard 3.0.5:
+  -  KeyAgreement.ALG_EC_SVDP_DH_PLAIN_XY
+- Must be supported and is part of JavaCard 3.0.4: 
+  - Cipher.ALG_AES_BLOCK_128_CBC_NOPAD
+  - MessageDigest.ALG_SHA_256
+  - MessageDigest.ALG_SHA_512
+  - RandomData.ALG_SECURE_RANDOM
+  - Signature.ALG_AES_MAC_128_NOPAD
+  - Signature.ALG_ECDSA_SHA_256
 
 To support Bitcoin signatures, the javacard must support ALG_ECDSA_SHA_256, which in practice requires a javacard compliant with the JavaCard 3.0.1 specification. Note that this is a necessary but not sufficient condition since javacards typically implements only a subset of the specification.
 
@@ -44,26 +48,16 @@ The card must also implement `KeyAgreement.ALG_EC_SVDP_DH_PLAIN_XY`, which is pa
 3.0.5, so in practice a 3.0.5-capable card is required. This is a *runtime* requirement on the
 card's implementation and is independent of the CAP, which targets JavaCard 3.0.4 so that it loads
 as widely as possible — the algorithm is selected by a constant passed to a method that already
-exists in 3.0.4. [Keycard](https://github.com/keycard-tech/status-keycard) documents the same
-combination.
+exists in 3.0.4.
+
 A detailed list of javacard and their supported features is available [here](http://www.fi.muni.cz/~xsvenda/jcsupport.html).
 
 An interesting guide to consult before shopping can be found [here](https://github.com/martinpaljak/GlobalPlatformPro/tree/master/docs/JavaCardBuyersGuide).
 
 ## Tested and working
 
-### Yubikey Neo
-**Important remark:** the Yubikeys currently sold by Yubico are configured for production only and it is not possible to load the applet on these dongles (see [this link](https://www.yubico.com/2014/07/yubikey-neo-updates/) for more details). Only the development Yubikeys (with serial number below 3,000,000) are suitable for our use! 
-
-### NXP JCOP J2D081
-Available for purchase [here](https://www.javacardsdk.com/product/j2d081/). (MOQ: 5 pieces).
-
-### Swissbit PS-100u VE card Secure micro SD memory card
-More info [here](http://www.swissbit.com/index.php?option=com_content&view=article&id=293&Itemid=601)
-(Note however that Swissbit does not sell its product directly to end users but only to business partners).
-
-### J3D081 JCOP v2.4.2 R2
-Available for purchase [here](https://www.motechno.com/product/j3d081-dual-interface-javacard-3-0-1/). (MOQ: 1 piece).
+* NXP JCOP4 J3R180 (recommended)
+* NXP JCOP3 J3H145
 
 # Buidl
 
@@ -259,16 +253,30 @@ taproot/schnorr and MuSig2 against a card. See
 [Running the Tests](https://github.com/Toporin/pysatochip#running-the-tests). Those hardware tests
 are destructive too: development cards only.
 
-# Install
+# Install the CAP file with GlobalPlatformPro
 
 Once you have a CAP file, you have to download it on the chip card. You can use [GlobalPlatformPro](https://github.com/martinpaljak/GlobalPlatformPro) to do this:
 
 - Download the latest release from https://github.com/martinpaljak/GlobalPlatformPro/releases
 - (Put the CAP file in the same folder as the GPJ jar file for convenience)
 - To list the applets loaded on a smartcard: `gp.exe -l`
-- To load the SatoChip applet: `gp.exe -install .\SatoChip-0.12-05.cap`
-- To delete the SatoChip applet: `gp.exe -uninstall .\SatoChip-0.12-05.cap`
-- You can also use the gp.jar library: `java -jar gp.jar -install .\SatoChip-0.12-05.cap`
+
+```
+# 1. (Only if an older version is already on the card) remove it and its instances
+java -jar gp.jar --delete 5361746F43686970 -f
+
+# 2. Load the package (no applet instances yet)
+java -jar gp.jar --load applet.cap
+
+# 3. Create the CardEdge instance (instance AID = applet AID)
+java -jar gp.jar --package 5361746F43686970 --applet 5361746F4368697000 --create 5361746F4368697000
+
+# 4. Create the NDEF instance under the standard NDEF AID
+java -jar gp.jar --package 5361746F43686970 --applet 5361746F4368697001 --create D2760000850101
+
+# 5. Check the result
+java -jar gp.jar --list
+```
 
 A more detailed tutorial is available on the GlobalPlatformPro [repository](https://github.com/martinpaljak/GlobalPlatformPro).
 
@@ -294,8 +302,7 @@ To use the applet, you have to connect your client application to the smartcard 
 # Credits
 
 - The CardEdge javacard applet is derived from the [MUSCLE framework](http://pcsclite.alioth.debian.org/musclecard.com/info.html).
-- The Bitcoin transaction parser is derived from [Btchip](https://github.com/LedgerHQ/btchipJC).
-- The BitcoinWallet application is based on ScripterRon [BitcoinWallet](https://github.com/ScripterRon/BitcoinWallet) client and [BitcoinCore](https://github.com/ScripterRon/BitcoinCore) library.
+- The testing framework and the gradle build is inspired from [Keycard](https://github.com/keycard-tech/status-keycard).
 
 # License
 

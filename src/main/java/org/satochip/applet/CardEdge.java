@@ -331,7 +331,6 @@ public class CardEdge extends javacard.framework.Applet {
 
     // JC API 2.2.2 does not define these constants:
     private final static byte ALG_ECDSA_SHA_256= (byte) 33;
-    private final static byte ALG_EC_SVDP_DH_PLAIN= (byte) 3; //https://javacard.kenai.com/javadocs/connected/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN
     private final static byte ALG_EC_SVDP_DH_PLAIN_XY= (byte) 6; //https://docs.oracle.com/javacard/3.0.5/api/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN_XY
     private final static short LENGTH_EC_FP_256= (short) 256;
     private final static byte TYPE_AES_TRANSIENT_DESELECT = (byte) 14;
