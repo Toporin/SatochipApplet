@@ -1145,11 +1145,15 @@ public class Satochip extends javacard.framework.Applet {
      * Returns an uninitialized ECPrivateKey object for the given keyslot, creating it
      * if necessary. The key's secp256k1 curve parameters are (re)set, so the slot is
      * guaranteed to be usable for import.
+     * @param key_nb the keyslot number (0x00-0x0F)
      * @return ECPrivateKey object
-     * @throws SW_ECKEYS_INITIALIZED_KEY if the slot already holds an initialized key,
+     * @throws SW_INCORRECT_P1 if key_nb is not a valid keyslot number,
+     *         SW_ECKEYS_INITIALIZED_KEY if the slot already holds an initialized key,
      *         SW_INCORRECT_ALG if the slot holds a key of unexpected type or size
      */
     private ECPrivateKey getUninitializedKey(byte key_nb) {
+        if ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS))
+            ISOException.throwIt(SW_INCORRECT_P1);
         ECPrivateKey key = (ECPrivateKey) eckeys[key_nb];
         if (key == null) {
             // We have to create the Key
@@ -1177,13 +1181,16 @@ public class Satochip extends javacard.framework.Applet {
      * Note: uses tmpBuffer as scratch (first 65 bytes), do not call while live
      * data is stored there.
      *
-     * @param key_nb the keyslot number (0x00-0x0F), assumed already validated
+     * @param key_nb the keyslot number (0x00-0x0F)
      * @return the initialized ECPrivateKey stored in the keyslot
-     * @throws ISOException SW_INCORRECT_P1 if no key is initialized in the keyslot,
+     * @throws ISOException SW_INCORRECT_P1 if key_nb is not a valid keyslot number
+     *         or no key is initialized in the keyslot,
      *         SW_INCORRECT_ALG if the key has an unexpected type or size, or if
      *         its curve parameters have been altered (fault injection check)
      */
     private ECPrivateKey getInitializedECKey(byte key_nb) {
+        if ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS))
+            ISOException.throwIt(SW_INCORRECT_P1);
         Key key = eckeys[key_nb];
         // check that a key is initialized in the keyslot
         if ((key == null) || !key.isInitialized())
@@ -1203,6 +1210,8 @@ public class Satochip extends javacard.framework.Applet {
     /**
      * Returns the private key selected by P1 for a signing operation: either the
      * last derived BIP32 extended key (0xFF), or the key stored in the given keyslot.
+     * Only signing operations accept 0xFF: keyslot management (ImportKey, ResetKey,
+     * getPublicKeyFromPrivate) uses getUninitializedKey()/getInitializedECKey() directly.
      * Note: uses tmpBuffer as scratch (see getInitializedECKey()).
      *
      * @param key_nb the keyslot number (0x00-0x0F), or 0xFF for the BIP32 extended key
@@ -1210,8 +1219,6 @@ public class Satochip extends javacard.framework.Applet {
      *         SW_BIP32_UNINITIALIZED_SEED if 0xFF is selected but no seed is imported
      */
     private ECPrivateKey getSigningKey(byte key_nb) {
-        if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
-            ISOException.throwIt(SW_INCORRECT_P1);
         if (key_nb==(byte)0xFF){
             if (!bip32_seeded)
                 ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
@@ -1359,8 +1366,6 @@ public class Satochip extends javacard.framework.Applet {
         if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
             ISOException.throwIt(SW_INCORRECT_P2);
         byte key_nb = buffer[ISO7816.OFFSET_P1];
-        if ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS))
-            ISOException.throwIt(SW_INCORRECT_P1);
         
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         
@@ -1451,8 +1456,6 @@ public class Satochip extends javacard.framework.Applet {
         if (buffer[ISO7816.OFFSET_P2] != (byte) 0x00)
             ISOException.throwIt(SW_INCORRECT_P2);
         byte key_nb = buffer[ISO7816.OFFSET_P1];
-        if ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS))
-            ISOException.throwIt(SW_INCORRECT_P1);
         
         ECPrivateKey key = getInitializedECKey(key_nb);
         
@@ -1499,8 +1502,6 @@ public class Satochip extends javacard.framework.Applet {
             ISOException.throwIt(SW_INCORRECT_P2);
         
         byte key_nb = buffer[ISO7816.OFFSET_P1];
-        if ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS))
-            ISOException.throwIt(SW_INCORRECT_P1);
         
         ECPrivateKey key = getInitializedECKey(key_nb);
                 

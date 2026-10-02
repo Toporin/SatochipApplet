@@ -842,6 +842,26 @@ public class SatochipTest {
     }
   }
 
+  @Test
+  @DisplayName("Keyslot commands reject out-of-range keyslots, including 0xFF")
+  void keyslotRangeTest() {
+    final byte INS_GET_PUBLIC_FROM_PRIVATE = (byte) 0x35;
+    byte[] blob = concat(new byte[]{0x00, 12, 0x01, 0x00}, new byte[6], new byte[]{0x00, 0x20}, SLOT_PRIVKEY);
+    // 0xFF selects the BIP32 extended key for signing commands only: it must never reach a keyslot command
+    for (int p1 : new int[]{16, 0x7F, 0x80, 0xFF}) {
+      assertEquals(SW_INCORRECT_P1, cmdSet.sendRawSecure(INS_IMPORT_KEY, p1, 0x00, blob).getSw(),
+          String.format("IMPORT_KEY, P1=%02X", p1));
+      assertEquals(SW_INCORRECT_P1, cmdSet.sendRawSecure(INS_RESET_KEY, p1, 0x00, new byte[0]).getSw(),
+          String.format("RESET_KEY, P1=%02X", p1));
+      assertEquals(SW_INCORRECT_P1, cmdSet.sendRawSecure(INS_GET_PUBLIC_FROM_PRIVATE, p1, 0x00, new byte[0]).getSw(),
+          String.format("GET_PUBLIC_FROM_PRIVATE, P1=%02X", p1));
+    }
+    for (int p1 : new int[]{16, 0x80}) {
+      assertEquals(SW_INCORRECT_P1, cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, p1, 0x00,
+          concat(new byte[32], new byte[2])).getSw(), String.format("SIGN_TRANSACTION_HASH, P1=%02X", p1));
+    }
+  }
+
   /** Generates a MuSig2 nonce for the given path and returns the 144-byte encrypted secnonce. */
   private byte[] musig2NewSecnonce(String path) {
     cmdSet.cardBip32GetExtendedKeyRaw(path);
