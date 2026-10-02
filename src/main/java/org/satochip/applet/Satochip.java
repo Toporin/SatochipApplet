@@ -2650,16 +2650,6 @@ public class Satochip extends javacard.framework.Applet {
 
         // generate randomness
         randomData.generateData(recvBuffer, OFFSET_BIP340_aux, (short)32);
-
-        // DEBUG using test vector 0 from bip0340
-        //public static byte[] sk0= {}; //0000000000000000000000000000000000000000000000000000000000000003
-        //public static byte[] m0= {}; //0000000000000000000000000000000000000000000000000000000000000000
-        //public static byte[] aux= {}; //0000000000000000000000000000000000000000000000000000000000000000
-        //Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP340_sk, (short)32, (byte)0);
-        //recvBuffer[(short)(OFFSET_BIP340_sk + 31)]= (byte)0x03;
-        //taproot_tweakedkey.setS(recvBuffer, OFFSET_BIP340_sk, (short)32);
-        //Util.arrayFillNonAtomic(recvBuffer, OFFSET_BIP340_aux, (short)32, (byte)0);
-        // ENDBUG
         
         // copy message hash to buffer
         Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, recvBuffer, OFFSET_BIP340_m, (short)32);
@@ -2744,7 +2734,6 @@ public class Satochip extends javacard.framework.Applet {
         Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
         Util.arrayFillNonAtomic(Biginteger.buffer2, (short)0, (short)Biginteger.buffer2.length, (byte)0);
         
-        //short sign_size= sigECDSA.signPreComputedHash(buffer, ISO7816.OFFSET_CDATA, MessageDigest.LENGTH_SHA_256, buffer, (short)0);
         return (short)64;
     }
     
@@ -2863,10 +2852,6 @@ public class Satochip extends javacard.framework.Applet {
         short recvOffset = OFFSET_BIP327_PK;
         recvOffset+=33;
 
-//        // DEBUG: return buffer with pubkey
-//        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_RAND, buffer, (short)0, (short)(recvOffset-OFFSET_BIP327_RAND));
-//        return (short)(recvOffset-OFFSET_BIP327_RAND);
-
         // get data from incoming apdu
         short buffer_offset = ISO7816.OFFSET_CDATA;
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
@@ -2885,10 +2870,6 @@ public class Satochip extends javacard.framework.Applet {
         recvOffset+=aggpk_size;
         buffer_offset+=aggpk_size;
         bytesLeft-=aggpk_size;
-
-//        // DEBUG: return buffer with aggpk
-//        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_RAND, buffer, (short)0, (short)(recvOffset-OFFSET_BIP327_RAND));
-//        return (short)(recvOffset-OFFSET_BIP327_RAND);
 
         // parse m
         if (bytesLeft<1)
@@ -2918,11 +2899,6 @@ public class Satochip extends javacard.framework.Applet {
             bytesLeft-=m_size;
         }
 
-//        // DEBUG: return buffer with msg
-//        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_RAND, buffer, (short)0, (short)(recvOffset-OFFSET_BIP327_RAND));
-//        return (short)(recvOffset-OFFSET_BIP327_RAND);
-
-
         // param extra_in
         if (bytesLeft<1)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
@@ -2944,10 +2920,6 @@ public class Satochip extends javacard.framework.Applet {
         // compute k1
         recvBuffer[recvOffset] = (byte) 0x00;
 
-//        // DEBUG: return buffer before hashing:
-//        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_RAND, buffer, (short)0, (short)(recvOffset+1-OFFSET_BIP327_RAND));
-//        return (short)(recvOffset+1-OFFSET_BIP327_RAND);
-
         schnorr_hash_tag(TAGS_MUSIG2, (short)9, (short)11, recvBuffer, OFFSET_BIP327_RAND, (short)(recvOffset+1-OFFSET_BIP327_RAND), recvBuffer, OFFSET_BIP327_K1);
         // compute k2
         recvBuffer[recvOffset] = (byte) 0x01;
@@ -2955,10 +2927,6 @@ public class Satochip extends javacard.framework.Applet {
         // todo: check not null (very low probability?)
 
         // at this point, recvBuffer = [ k1(32b) | k2(32b) | rand(32b) | 0x33 | pk(33b) | len(aggpk)(1b) | aggpk(32) | m_prefixed | extra_in_prefixed | 0x00 or 0x01 ]
-
-//        // DEBUG: return buffer after hashing:
-//        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_K1, buffer, (short)0, (short)64);
-//        return 64;
 
         // save pubnonce in returned buffer
         // compute R1
@@ -3175,11 +3143,6 @@ public class Satochip extends javacard.framework.Applet {
         if (0 != Util.arrayCompare(buffer, OFFSET_BIP327_SIGN_PK, recvBuffer, (short)0, (short)33)) {
             // todo clean up the buffers we used.
             ISOException.throwIt(SW_BIP327_PUBKEY_MISMATCH);
-
-            // DEBUG return pubkeys
-//            Util.arrayCopyNonAtomic(buffer, OFFSET_BIP327_SIGN_PK, buffer, (short)0, (short)33);
-//            Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)33, (short)33);
-//            return (short) 66;
         }
         // we don't need pk from recvBuffer anymore
 
@@ -3201,10 +3164,6 @@ public class Satochip extends javacard.framework.Applet {
             Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, OFFSET_BIP327_SIGN_K1_, (short)64);
         }
 
-        // DEBUG return k1,K2
-//        Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)0, (short)64);
-//        return (short)64;
-
         // compute d = ggacc * d' mod n (negation of the private key according to g*gacc)
         boolean ggacc_equal_1 = ( buffer[OFFSET_BIP327_SIGN_GGAC]== 0x01);
         if (!ggacc_equal_1){
@@ -3222,10 +3181,6 @@ public class Satochip extends javacard.framework.Applet {
         // compute (e*a)*d => buffer2
         short size = Biginteger.mult_rsa_trick(buffer, OFFSET_BIP327_SIGN_EA, recvBuffer, (short)0, (short)32, Biginteger.buffer2, (short)0);
 
-//        // DEBUG return ea * d
-//        Util.arrayCopyNonAtomic(Biginteger.buffer2, (short)0, buffer, (short)0, (short)Biginteger.buffer2.length);
-//        return (short)Biginteger.buffer2.length;
-
         // (e*a)*d + k1 => buffer1
         Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
         Util.arrayCopyNonAtomic(buffer, OFFSET_BIP327_SIGN_K1_, Biginteger.buffer1, (short)(Biginteger.buffer1.length-32), (short)32); // copy 32bytes k to 96bytes buffer
@@ -3234,26 +3189,11 @@ public class Satochip extends javacard.framework.Applet {
         // copy to recvBuffer as Biginteger.buffer1 can be overwritten by biginteger operations.
         Util.arrayCopyNonAtomic(Biginteger.buffer1, (short)0, recvBuffer, (short)0, (short)Biginteger.buffer1.length);
 
-//        // DEBUG return (e*a)*d + k1
-//        Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)0, (short)Biginteger.buffer1.length);
-//        return (short)Biginteger.buffer1.length;
-
-//        // (e*a)*d + k1 mod n => buffer1
-//        //size= Biginteger.mod(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
-//
         // compute b*k2 => buffer 2
         size = Biginteger.mult_rsa_trick(buffer, OFFSET_BIP327_SIGN_B , buffer, OFFSET_BIP327_SIGN_K2_, (short)32, Biginteger.buffer2, (short)0);
 
-//        // DEBUG return b*k2
-//        Util.arrayCopyNonAtomic(Biginteger.buffer2, (short)0, buffer, (short)0, (short)Biginteger.buffer2.length);
-//        return (short)Biginteger.buffer2.length;
-
         // compute [(e*a)*d + k1] + b*k2 => buffer1
         carry = Biginteger.add_carry(recvBuffer, (short)0, Biginteger.buffer2, (short)0, (short)Biginteger.buffer2.length);
-
-//        // DEBUG return [(e*a)*d + k1] + b*k2
-//        Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, (short)0, (short)Biginteger.buffer2.length);
-//        return (short)Biginteger.buffer2.length;
 
         // compute (e*a)*d + k1 + b*k2  mod n=> buffer1
         size= Biginteger.mod(recvBuffer, (short)0, (short)Biginteger.buffer2.length, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
@@ -3262,7 +3202,6 @@ public class Satochip extends javacard.framework.Applet {
         Util.arrayCopyNonAtomic(recvBuffer, (short)64, buffer, (short)(0), (short)32);
 
         // todo: sign with authentikey?
-
         return (short)32;
     }
 
