@@ -893,7 +893,31 @@ public class SatochipTest {
         assertEquals(SW_OK, schnorr.getSw());
         assertTrue(verifyBip340(tweaked, hash, schnorr.getData()));
       }
+
+      // --- resetBIP32Seed: [pin | hmac(authentikey_x | 0xFF*32)], P1 = pin size
+      final byte INS_BIP32_RESET_SEED = (byte) 0x77;
+      final byte INS_EXPORT_PKI_PUBKEY = (byte) 0x98;
+      byte[] authentikey = cmdSet.sendRawSecure(INS_EXPORT_PKI_PUBKEY, 0x00, 0x00, new byte[0]).getData();
+      byte[] authentikeyX = Arrays.copyOfRange(authentikey, 1, 33);
+      byte[] baselinePub = cmdSet.cardBip32GetExtendedKeyRaw("m/44'/0'/0'/0/0");
+      assertEquals(SW_SIGNATURE_INVALID, cmdSet.sendRawSecure(INS_BIP32_RESET_SEED, PIN.length, 0x00,
+          concat(PIN, hmac2FA(authentikeyX, 0xAA))).getSw());
+      assertTrue(isSeeded(cmdSet), "a refused seed reset must leave the card seeded");
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_BIP32_RESET_SEED, PIN.length, 0x00,
+          concat(PIN, hmac2FA(authentikeyX, 0xFF))).getSw());
+      assertFalse(isSeeded(cmdSet));
+      // a seed reset logs the user out; the seed is re-imported (no 2FA needed for that)
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw());
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_BIP32_IMPORT_SEED, Vectors.BIP32_SEED.length, 0x00,
+          Vectors.BIP32_SEED).getSw());
+      assertArrayEquals(baselinePub, cmdSet.cardBip32GetExtendedKeyRaw("m/44'/0'/0'/0/0"));
     } finally {
+      // a failure may have left the session closed or the user logged out
+      resetSession();
+      if (!isSeeded(cmdSet)) {
+        assertEquals(SW_OK, cmdSet.sendRawSecure(INS_BIP32_IMPORT_SEED, Vectors.BIP32_SEED.length, 0x00,
+            Vectors.BIP32_SEED).getSw(), "could not restore the baseline seed");
+      }
       reset2FA();
     }
     // 2FA is gone: the plain form works again
