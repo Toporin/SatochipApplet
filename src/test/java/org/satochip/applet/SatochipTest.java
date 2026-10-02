@@ -348,6 +348,48 @@ public class SatochipTest {
   }
 
   @Test
+  @DisplayName("Secure channel: wrapped GET STATUS is answered encrypted, IV counter and size checks")
+  void secureChannelHardeningTest() throws Exception {
+    final int SW_WRONG_LENGTH = 0x6700;
+    final int SW_SECURE_CHANNEL_UNINITIALIZED = 0x9C21;
+    final int SW_SECURE_CHANNEL_WRONG_IV = 0x9C22;
+    final byte INS_PROCESS_SECURE_CHANNEL = (byte) 0x82;
+
+    // a GET STATUS sent through the secure channel is answered through it (it used to come back
+    // in cleartext, which the client cannot decrypt)
+    byte[] plainStatus = cmdSet.cardGetStatus().getData();
+    APDUResponse wrapped = cmdSet.sendRawSecure(INS_GET_STATUS, 0x00, 0x00, new byte[0]);
+    assertEquals(SW_OK, wrapped.getSw());
+    assertArrayEquals(plainStatus, wrapped.getData());
+
+    // the counter may jump ahead, but no counter at or below the last one is accepted afterwards
+    cmdSet.setIvCounter(101);
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_GET_RANDOM, 8, 0x00, new byte[0]).getSw());
+    cmdSet.setIvCounter(51);
+    assertEquals(SW_SECURE_CHANNEL_WRONG_IV, cmdSet.sendRawSecure(INS_GET_RANDOM, 8, 0x00, new byte[0]).getSw());
+    cmdSet.setIvCounter(101);
+    assertEquals(SW_SECURE_CHANNEL_WRONG_IV, cmdSet.sendRawSecure(INS_GET_RANDOM, 8, 0x00, new byte[0]).getSw());
+
+    // the last counter value would wrap the card's counter to 0: the session is closed instead
+    resetSession();
+    cmdSet.setIvCounter(0xFFFFFFFF);
+    assertEquals(SW_SECURE_CHANNEL_WRONG_IV, cmdSet.sendRawSecure(INS_GET_RANDOM, 8, 0x00, new byte[0]).getSw());
+    cmdSet.setIvCounter(3);
+    assertEquals(SW_SECURE_CHANNEL_UNINITIALIZED,
+        cmdSet.sendRawSecure(INS_GET_RANDOM, 8, 0x00, new byte[0]).getSw(), "the session must be closed");
+
+    // the ciphertext must be a whole number of AES blocks (checked before the MAC)
+    resetSession();
+    byte[] iv = new byte[16];
+    byte[] mac = concat(new byte[]{0x00, 0x14}, new byte[20]);
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawPlain(INS_PROCESS_SECURE_CHANNEL, 0x00, 0x00,
+        concat(iv, new byte[]{0x00, 0x0F}, new byte[15], mac)).getSw());
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawPlain(INS_PROCESS_SECURE_CHANNEL, 0x00, 0x00,
+        concat(iv, new byte[]{(byte) 0xFF, (byte) 0xF0}, new byte[16], mac)).getSw());
+    resetSession();
+  }
+
+  @Test
   @DisplayName("Replaying an encrypted command is rejected")
   void secureChannelReplayTest() throws Exception {
     APDUCommand encrypted = cmdSet.encrypt(INS_GET_RANDOM, 8, 0x00, new byte[0]);

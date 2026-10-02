@@ -74,6 +74,21 @@ public class TestSatochipCommandSet extends SatochipCommandSet {
     return response;
   }
 
+  /**
+   * Sets the IV counter of the SDK secure channel (opening one first if needed), so that the next
+   * secure command is sent with this counter. The SDK sends odd counters, starting at 1, +2 each time.
+   */
+  public void setIvCounter(int counter) {
+    SecureChannelSession sc = openedSecureChannel();
+    try {
+      Field f = SecureChannelSession.class.getDeclaredField("ivCounter");
+      f.setAccessible(true);
+      f.setInt(sc, counter);
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalStateException("Cannot reach the SDK IV counter", e);
+    }
+  }
+
   /** Drops the current secure channel so the next secure command negotiates a fresh one. */
   public void forgetSecureChannel() {
     try {

@@ -228,6 +228,9 @@ class SecureChannel {
         if (bytesLeft<18)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         short sizein = Util.getShort(buffer, (short) (offset+SIZE_SC_IV));
+        // the ciphertext is AES-CBC without padding removal: a whole number of blocks
+        if (sizein < 0 || (sizein % SIZE_SC_IV) != 0)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         if (bytesLeft<(short)(SIZE_SC_IV+2+sizein+2))
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         short sizemac= Util.getShort(buffer, (short) (offset+SIZE_SC_IV+2+sizein));
@@ -247,9 +250,17 @@ class SecureChannel {
             ISOException.throwIt(SW_SECURE_CHANNEL_WRONG_IV);
         if ( !Biginteger.lessThan(sc_buffer, OFFSET_SC_IV_COUNTER, buffer, (short)(offset+SIZE_SC_IV_RANDOM), SIZE_SC_IV_COUNTER ) ) //and greater than local IV
             ISOException.throwIt(SW_SECURE_CHANNEL_WRONG_IV);
-        // update local IV
+        // update local IV: local counter = received counter + 1. The next command must use a counter
+        // strictly greater, so no value at or below this one is ever accepted again. The +1 also
+        // makes the response IV counter even (requests use odd ones), so that request and response
+        // IVs never collide under the same session key: do not set local = received.
         Util.arrayCopy(buffer, (short)(offset+SIZE_SC_IV_RANDOM), sc_buffer, OFFSET_SC_IV_COUNTER, SIZE_SC_IV_COUNTER);
-        Biginteger.add1_carry(sc_buffer, OFFSET_SC_IV_COUNTER, SIZE_SC_IV_COUNTER);
+        if (Biginteger.add1_carry(sc_buffer, OFFSET_SC_IV_COUNTER, SIZE_SC_IV_COUNTER)){
+            // the counter wrapped to 0, which would make old counters acceptable again:
+            // the session is exhausted, a new one must be initiated
+            initialized_secure_channel = false;
+            ISOException.throwIt(SW_SECURE_CHANNEL_WRONG_IV);
+        }
         randomData.generateData(sc_buffer, OFFSET_SC_IV_RANDOM, SIZE_SC_IV_RANDOM);
         sc_aes128_cbc.init(sc_sessionkey, Cipher.MODE_DECRYPT, buffer, offset, SIZE_SC_IV);
         offset+=SIZE_SC_IV;

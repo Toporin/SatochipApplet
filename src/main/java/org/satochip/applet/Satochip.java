@@ -958,14 +958,11 @@ public class Satochip extends javacard.framework.Applet {
         if (sizeout==0){
             return;
         }
-        else if ((ins == INS_GET_STATUS) || (ins == INS_INIT_SECURE_CHANNEL)) {
-            apdu.setOutgoingAndSend((short) 0, sizeout);
-        }
-        else { // encrypt response through the Secure Channel
-            sizeout= secureChannel.wrap(buffer, sizeout);
-            //send back
-            apdu.setOutgoingAndSend((short) 0, sizeout);
-        }
+        // the command arrived through the secure channel, so the response goes back through it,
+        // whatever the inner INS (the plaintext GET_STATUS and INIT_SECURE_CHANNEL commands
+        // have already returned above)
+        sizeout= secureChannel.wrap(buffer, sizeout);
+        apdu.setOutgoingAndSend((short) 0, sizeout);
 
         
     } // end of process method
