@@ -50,7 +50,6 @@ public class Biginteger {
     public static final short BUFFER_SIZE = (short)96;//65 is not OK => FLAG_FAST_MULT_VIA_RSA is false; // TODO: optimise size
     public static byte[] buffer1;
     public static byte[] buffer2;
-    //public static byte[] buffer3; // todo: remove?
     
     // Helper objects for fast multiplication of two large numbers (without modulo)
     public static boolean FLAG_FAST_MULT_VIA_RSA = false;
@@ -74,11 +73,6 @@ public class Biginteger {
         } catch (SystemException e) {
             buffer2 = new byte[BUFFER_SIZE];
         }
-//        try {
-//            buffer3 = JCSystem.makeTransientByteArray((short) BUFFER_SIZE, JCSystem.CLEAR_ON_DESELECT);
-//        } catch (SystemException e) {
-//            buffer3 = new byte[BUFFER_SIZE];
-//        }
         // RSA engine for fast multiplication
         rsa_keypair = new KeyPair(KeyPair.ALG_RSA_CRT, MULT_RSA_ENGINE_MAX_LENGTH_BITS);
         rsa_keypair.genKeyPair();

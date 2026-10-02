@@ -324,7 +324,7 @@ public class Satochip extends javacard.framework.Applet {
     // KeyBlob Encoding in Key Blobs
     private final static byte BLOB_ENC_PLAIN = (byte) 0x00;
 
-    // Cipher Operations admitted in ComputeCrypt()
+    // Operation order for commands with multiple steps
     private final static byte OP_INIT = (byte) 0x01;
     private final static byte OP_PROCESS = (byte) 0x02;
     private final static byte OP_FINALIZE = (byte) 0x03;
@@ -2143,9 +2143,9 @@ public class Satochip extends javacard.framework.Applet {
      * DEPRECATED - Not necessary anymore when recovering the pubkey with ALG_EC_SVDP_DH_PLAIN_XY
      * A minimalist API is maintained for backward compatibility.
      * 
-     * This function allows to compute the authentikey pubkey externally and 
+     * This function allowed to compute the authentikey pubkey externally and
      * store it in the secure memory cache for future use. 
-     * This allows to speed up computation during derivation of non-hardened child.
+     * This allowed to speed up computation during derivation of non-hardened child.
      * 
      * ins: 0x75
      * p1: 
@@ -2303,9 +2303,9 @@ public class Satochip extends javacard.framework.Applet {
      * DEPRECATED - Not necessary anymore when recovering the pubkey with ALG_EC_SVDP_DH_PLAIN_XY
      * A minimalist API is maintained for backward compatibility.
      * 
-     * This function allows to compute an extended pubkey externally and 
+     * This function allowed to compute an extended pubkey externally and
      * store it in the secure BIP32 memory cache for future use. 
-     * This allows to speed up computation during derivation of non-hardened child.
+     * This allowed to speed up computation during derivation of non-hardened child.
      * 
      * ins: 0x74
      * p1: 
@@ -2650,7 +2650,7 @@ public class Satochip extends javacard.framework.Applet {
 
         // generate randomness
         randomData.generateData(recvBuffer, OFFSET_BIP340_aux, (short)32);
-        
+
         // DEBUG using test vector 0 from bip0340
         //public static byte[] sk0= {}; //0000000000000000000000000000000000000000000000000000000000000003
         //public static byte[] m0= {}; //0000000000000000000000000000000000000000000000000000000000000000
