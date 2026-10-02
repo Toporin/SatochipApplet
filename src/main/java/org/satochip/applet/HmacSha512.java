@@ -73,6 +73,9 @@ public class HmacSha512 {
         sha512.reset();
         sha512.doFinal(data, (short)0, (short)(BLOCKSIZE+HASHSIZE), mac, mac_offset);
         
+        // erase the scratch area: it holds key^opad, the inner hash and the end of the message
+        // (e.g. the parent private key for a hardened BIP32 child)
+        Util.arrayFillNonAtomic(data, (short)0, (short)(BLOCKSIZE + ((message_length > HASHSIZE) ? message_length : HASHSIZE)), (byte)0);
         return HASHSIZE;
     }   
     

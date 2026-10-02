@@ -22,6 +22,7 @@ package org.satochip.applet;
 
 import javacard.framework.ISOException;
 import javacard.framework.JCSystem;
+import javacard.framework.Util;
 import javacard.security.MessageDigest;
 
 // very limited Hmac-SHA160 implementation
@@ -74,6 +75,8 @@ public class HmacSha160 {
         // previous hash already copied to correct offset in data
         sha160.reset();
         sha160.doFinal(data, (short)0, (short)(BLOCKSIZE+HASHSIZE), mac, mac_offset);
+        // erase the scratch area: it holds key^opad, the inner hash and the end of the message
+        Util.arrayFillNonAtomic(data, (short)0, (short)(BLOCKSIZE + ((message_length > HASHSIZE) ? message_length : HASHSIZE)), (byte)0);
         return HASHSIZE;
     }   
     
