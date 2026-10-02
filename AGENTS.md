@@ -38,8 +38,9 @@ SatoChip-v*.cap           Pre-built CAP artifacts in the worktree (untracked, ig
 
 ### Source files (`src/main/java/org/satochip/applet/`)
 
-- `Satochip.java` (~4300 lines) — the main applet class (`extends javacard.framework.Applet`). Contains the APDU dispatcher (`process()`), all instruction handlers, PIN management, secure channel, 2FA, BIP32 derivation, Schnorr/Taproot, MuSig2, feature/NFC policies, PKI personalization. Derived from the MUSCLE framework, whose `CardEdge` applet gave the class its former name; the MUSCLE attribution header and the `CardEdge_CLA` constant keep that name deliberately.
+- `Satochip.java` (~3700 lines) — the main applet class (`extends javacard.framework.Applet`). Contains the APDU dispatcher (`process()`), all instruction handlers, PIN management, 2FA, BIP32 derivation, Schnorr/Taproot, MuSig2, feature/NFC policies, PKI personalization. Derived from the MUSCLE framework, whose `CardEdge` applet gave the class its former name; the MUSCLE attribution header and the `CardEdge_CLA` constant keep that name deliberately.
 - `NDEFApplet.java` — second applet in the package, installed under the NFC Forum Type 4 AID `D2760000850101`; serves a single NDEF record so tapping the card opens a link.
+- `SecureChannel.java` — the mandatory secure channel (ECDH key exchange, AES-CBC + HMAC-SHA1 command/response wrapping, IV counter). Owns only its session state; the cipher, scratch EC key, crypto engines and working buffers are shared with `Satochip` and passed to its constructor, so it costs no extra RAM. Keep it that way: on many cards each `Cipher`/`Signature`/`KeyAgreement` instance reserves RAM.
 - `SharedMemory.java` — the 224-byte NDEF record buffer, shared between the two applet instances.
 - `Secp256k1.java` — secp256k1 domain parameters, EC key initialization helpers and on-curve validation.
 - `Biginteger.java` — big-integer arithmetic on byte arrays (based on the OV-chip 2.0 project, Radboud University), optionally accelerated via the card's RSA engine (`mult_rsa_trick`).
