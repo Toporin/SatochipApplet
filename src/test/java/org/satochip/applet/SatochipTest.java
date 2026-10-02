@@ -499,6 +499,12 @@ public class SatochipTest {
     assertEquals(label.length, r.getData()[0]);
     assertArrayEquals(label, Arrays.copyOfRange(r.getData(), 1, 1 + label.length));
 
+    // a label size one byte larger than the label must be refused, not padded with a stale byte
+    byte[] truncated = concat(new byte[]{(byte) (label.length + 1)}, label);
+    assertEquals(SW_INVALID_PARAMETER, cmdSet.sendRawSecure(INS_CARD_LABEL, 0x00, 0x00, truncated).getSw());
+    r = cmdSet.sendRawSecure(INS_CARD_LABEL, 0x00, 0x01, new byte[0]);
+    assertEquals(label.length, r.getData()[0], "a refused label must leave the current one unchanged");
+
     assertEquals(SW_INCORRECT_P2, cmdSet.sendRawSecure(INS_CARD_LABEL, 0x00, 0x7F, new byte[0]).getSw());
   }
 

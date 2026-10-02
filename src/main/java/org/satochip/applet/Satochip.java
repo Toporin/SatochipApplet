@@ -1765,15 +1765,16 @@ public class Satochip extends javacard.framework.Applet {
                     buffer[ISO7816.OFFSET_LC]);
             short buffer_offset = ISO7816.OFFSET_CDATA;
             if (bytes_left > 0) {
+                // data: [label_size(1b) | label]
                 short label_size = Util.makeShort((byte) 0x00,
                         buffer[buffer_offset]);
+                bytes_left--;
+                buffer_offset++;
                 if (label_size > bytes_left)
                     ISOException.throwIt(SW_INVALID_PARAMETER);
                 if (label_size > MAX_CARD_LABEL_SIZE)
                     ISOException.throwIt(SW_INVALID_PARAMETER);
-                card_label_size = buffer[buffer_offset];
-                bytes_left--;
-                buffer_offset++;
+                card_label_size = (byte) label_size;
                 Util.arrayCopyNonAtomic(buffer, buffer_offset, card_label,
                         (short) 0, label_size);
             } else if (bytes_left == 0) {// reset label
