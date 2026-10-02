@@ -652,6 +652,241 @@ public class SatochipTest {
   }
 
   // =============================================================================================
+  // Tier 3 -- 2FA and MuSig2
+  // =============================================================================================
+
+  static final byte INS_IMPORT_KEY = (byte) 0x32;
+  static final byte INS_RESET_KEY = (byte) 0x33;
+  static final byte INS_SET_2FA_KEY = (byte) 0x79;
+  static final byte INS_RESET_2FA_KEY = (byte) 0x78;
+  static final byte INS_MUSIG2_GENERATE_NONCE = (byte) 0x7E;
+  static final byte INS_MUSIG2_SIGN_HASH = (byte) 0x7F;
+  static final int OP_INIT = 0x01;
+  static final int OP_FINALIZE = 0x03;
+  static final int SW_WRONG_LENGTH = 0x6700;
+  static final int SW_INCORRECT_ALG = 0x9C09;
+  static final int SW_SIGNATURE_INVALID = 0x9C0B;
+  static final int SW_2FA_INITIALIZED_KEY = 0x9C18;
+  static final int SW_ECKEYS_INITIALIZED_KEY = 0x9C1A;
+  static final int SW_BIP327_WRONG_SECNONCE = 0x9C44;
+  static final int SW_BIP327_PUBKEY_MISMATCH = 0x9C45;
+  static final int SW_BIP327_INVALID_ID = 0x9C47;
+
+  static final byte[] KEY_2FA = Hex.decode("00112233445566778899aabbccddeeff01234567");
+  static final byte[] SLOT_PRIVKEY =
+      Hex.decode("1f2e3d4c5b6a79880123456789abcdef00112233445566778899aabbccddeeff");
+  static final int TEST_SLOT = 15;
+  static final byte[] HMAC_FLAG_2FA = {(byte) 0x80, 0x00};
+
+  @Test
+  @DisplayName("2FA gates hash signing, key import and key reset, and can be removed")
+  void twoFactorTest() throws Exception {
+    APDUResponse set = cmdSet.sendRawSecure(INS_SET_2FA_KEY, 0x00, 0x00, concat(KEY_2FA, new byte[8]));
+    if (set.getSw() == SW_2FA_INITIALIZED_KEY) {
+      // left over from an interrupted run of this test: remove it and start again
+      reset2FA();
+      set = cmdSet.sendRawSecure(INS_SET_2FA_KEY, 0x00, 0x00, concat(KEY_2FA, new byte[8]));
+    }
+    assertEquals(SW_OK, set.getSw(), "could not enable 2FA");
+    try {
+      // --- SignTransactionHash: [hash | 0x8000 | hmac(hash | 0xCC*32)]
+      byte[] pub = cmdSet.cardBip32GetExtendedKeyRaw("m/44'/0'/0'/0/0");
+      byte[] hash = sha256("satochip 2fa test".getBytes());
+      assertEquals(SW_WRONG_LENGTH,
+          cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, 0xFF, 0x00, hash).getSw(),
+          "the HMAC is mandatory once 2FA is enabled");
+      assertEquals(SW_INCORRECT_ALG, cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, 0xFF, 0x00,
+          concat(hash, new byte[2], hmac2FA(hash, 0xCC))).getSw());
+      assertEquals(SW_SIGNATURE_INVALID, cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, 0xFF, 0x00,
+          concat(hash, HMAC_FLAG_2FA, hmac2FA(hash, 0xDD))).getSw(),
+          "an HMAC made for another operation must be refused");
+      APDUResponse sig = cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, 0xFF, 0x00,
+          concat(hash, HMAC_FLAG_2FA, hmac2FA(hash, 0xCC)));
+      assertEquals(SW_OK, sig.getSw());
+      assertTrue(verifyEcdsa(pub, hash, sig.getData()));
+
+      // --- ImportKey: hmac(x(P) | (0x10^slot)*32)
+      ECNamedCurveParameterSpec spec = ECNamedCurveTable.getParameterSpec("secp256k1");
+      byte[] slotPub = spec.getG().multiply(new java.math.BigInteger(1, SLOT_PRIVKEY)).normalize().getEncoded(false);
+      byte[] slotX = Arrays.copyOfRange(slotPub, 1, 33);
+      byte[] blob = concat(new byte[]{0x00, 12, 0x01, 0x00}, new byte[6], new byte[]{0x00, 0x20}, SLOT_PRIVKEY);
+      byte[] importHmac = hmac2FA(slotX, 0x10 ^ TEST_SLOT);
+      byte[] resetHmac = hmac2FA(slotX, 0x20 ^ TEST_SLOT);
+      // start from an empty slot, whatever an interrupted run left there
+      int sw = cmdSet.sendRawSecure(INS_IMPORT_KEY, TEST_SLOT, 0x00, concat(blob, importHmac)).getSw();
+      assertTrue(sw == SW_OK || sw == SW_ECKEYS_INITIALIZED_KEY, String.format("import: %04X", sw));
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_RESET_KEY, TEST_SLOT, 0x00, resetHmac).getSw());
+      assertEquals(SW_SIGNATURE_INVALID,
+          cmdSet.sendRawSecure(INS_IMPORT_KEY, TEST_SLOT, 0x00, concat(blob, resetHmac)).getSw());
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_IMPORT_KEY, TEST_SLOT, 0x00, concat(blob, importHmac)).getSw());
+
+      sig = cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, TEST_SLOT, 0x00,
+          concat(hash, HMAC_FLAG_2FA, hmac2FA(hash, 0xCC)));
+      assertEquals(SW_OK, sig.getSw());
+      assertTrue(verifyEcdsa(slotPub, hash, sig.getData()), "the imported key should sign");
+
+      // --- ResetKey: hmac(x(P) | (0x20^slot)*32)
+      assertEquals(SW_SIGNATURE_INVALID,
+          cmdSet.sendRawSecure(INS_RESET_KEY, TEST_SLOT, 0x00, importHmac).getSw());
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_RESET_KEY, TEST_SLOT, 0x00, resetHmac).getSw());
+      assertEquals(SW_INCORRECT_P1, cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, TEST_SLOT, 0x00,
+          concat(hash, HMAC_FLAG_2FA, hmac2FA(hash, 0xCC))).getSw(), "the slot should be empty again");
+
+      // --- MuSig2: [b | ea | r | g | 0x8000 | hmac(b | 0xEE*32)]
+      if (FeaturePolicyCondition.availableCapabilities.contains("musig2")) {
+        byte[] secnonce = musig2NewSecnonce("m/86'/0'/0'/0/0");
+        byte[] b = sha256("b".getBytes());
+        byte[] ctx = concat(b, sha256("ea".getBytes()), new byte[]{0x00, 0x01});
+        assertEquals(SW_OK, cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_INIT, secnonce).getSw());
+        assertEquals(SW_SIGNATURE_INVALID, cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_FINALIZE,
+            concat(ctx, HMAC_FLAG_2FA, hmac2FA(b, 0xCC))).getSw());
+        // a failed 2FA attempt must not consume the secnonce id
+        sw = cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_FINALIZE,
+            concat(ctx, HMAC_FLAG_2FA, hmac2FA(b, 0xEE))).getSw();
+        assertNotEquals(SW_BIP327_INVALID_ID, sw);
+        assertNotEquals(SW_SIGNATURE_INVALID, sw);
+        if (FeaturePolicyCondition.availableCapabilities.contains("rsaMult")) {
+          assertEquals(SW_OK, sw);
+        }
+      }
+
+      // --- SignSchnorrHash: hmac(hash | 0xDD*32)
+      if (FeaturePolicyCondition.availableCapabilities.contains("rsaMult")) {
+        byte[] tweaked = cmdSet.cardTaprootTweakPrivateKey(0xFF, null, false);
+        assertEquals(SW_SIGNATURE_INVALID, cmdSet.sendRawSecure(INS_SIGN_SCHNORR_HASH, 0x00, 0x00,
+            concat(hash, HMAC_FLAG_2FA, hmac2FA(hash, 0xCC))).getSw());
+        APDUResponse schnorr = cmdSet.sendRawSecure(INS_SIGN_SCHNORR_HASH, 0x00, 0x00,
+            concat(hash, HMAC_FLAG_2FA, hmac2FA(hash, 0xDD)));
+        assertEquals(SW_OK, schnorr.getSw());
+        assertTrue(verifyBip340(tweaked, hash, schnorr.getData()));
+      }
+    } finally {
+      reset2FA();
+    }
+    // 2FA is gone: the plain form works again
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, 0xFF, 0x00,
+        concat(sha256("x".getBytes()), new byte[2])).getSw());
+  }
+
+  @Test
+  @DisplayName("MuSig2 secnonces are authenticated, bound to their key and single-use")
+  @FeaturePolicies({"musig2"})
+  void musig2NonceTest() {
+    // Pubnonce format: [R1(33b) | R2(33b) | id(2b)], both R compressed points on secp256k1
+    cmdSet.cardBip32GetExtendedKeyRaw("m/86'/0'/0'/0/1");
+    APDUResponse init = cmdSet.sendRawSecure(INS_MUSIG2_GENERATE_NONCE, 0xFF, OP_INIT,
+        new byte[]{0x00, (byte) 0xFF, 0x00});
+    assertEquals(SW_OK, init.getSw());
+    assertEquals(68, init.getData().length);
+    ECNamedCurveParameterSpec spec = ECNamedCurveTable.getParameterSpec("secp256k1");
+    spec.getCurve().decodePoint(Arrays.copyOfRange(init.getData(), 0, 33));
+    spec.getCurve().decodePoint(Arrays.copyOfRange(init.getData(), 33, 66));
+    APDUResponse fin = cmdSet.sendRawSecure(INS_MUSIG2_GENERATE_NONCE, 0xFF, OP_FINALIZE, new byte[0]);
+    assertEquals(SW_OK, fin.getSw());
+    assertEquals(144, fin.getData().length);
+
+    // a tampered secnonce is refused, without consuming the id
+    byte[] secnonce = fin.getData();
+    byte[] tampered = secnonce.clone();
+    tampered[5] ^= 0x01;
+    byte[] ctx = concat(sha256("b".getBytes()), sha256("ea".getBytes()), new byte[]{0x00, 0x01});
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_INIT, tampered).getSw());
+    assertEquals(SW_BIP327_WRONG_SECNONCE,
+        cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_FINALIZE, ctx).getSw());
+
+    // the secnonce is bound to the key it was generated for
+    cmdSet.cardBip32GetExtendedKeyRaw("m/86'/0'/0'/0/2");
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_INIT, secnonce).getSw());
+    assertEquals(SW_BIP327_PUBKEY_MISMATCH,
+        cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_FINALIZE, ctx).getSw());
+
+    // ... and single-use: the mismatch above already consumed its id
+    cmdSet.cardBip32GetExtendedKeyRaw("m/86'/0'/0'/0/1");
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_INIT, secnonce).getSw());
+    assertEquals(SW_BIP327_INVALID_ID,
+        cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_FINALIZE, ctx).getSw());
+  }
+
+  @Test
+  @DisplayName("MuSig2 partial signatures satisfy the BIP327 verification equation")
+  @FeaturePolicies({"musig2", "rsaMult"})
+  void musig2PartialSignatureTest() {
+    ECNamedCurveParameterSpec spec = ECNamedCurveTable.getParameterSpec("secp256k1");
+    java.math.BigInteger n = Vectors.SECP256K1_N;
+    byte[] pub = cmdSet.cardBip32GetExtendedKeyRaw("m/86'/0'/0'/0/3");
+    ECPoint p = spec.getCurve().decodePoint(pub);
+    java.math.BigInteger b = new java.math.BigInteger(1, sha256("musig2 b".getBytes())).mod(n);
+    java.math.BigInteger ea = new java.math.BigInteger(1, sha256("musig2 ea".getBytes())).mod(n);
+
+    // (r_has_odd_y, g*gacc = -1) for each case; both flip the sign of the whole equation
+    byte[][] flags = {{0x00, 0x01}, {0x01, 0x00}};
+    for (byte[] f : flags) {
+      APDUResponse init = cmdSet.sendRawSecure(INS_MUSIG2_GENERATE_NONCE, 0xFF, OP_INIT,
+          new byte[]{0x00, (byte) 0xFF, 0x00});
+      assertEquals(SW_OK, init.getSw());
+      ECPoint r1 = spec.getCurve().decodePoint(Arrays.copyOfRange(init.getData(), 0, 33));
+      ECPoint r2 = spec.getCurve().decodePoint(Arrays.copyOfRange(init.getData(), 33, 66));
+      byte[] secnonce = cmdSet.sendRawSecure(INS_MUSIG2_GENERATE_NONCE, 0xFF, OP_FINALIZE, new byte[0]).getData();
+
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_INIT, secnonce).getSw());
+      APDUResponse psig = cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_FINALIZE,
+          concat(bytes32(b), bytes32(ea), f));
+      assertEquals(SW_OK, psig.getSw());
+      assertEquals(32, psig.getData().length);
+
+      // psig*G == +/-(R1 + b*R2 + ea*P)
+      ECPoint lhs = spec.getG().multiply(new java.math.BigInteger(1, psig.getData())).normalize();
+      ECPoint rhs = r1.add(r2.multiply(b)).add(p.multiply(ea));
+      if (f[0] == 0x01) rhs = rhs.negate();
+      assertEquals(rhs.normalize(), lhs, "partial signature equation, flags " + Hex.toHexString(f));
+    }
+  }
+
+  /** Generates a MuSig2 nonce for the given path and returns the 144-byte encrypted secnonce. */
+  private byte[] musig2NewSecnonce(String path) {
+    cmdSet.cardBip32GetExtendedKeyRaw(path);
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_MUSIG2_GENERATE_NONCE, 0xFF, OP_INIT,
+        new byte[]{0x00, (byte) 0xFF, 0x00}).getSw());
+    APDUResponse fin = cmdSet.sendRawSecure(INS_MUSIG2_GENERATE_NONCE, 0xFF, OP_FINALIZE, new byte[0]);
+    assertEquals(SW_OK, fin.getSw());
+    return fin.getData();
+  }
+
+  /** 2FA approval: HMAC-SHA1(KEY_2FA, value(32b) | 32 bytes of padding). */
+  private static byte[] hmac2FA(byte[] value32, int padding) {
+    byte[] pad = new byte[32];
+    Arrays.fill(pad, (byte) padding);
+    return hmacSha1(KEY_2FA, concat(value32, pad));
+  }
+
+  /** Removes the test 2FA key: HMAC-SHA1(KEY_2FA, id_2FA(20b) | 44 bytes 0xAA). */
+  private void reset2FA() {
+    byte[] id = hmacSha1(KEY_2FA, "id_2FA".getBytes());
+    byte[] pad = new byte[44];
+    Arrays.fill(pad, (byte) 0xAA);
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_RESET_2FA_KEY, 0x00, 0x00,
+        hmacSha1(KEY_2FA, concat(id, pad))).getSw(), "could not remove the test 2FA key");
+  }
+
+  private static byte[] hmacSha1(byte[] key, byte[] msg) {
+    try {
+      javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA1");
+      mac.init(new javax.crypto.spec.SecretKeySpec(key, "HmacSHA1"));
+      return mac.doFinal(msg);
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  private static byte[] bytes32(java.math.BigInteger v) {
+    byte[] raw = v.toByteArray();
+    byte[] out = new byte[32];
+    int len = Math.min(32, raw.length);
+    System.arraycopy(raw, raw.length - len, out, 32 - len, len);
+    return out;
+  }
+
+  // =============================================================================================
   // Helpers
   // =============================================================================================
 
