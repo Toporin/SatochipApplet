@@ -2727,18 +2727,18 @@ public class Satochip extends javacard.framework.Applet {
         return (short)64;
     }
     
-    // BIP0340 hashtag function for Schnorr signatures
-    // This function uses tmpBuffer for intermediate results, hence it should not be used for msg buffer.
+    // BIP0340 tagged hash: dst = SHA256(SHA256(tag) || SHA256(tag) || msg)
+    // The message is hashed in place (streamed), so its length is not bounded by a scratch buffer.
+    // This function uses tmpBuffer[0..32) for the tag hash, hence msg must not be stored there.
     public short schnorr_hash_tag(
             byte[] tag, short tag_offset, short tag_length,
-            byte[] msg, short msg_offset, short msg_length, 
+            byte[] msg, short msg_offset, short msg_length,
             byte[] dst, short dst_offset){
-        sha256.reset(); 
+        sha256.reset();
         sha256.doFinal(tag, tag_offset, tag_length, tmpBuffer, (short)0);
-        Util.arrayCopyNonAtomic(tmpBuffer, (short)0, tmpBuffer, (short)32, (short)32);
-        Util.arrayCopyNonAtomic(msg, msg_offset, tmpBuffer, (short)64, msg_length);
-        sha256.reset(); 
-        sha256.doFinal(tmpBuffer, (short)0, (short)(64+msg_length), dst, dst_offset);
+        sha256.update(tmpBuffer, (short)0, (short)32);
+        sha256.update(tmpBuffer, (short)0, (short)32);
+        sha256.doFinal(msg, msg_offset, msg_length, dst, dst_offset);
         return (short)32;
     }
 

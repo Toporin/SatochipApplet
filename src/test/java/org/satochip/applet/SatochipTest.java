@@ -657,6 +657,31 @@ public class SatochipTest {
   }
 
   @Test
+  @DisplayName("Taproot tweak output key matches BIP341, with and without a merkle root")
+  @FeaturePolicies({"schnorr"})
+  void taprootTweakVectorTest() {
+    // runs without the RSA multiplication trick, so it also covers the BIP340 tagged hash on the simulator
+    ECNamedCurveParameterSpec spec = ECNamedCurveTable.getParameterSpec("secp256k1");
+    byte[] pub = cmdSet.cardBip32GetExtendedKeyRaw("m/86'/0'/0'/0/0");
+    byte[] px = Arrays.copyOfRange(pub, 1, 33);
+    ECPoint p = liftX(spec, new java.math.BigInteger(1, px));
+    byte[] merkleRoot = sha256("some merkle root".getBytes());
+
+    for (byte[] h : new byte[][]{new byte[0], merkleRoot}) {
+      // Q = lift_x(x(P)) + t*G, with t = tagged_hash("TapTweak", x(P) || h)
+      java.math.BigInteger t = new java.math.BigInteger(1, taggedHash("TapTweak", concat(px, h)));
+      byte[] expected = p.add(spec.getG().multiply(t)).normalize().getEncoded(false);
+
+      APDUResponse r = cmdSet.sendRawSecure(INS_TAPROOT_TWEAK_PRIVKEY, 0xFF, 0x00,
+          concat(new byte[]{(byte) h.length}, h));
+      assertEquals(SW_OK, r.getSw());
+      // Response: [pubkey_size(2b) | uncompressed pubkey(65b) | sig_size(2b) | authentikey sig]
+      assertArrayEquals(expected, Arrays.copyOfRange(r.getData(), 2, 67),
+          "tweaked output key, merkle root of " + h.length + " bytes");
+    }
+  }
+
+  @Test
   @DisplayName("SDK taproot tweak: BIP86 (tweak_size=0) and script-path both verify")
   @FeaturePolicies({"schnorr", "rsaMult"})
   void taprootTweakViaSdkTest() throws Exception {
