@@ -239,7 +239,7 @@ public class Satochip extends javacard.framework.Applet {
     /** Incorrect P2 parameter */
     private final static short SW_INCORRECT_P2 = (short) 0x9C11;
     /** Invalid input parameter to command */
-    private final static short SW_INVALID_PARAMETER = (short) 0x9C0F;
+    final static short SW_INVALID_PARAMETER = (short) 0x9C0F;
     
     /** Eckeys initialized */
     private final static short SW_ECKEYS_INITIALIZED_KEY = (short) 0x9C1A;
@@ -274,9 +274,8 @@ public class Satochip extends javacard.framework.Applet {
     
     /** Secure channel */
     private final static short SW_SECURE_CHANNEL_REQUIRED = (short) 0x9C20;
-    private final static short SW_SECURE_CHANNEL_UNINITIALIZED = (short) 0x9C21;
-    private final static short SW_SECURE_CHANNEL_WRONG_IV= (short) 0x9C22;
-    private final static short SW_SECURE_CHANNEL_WRONG_MAC= (short) 0x9C23;
+    // SW_SECURE_CHANNEL_UNINITIALIZED (0x9C21), SW_SECURE_CHANNEL_WRONG_IV (0x9C22) and
+    // SW_SECURE_CHANNEL_WRONG_MAC (0x9C23) are declared in SecureChannel
     
     /** Secret data is too long for import **/
     private final static short SW_IMPORTED_DATA_TOO_LONG = (short) 0x9C32;
@@ -507,24 +506,16 @@ public class Satochip extends javacard.framework.Applet {
     private Cipher aes128_cbc;
     private AESKey key_2FA;
     
-    // secure channel
-    private static final byte[] CST_SC = {'s','c','_','k','e','y', 's','c','_','m','a','c'};
-    private boolean initialized_secure_channel = false;
+    // secure channel (see SecureChannel)
+    private SecureChannel secureChannel;
+    // scratch EC private key, used by the secure channel, BIP32 derivation, ImportKey, Schnorr & MuSig2
     private ECPrivateKey ephemeral_privkey;
     private boolean ephemeral_privkey_transient = false;
-    private AESKey sc_sessionkey;
+    // AES-CBC cipher used statelessly (re-initialized at each use) by the secure channel,
+    // MuSig2 secnonce encryption and secure import (unlike aes128_cbc, used across APDUs by 2FA)
     private Cipher sc_aes128_cbc;
-    private byte[] sc_buffer;
-    private static final byte OFFSET_SC_IV=0;
-    private static final byte OFFSET_SC_IV_RANDOM=OFFSET_SC_IV;
-    private static final byte OFFSET_SC_IV_COUNTER=12;
-    private static final byte OFFSET_SC_MACKEY=16;
-    private static final byte SIZE_SC_MACKEY=20;
-    private static final byte SIZE_SC_IV= 16;
-    private static final byte SIZE_SC_IV_RANDOM=12;
-    private static final byte SIZE_SC_IV_COUNTER=SIZE_SC_IV-SIZE_SC_IV_RANDOM;
-    private static final byte SIZE_SC_BUFFER=SIZE_SC_MACKEY+SIZE_SC_IV;
-    
+    private static final byte AES_IV_SIZE= 16;
+
     // import from seedkeeper
     private boolean is_trusted_pubkey = false;
     private byte[] trusted_pubkey;
@@ -601,27 +592,6 @@ public class Satochip extends javacard.framework.Applet {
             ISOException.throwIt(SW_UNSUPPORTED_FEATURE);// unsupported feature => use a more recent card!
         }
         
-        //secure channel objects
-        try {
-            sc_buffer = JCSystem.makeTransientByteArray((short) SIZE_SC_BUFFER, JCSystem.CLEAR_ON_DESELECT);
-        } catch (SystemException e) {
-            sc_buffer = new byte[SIZE_SC_BUFFER];
-        }
-
-        // secure channel
-        try {
-            // Put the AES key in RAM if we can.
-            sc_sessionkey = (AESKey) KeyBuilder.buildKey(TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, false);
-        } catch (CryptoException e) {
-            try {
-                // This uses a bit more RAM, but at least it isn't using flash.
-                sc_sessionkey = (AESKey) KeyBuilder.buildKey(TYPE_AES_TRANSIENT_RESET, KeyBuilder.LENGTH_AES_128, false);
-            } catch (CryptoException e1) {
-                // Last option as it will wear out the flash eventually
-                sc_sessionkey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
-            }
-        }
-
         sc_aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
 
         try {
@@ -652,7 +622,12 @@ public class Satochip extends javacard.framework.Applet {
         keyAgreement.init(authentikey_private);   
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form => silently fail after cap loaded
         authentikey_public.setW(recvBuffer, (short)0, (short)65);
-        
+
+        // secure channel: requires the authentikey
+        secureChannel = new SecureChannel(sc_aes128_cbc, ephemeral_privkey, ephemeral_privkey_transient,
+                keyAgreement, sigECDSA, randomData, authentikey_private, authentikey_public,
+                recvBuffer, tmpBuffer);
+
         // BIP32 material
         bip32_masterkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
         bip32_masterchaincode= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
@@ -693,22 +668,30 @@ public class Satochip extends javacard.framework.Applet {
         
         // import from SeedKeeper
         trusted_pubkey = new byte[PUBKEY_SIZE];
-        try {
-            // Put the AES key in RAM if we can.
-            secret_sc_sessionkey = (AESKey) KeyBuilder.buildKey(TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, false);
-        } catch (CryptoException e) {
-            try {
-                // This uses a bit more RAM, but at least it isn't using flash.
-                secret_sc_sessionkey = (AESKey) KeyBuilder.buildKey(TYPE_AES_TRANSIENT_RESET, KeyBuilder.LENGTH_AES_128, false);
-            } catch (CryptoException e1) {
-                // Last option as it will wear out the flash eventually
-                secret_sc_sessionkey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
-            }
-        }
+        secret_sc_sessionkey = buildTransientAES128Key();
 
         // debug
         register();
     } // end of constructor
+
+    /**
+     * Builds an AES-128 key, in RAM if the card supports it, otherwise in EEPROM.
+     * Used for the session keys, which are derived again for each session.
+     */
+    static AESKey buildTransientAES128Key() {
+        try {
+            // Put the AES key in RAM if we can.
+            return (AESKey) KeyBuilder.buildKey(TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, false);
+        } catch (CryptoException e) {
+            try {
+                // This uses a bit more RAM, but at least it isn't using flash.
+                return (AESKey) KeyBuilder.buildKey(TYPE_AES_TRANSIENT_RESET, KeyBuilder.LENGTH_AES_128, false);
+            } catch (CryptoException e1) {
+                // Last option as it will wear out the flash eventually
+                return (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
+            }
+        }
+    }
 
     public static void install(byte[] bArray, short bOffset, byte bLength) {
         Satochip wal = new Satochip(bArray, bOffset, bLength);
@@ -720,8 +703,7 @@ public class Satochip extends javacard.framework.Applet {
          */
         LogOutAll();
         
-        //todo: clear secure channel values?
-        initialized_secure_channel=false;
+        secureChannel.close();
 
         // check nfc policy
         if (nfc_policy == NFC_DISABLED || nfc_policy == NFC_BLOCKED){
@@ -786,12 +768,12 @@ public class Satochip extends javacard.framework.Applet {
             return;
         }
         else if (ins == INS_INIT_SECURE_CHANNEL){
-            sizeout= InitiateSecureChannel(apdu, buffer);
+            sizeout= secureChannel.initiate(buffer);
             apdu.setOutgoingAndSend((short) 0, sizeout);
             return;
         }
         else if (ins == INS_PROCESS_SECURE_CHANNEL){
-            sizeout= ProcessSecureChannel(apdu, buffer);
+            sizeout= secureChannel.unwrap(buffer);
             //todo: check if sizeout and buffer[ISO7816.OFFSET_LC] matches...
             //if sizeout>4, buffer[ISO7816.OFFSET_LC] should be equal to (sizeout-5)
             //todo: remove padding ? (it is actually not used)          
@@ -979,18 +961,7 @@ public class Satochip extends javacard.framework.Applet {
             apdu.setOutgoingAndSend((short) 0, sizeout);
         }
         else { // encrypt response through the Secure Channel
-            // buffer contains the data (sizeout)
-            // for encryption, data is padded with PKCS#7
-            short blocksize=(short)16;
-            short padsize= (short) (blocksize - (sizeout%blocksize));
-            
-            Util.arrayCopy(buffer, (short)0, tmpBuffer, (short)0, sizeout);
-            Util.arrayFillNonAtomic(tmpBuffer, sizeout, padsize, (byte)padsize);//padding
-            Util.arrayCopy(sc_buffer, OFFSET_SC_IV, buffer, (short)0, SIZE_SC_IV);
-            sc_aes128_cbc.init(sc_sessionkey, Cipher.MODE_ENCRYPT, sc_buffer, OFFSET_SC_IV, SIZE_SC_IV);
-            short sizeoutCrypt=sc_aes128_cbc.doFinal(tmpBuffer, (short)0, (short)(sizeout+padsize), buffer, (short) (18));
-            Util.setShort(buffer, (short)16, sizeoutCrypt);
-            sizeout= (short)(18+sizeoutCrypt);
+            sizeout= secureChannel.wrap(buffer, sizeout);
             //send back
             apdu.setOutgoingAndSend((short) 0, sizeout);
         }
@@ -1137,8 +1108,7 @@ public class Satochip extends javacard.framework.Applet {
         eckeys_flag=(short)0;
 
         // secure channel session key
-        sc_sessionkey.clearKey();
-        initialized_secure_channel=false;
+        secureChannel.clear();
 
         // reset NFC policy to enabled
         nfc_policy = NFC_ENABLED;
@@ -1308,7 +1278,7 @@ public class Satochip extends javacard.framework.Applet {
      * 
      * @return true if the length bytes at both locations are equal, false otherwise
      */
-    private static boolean arrayCompareConstantTime(byte[] a, short aOffset, byte[] b, short bOffset, short length){
+    static boolean arrayCompareConstantTime(byte[] a, short aOffset, byte[] b, short bOffset, short length){
         byte diff = (byte)0;
         for (short i=(short)0; i<length; i++){
             diff |= (byte)(a[(short)(aOffset+i)] ^ b[(short)(bOffset+i)]);
@@ -2983,7 +2953,7 @@ public class Satochip extends javacard.framework.Applet {
 
         // encrypt [ k1 | k2 | pk | id | padding ] using a key only known to the applet
         // we reuse the cipher object of the secure channel, since it is used in a stateless way.
-        sc_aes128_cbc.init(bip327_encryptkey, Cipher.MODE_ENCRYPT, recvBuffer, OFFSET_BIP327_IV, SIZE_SC_IV);
+        sc_aes128_cbc.init(bip327_encryptkey, Cipher.MODE_ENCRYPT, recvBuffer, OFFSET_BIP327_IV, AES_IV_SIZE);
         sc_aes128_cbc.doFinal(recvBuffer, OFFSET_BIP327_K1, (short)112, recvBuffer, OFFSET_BIP327_K1);
 
         // compute MAC over encrypted secnonce+IV
@@ -3071,7 +3041,7 @@ public class Satochip extends javacard.framework.Applet {
 
         // decrypt [ k1 | k2 | pk | id | padding ] using a key only known to the applet
         // we reuse the cipher object of the secure channel, since it is used in a stateless way.
-        sc_aes128_cbc.init(bip327_encryptkey, Cipher.MODE_DECRYPT, recvBuffer, OFFSET_BIP327_IV, SIZE_SC_IV);
+        sc_aes128_cbc.init(bip327_encryptkey, Cipher.MODE_DECRYPT, recvBuffer, OFFSET_BIP327_IV, AES_IV_SIZE);
         sc_aes128_cbc.doFinal(recvBuffer, OFFSET_BIP327_K1, (short)112, recvBuffer, OFFSET_BIP327_K1);
 
         // check that the secnonce id is in list of valid ids (not used yet)
@@ -3455,7 +3425,7 @@ public class Satochip extends javacard.framework.Applet {
         sha256.update(buffer, ISO7816.OFFSET_CDATA, (short) (SECRET_HEADER_SIZE));
 
         // compute shared static key
-        if (bytes_left < SIZE_SC_IV)// IV
+        if (bytes_left < AES_IV_SIZE)// IV
             ISOException.throwIt(SW_INVALID_PARAMETER);
         keyAgreement.init(authentikey_private);
         keyAgreement.generateSecret(trusted_pubkey, (short)0, (short)65, recvBuffer, (short)0); // pubkey in uncompressed form
@@ -3464,9 +3434,9 @@ public class Satochip extends javacard.framework.Applet {
         secret_sc_sessionkey.setKey(recvBuffer, (short)33); // AES-128:
         // 16-bytes key!!
         HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)6, (short)6, recvBuffer, (short)33);
-        sc_aes128_cbc.init(secret_sc_sessionkey, Cipher.MODE_DECRYPT, buffer, buffer_offset, SIZE_SC_IV);
-        buffer_offset += SIZE_SC_IV;
-        bytes_left -= SIZE_SC_IV;
+        sc_aes128_cbc.init(secret_sc_sessionkey, Cipher.MODE_DECRYPT, buffer, buffer_offset, AES_IV_SIZE);
+        buffer_offset += AES_IV_SIZE;
+        bytes_left -= AES_IV_SIZE;
 
         // load the new (sensitive) data
         data_size = Util.getShort(buffer, buffer_offset);
@@ -3489,7 +3459,7 @@ public class Satochip extends javacard.framework.Applet {
         if (hmac_size != (short) 20 || bytes_left < hmac_size) {
             ISOException.throwIt(SW_INVALID_PARAMETER);
         }
-        short sign_size = HmacSha160.computeHmacSha160(recvBuffer, (short)33, SIZE_SC_MACKEY, recvBuffer, (short)53, (short)32, recvBuffer, (short)85);
+        short sign_size = HmacSha160.computeHmacSha160(recvBuffer, (short)33, (short)20, recvBuffer, (short)53, (short)32, recvBuffer, (short)85);
         if (!arrayCompareConstantTime(buffer, hmac_offset, recvBuffer, (short)(85), (short)20))
             ISOException.throwIt(SW_SECURE_IMPORT_WRONG_MAC);
 
@@ -3525,149 +3495,6 @@ public class Satochip extends javacard.framework.Applet {
         return (short)0;
     }
 
-    /****************************************
-     *               Secure Channel         *
-     ****************************************/
-
-    /**
-     * This function allows to initiate a Secure Channel
-     *  
-     *  ins: 0x81
-     *  p1: 0x00
-     *  p2: 0x00
-     *  data: [client-pubkey(65b)]
-     *  return: [coordx_size(2b) | ephemeralkey_coordx | sig_size(2b) | self_sig | sig2_size(2b) | authentikey_sig | coordx_size(2b) | authentikey_coordx]
-     */
-    private short InitiateSecureChannel(APDU apdu, byte[] buffer){
-        
-        // get client pubkey
-        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-        if (bytesLeft < (short)65)
-            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        if (buffer[ISO7816.OFFSET_CDATA] != (byte)0x04)
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        // check that the client point is on secp256k1 (mitigates invalid-curve attacks via ECDH)
-        if (!Secp256k1.isOnCurve(buffer, ISO7816.OFFSET_CDATA, recvBuffer, (short)0))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-            
-        // generate a new ephemeral key
-        if (ephemeral_privkey_transient) {
-            Secp256k1.setCommonCurveParameters(ephemeral_privkey);
-        }
-        //ephemeral_privkey.clearKey(); //todo: simply generate new random S param instead?
-        //Secp256k1.setCommonCurveParameters(ephemeral_privkey);// keep public params!
-        randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
-        ephemeral_privkey.setS(recvBuffer, (short)0, BIP32_KEY_SIZE); //random value first
-        
-        // compute the shared secret...
-        keyAgreement.init(ephemeral_privkey);
-        keyAgreement.generateSecret(buffer, ISO7816.OFFSET_CDATA, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form
-        // derive sc_sessionkey & sc_mackey
-        HmacSha160.computeHmacSha160(recvBuffer, (short)1, BIP32_KEY_SIZE, CST_SC, (short)6, (short)6, recvBuffer, (short)33);
-        Util.arrayCopyNonAtomic(recvBuffer, (short)33, sc_buffer, OFFSET_SC_MACKEY, SIZE_SC_MACKEY);
-        HmacSha160.computeHmacSha160(recvBuffer, (short)1, BIP32_KEY_SIZE, CST_SC, (short)0, (short)6, recvBuffer, (short)33);
-        sc_sessionkey.setKey(recvBuffer,(short)33); // AES-128: 16-bytes key!!       
-//      //alternatively: derive session_key (sha256 of coordx)
-//      sha256.reset();
-//      sha256.doFinal(recvBuffer, (short)1, (short)32, recvBuffer, (short) 0);
-//      sc_sessionkey.setKey(recvBuffer,(short)0); // AES-128: 16-bytes key!!
-//      //derive mac_key
-//      sha256.reset();
-//      sha256.doFinal(recvBuffer, (short)0, (short)32, sc_mackey, (short) 0);
-        
-        //reset IV counter
-        Util.arrayFillNonAtomic(sc_buffer, OFFSET_SC_IV, SIZE_SC_IV, (byte) 0);
-        
-        // self signed ephemeral pubkey
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
-        Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
-        sigECDSA.init(ephemeral_privkey, Signature.MODE_SIGN);
-        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2), buffer, (short)(BIP32_KEY_SIZE+4));
-        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+2), sign_size);
-        
-        // hash signed by authentikey
-        short offset= (short)(2+BIP32_KEY_SIZE+2+sign_size);
-        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
-        short sign2_size= sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
-        Util.setShort(buffer, offset, sign2_size);
-        offset+=(short)(2+sign2_size);
-        
-        // add coordx for authentikey (allows for non-ambiguous recovery of pubkey using signature)
-        authentikey_public.getW(buffer, (short)(offset+1));
-        Util.setShort(buffer, offset, BIP32_KEY_SIZE);
-        offset+=(short)(2+BIP32_KEY_SIZE);
-        
-        initialized_secure_channel= true;
-        
-        // return x-coordinate of public key+signature
-        // the client can recover full public-key from the signature or
-        // by guessing the compression value () and verifying the signature... 
-        // buffer= [coordx_size(2b) | ephemeralkey_coordx | sig_size(2b) | self_sig | sig2_size | authentikey_sig | coordx_size(2b) | authentikey_coordx]
-        return offset;
-    }
-    
-    /**
-     * This function allows to decrypt a secure channel message
-     * Note: given the buffer size limitations, the max size for a plaintext command apdu is 154 bytes.
-     *  
-     *  ins: 0x82
-     *  
-     *  p1: 0x00 (RFU)
-     *  p2: 0x00 (RFU)
-     *  data: [IV(16b) | data_size(2b) | encrypted_command | mac_size(2b) | mac]
-     *  
-     *  return: [decrypted command]
-     *   
-     */
-    private short ProcessSecureChannel(APDU apdu, byte[] buffer){
-        
-        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-        short offset = ISO7816.OFFSET_CDATA;
-        
-        if (!initialized_secure_channel){
-            ISOException.throwIt(SW_SECURE_CHANNEL_UNINITIALIZED);
-        }
-        
-        // check hmac
-        if (bytesLeft<18)
-            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        short sizein = Util.getShort(buffer, (short) (offset+SIZE_SC_IV));
-        if (bytesLeft<(short)(SIZE_SC_IV+2+sizein+2))
-            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        short sizemac= Util.getShort(buffer, (short) (offset+SIZE_SC_IV+2+sizein));
-        if (sizemac != (short)20)
-            ISOException.throwIt(SW_SECURE_CHANNEL_WRONG_MAC);
-        if (bytesLeft<(short)(SIZE_SC_IV+2+sizein+2+sizemac))
-            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        // we compute the hmac on the very end of the recvBuffer, so that first bytes can be used as temporary storage between 2 commands.
-        HmacSha160.computeHmacSha160(sc_buffer, OFFSET_SC_MACKEY, SIZE_SC_MACKEY, buffer, offset, (short)(SIZE_SC_IV+2+sizein), recvBuffer, (short)248);
-        if ( !arrayCompareConstantTime(recvBuffer, (short)248, buffer, (short)(offset+SIZE_SC_IV+2+sizein+2), (short)20) )
-            ISOException.throwIt(SW_SECURE_CHANNEL_WRONG_MAC);
-        
-        // process IV
-        // IV received from client should be odd and strictly greater than locally saved IV
-        // IV should be random (the 12 first bytes), never reused (the last 4 bytes counter) and different for send and receive
-        if ((buffer[(short)(offset+SIZE_SC_IV-(short)1)] & (byte)0x01)==0x00)// should be odd
-            ISOException.throwIt(SW_SECURE_CHANNEL_WRONG_IV);
-        if ( !Biginteger.lessThan(sc_buffer, OFFSET_SC_IV_COUNTER, buffer, (short)(offset+SIZE_SC_IV_RANDOM), SIZE_SC_IV_COUNTER ) ) //and greater than local IV
-            ISOException.throwIt(SW_SECURE_CHANNEL_WRONG_IV);
-        // update local IV
-        Util.arrayCopy(buffer, (short)(offset+SIZE_SC_IV_RANDOM), sc_buffer, OFFSET_SC_IV_COUNTER, SIZE_SC_IV_COUNTER);
-        Biginteger.add1_carry(sc_buffer, OFFSET_SC_IV_COUNTER, SIZE_SC_IV_COUNTER);
-        randomData.generateData(sc_buffer, OFFSET_SC_IV_RANDOM, SIZE_SC_IV_RANDOM);
-        sc_aes128_cbc.init(sc_sessionkey, Cipher.MODE_DECRYPT, buffer, offset, SIZE_SC_IV);
-        offset+=SIZE_SC_IV;
-        bytesLeft-=SIZE_SC_IV;
-        
-        //decrypt command
-        offset+=2;
-        bytesLeft-=2;
-        if (bytesLeft<sizein)
-            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        short sizeout=sc_aes128_cbc.doFinal(buffer, offset, sizein, buffer, (short) (0));
-        return sizeout;
-    }
-    
     /*********************************************
      *      Methods for PKI personalization      *
      *********************************************/
