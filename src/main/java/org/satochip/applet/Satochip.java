@@ -3600,7 +3600,7 @@ public class Satochip extends javacard.framework.Applet {
                 short chunk_size= Util.getShort(buffer, buffer_offset);
                 buffer_offset+=2;
                 bytesLeft-=4;
-                if (bytesLeft < chunk_size)
+                if ((chunk_size < 0) || (bytesLeft < chunk_size))
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
                 if ((chunk_offset<0) || (chunk_offset>=authentikey_certificate_size))
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
@@ -3647,7 +3647,11 @@ public class Satochip extends javacard.framework.Applet {
                 
                 if ((chunk_offset<0) || (chunk_offset>=authentikey_certificate_size))
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                if (((short)(chunk_offset+chunk_size))>authentikey_certificate_size)
+                // the chunk is returned through the secure channel, which bounds the response size
+                if ((chunk_size<0) || (chunk_size>SecureChannel.MAX_WRAP_SIZE))
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                // written as a difference, so that chunk_offset+chunk_size cannot overflow
+                if (chunk_size > (short)(authentikey_certificate_size-chunk_offset))
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
                 Util.arrayCopyNonAtomic(authentikey_certificate, chunk_offset, buffer, (short)0, chunk_size);
                 return chunk_size; 

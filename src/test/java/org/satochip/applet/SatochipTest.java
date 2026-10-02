@@ -126,6 +126,11 @@ public class SatochipTest {
     boot.cardSelect().checkOK();
 
     if (!isSetupDone(boot)) {
+      if (TARGET == TARGET_SIMULATOR) {
+        // personalization is only possible before setup: give the simulator a certificate, like
+        // a real card gets at the factory, so that the certificate export can be tested
+        importTestCertificate(boot);
+      }
       setupCard(boot);
     }
     boot.setPin0(PIN);
@@ -208,6 +213,27 @@ public class SatochipTest {
     }
 
     FeaturePolicyCondition.availableCapabilities = caps;
+  }
+
+  static final byte INS_IMPORT_PKI_CERTIFICATE = (byte) 0x92;
+  static final byte INS_EXPORT_PKI_CERTIFICATE = (byte) 0x93;
+  /** Test certificate for the simulator, larger than the largest chunk the secure channel can return. */
+  static final byte[] TEST_CERTIFICATE = new byte[300];
+  static {
+    for (int i = 0; i < TEST_CERTIFICATE.length; i++) TEST_CERTIFICATE[i] = (byte) (i * 7);
+  }
+
+  private static void importTestCertificate(TestSatochipCommandSet cmd) {
+    int size = TEST_CERTIFICATE.length;
+    assertEquals(SW_OK, cmd.sendRawSecure(INS_IMPORT_PKI_CERTIFICATE, 0x00, 0x01,
+        new byte[]{(byte) (size >> 8), (byte) size}).getSw());
+    for (int off = 0; off < size; off += 128) {
+      int len = Math.min(128, size - off);
+      byte[] data = concat(new byte[]{(byte) (off >> 8), (byte) off, (byte) (len >> 8), (byte) len},
+          Arrays.copyOfRange(TEST_CERTIFICATE, off, off + len));
+      assertEquals(SW_OK, cmd.sendRawSecure(INS_IMPORT_PKI_CERTIFICATE, 0x00, 0x02, data).getSw(),
+          "could not import the test certificate");
+    }
   }
 
   private static boolean isSetupDone(TestSatochipCommandSet cmd) {
@@ -1029,6 +1055,45 @@ public class SatochipTest {
     byte[] mac = hmacSha1(macKey, sha256(concat(header, ct)));
     if (badMac) mac[0] ^= 0x01;
     return concat(header, iv, new byte[]{(byte) (ct.length >> 8), (byte) ct.length}, ct, new byte[]{20}, mac);
+  }
+
+  @Test
+  @DisplayName("Certificate export bounds the requested chunk")
+  void exportCertificateChunkTest() {
+    final int SW_WRONG_LENGTH = 0x6700;
+    APDUResponse init = cmdSet.sendRawSecure(INS_EXPORT_PKI_CERTIFICATE, 0x00, 0x01, new byte[0]);
+    assertEquals(SW_OK, init.getSw());
+    int size = ((init.getData()[0] & 0xff) << 8) | (init.getData()[1] & 0xff);
+    Assumptions.assumeTrue(size >= 224, "needs a certificate of at least 224 bytes, card has " + size);
+
+    // the largest chunk that fits a secure channel response is accepted...
+    APDUResponse chunk = cmdSet.sendRawSecure(INS_EXPORT_PKI_CERTIFICATE, 0x00, 0x02, chunkRequest(0, 223));
+    assertEquals(SW_OK, chunk.getSw());
+    assertEquals(223, chunk.getData().length);
+    // ... one more byte, a negative size, or an offset+size overflowing a short are refused
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawSecure(INS_EXPORT_PKI_CERTIFICATE, 0x00, 0x02, chunkRequest(0, 224)).getSw());
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawSecure(INS_EXPORT_PKI_CERTIFICATE, 0x00, 0x02, chunkRequest(0, 0xFFFF)).getSw());
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawSecure(INS_EXPORT_PKI_CERTIFICATE, 0x00, 0x02, chunkRequest(size - 1, 0x7FFF)).getSw());
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawSecure(INS_EXPORT_PKI_CERTIFICATE, 0x00, 0x02, chunkRequest(size - 10, 11)).getSw());
+
+    // the whole certificate still exports in 128-byte chunks, as the SDK does
+    byte[] cert = new byte[0];
+    for (int off = 0; off < size; off += 128) {
+      APDUResponse r = cmdSet.sendRawSecure(INS_EXPORT_PKI_CERTIFICATE, 0x00, 0x02,
+          chunkRequest(off, Math.min(128, size - off)));
+      assertEquals(SW_OK, r.getSw());
+      cert = concat(cert, r.getData());
+    }
+    assertEquals(size, cert.length);
+    assertArrayEquals(Arrays.copyOfRange(cert, 0, 223), chunk.getData());
+    if (TARGET == TARGET_SIMULATOR) {
+      assertArrayEquals(TEST_CERTIFICATE, cert);
+    }
+  }
+
+  /** Certificate export request: [chunk_offset(2b) | chunk_size(2b)]. */
+  private static byte[] chunkRequest(int offset, int size) {
+    return new byte[]{(byte) (offset >> 8), (byte) offset, (byte) (size >> 8), (byte) size};
   }
 
   /** Generates a MuSig2 nonce for the given path and returns the 144-byte encrypted secnonce. */

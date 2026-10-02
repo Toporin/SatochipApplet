@@ -53,6 +53,13 @@ class SecureChannel {
 
     private final static short COORD_SIZE = (short) 32; // size of a secp256k1 coordinate
 
+    /**
+     * Largest plaintext response that wrap() can send: the PKCS#7-padded plaintext must fit in
+     * tmpBuffer (256b), and [IV(16b) | size(2b) | ciphertext] in a short R-APDU (256b), i.e. a
+     * ciphertext of at most 224 bytes. Handlers returning variable-size data must respect it.
+     */
+    final static short MAX_WRAP_SIZE = (short) 223;
+
     private static final byte[] CST_SC = {'s','c','_','k','e','y', 's','c','_','m','a','c'};
 
     // sc_buffer=[ IV(16b) | mackey(20b) ], where IV=[ random(12b) | counter(4b) ]
@@ -274,6 +281,9 @@ class SecureChannel {
      * return: [IV(16b) | data_size(2b) | encrypted_response] in buffer, and its size
      */
     short wrap(byte[] buffer, short sizeout){
+        // handlers are expected to bound their response; this is a last line of defense
+        if (sizeout > MAX_WRAP_SIZE)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         // buffer contains the data (sizeout)
         // for encryption, data is padded with PKCS#7
         short blocksize=(short)16;
