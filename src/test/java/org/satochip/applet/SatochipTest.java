@@ -862,6 +862,110 @@ public class SatochipTest {
     }
   }
 
+  @Test
+  @DisplayName("Encrypted secret import validates the decrypted secret before using it")
+  void importEncryptedSecretTest() throws Exception {
+    final byte INS_BIP32_RESET_SEED = (byte) 0x77;
+    final byte INS_IMPORT_TRUSTED_PUBKEY = (byte) 0xAA;
+    final byte INS_IMPORT_ENCRYPTED_SECRET = (byte) 0xAC;
+    final byte INS_EXPORT_PKI_PUBKEY = (byte) 0x98;
+    final byte TYPE_SEED = 0x10;
+    final byte TYPE_2FA = (byte) 0xB0;
+    final int SW_SECURE_IMPORT_WRONG_MAC = 0x9C33;
+
+    // play the SeedKeeper: the shared key is ECDH between its authentikey and the card's
+    ECNamedCurveParameterSpec spec = ECNamedCurveTable.getParameterSpec("secp256k1");
+    java.math.BigInteger hostPriv = new java.math.BigInteger(1, sha256("test seedkeeper".getBytes()));
+    byte[] hostPub = spec.getG().multiply(hostPriv).normalize().getEncoded(false);
+    APDUResponse pki = cmdSet.sendRawSecure(INS_EXPORT_PKI_PUBKEY, 0x00, 0x00, new byte[0]);
+    assertEquals(SW_OK, pki.getSw());
+    byte[] sharedX = spec.getCurve().decodePoint(pki.getData()).multiply(hostPriv).normalize()
+        .getAffineXCoord().getEncoded();
+
+    byte[] baselinePub = cmdSet.cardBip32GetExtendedKeyRaw("m/44'/0'/0'/0/0");
+    // a trusted pubkey can only be imported on an unseeded card; the seed is restored below
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_BIP32_RESET_SEED, PIN.length, 0x00, PIN).getSw());
+    // a seed reset logs the user out
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw());
+    boolean twoFactorSet = false;
+    try {
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_IMPORT_TRUSTED_PUBKEY, 0x00, 0x00,
+          concat(new byte[]{0x00, 0x41}, hostPub)).getSw());
+
+      // all the blobs below carry a valid MAC, so they reach the checks on the decrypted secret
+      byte[] seed = Vectors.BIP32_SEED;
+      assertEquals(SW_SECURE_IMPORT_WRONG_MAC, cmdSet.sendRawSecure(INS_IMPORT_ENCRYPTED_SECRET, 0x00, 0x00,
+          encryptedSecret(TYPE_SEED, concat(new byte[]{(byte) seed.length}, seed), sharedX, -1, true)).getSw());
+      assertEquals(SW_INVALID_PARAMETER, cmdSet.sendRawSecure(INS_IMPORT_ENCRYPTED_SECRET, 0x00, 0x00,
+          encryptedSecret(TYPE_SEED, concat(new byte[]{(byte) seed.length}, seed), sharedX, 0, false)).getSw(),
+          "a zero PKCS#7 padding byte must be refused");
+      assertEquals(SW_INVALID_PARAMETER, cmdSet.sendRawSecure(INS_IMPORT_ENCRYPTED_SECRET, 0x00, 0x00,
+          encryptedSecret(TYPE_SEED, concat(new byte[]{100}, seed), sharedX, -1, false)).getSw(),
+          "a seed size larger than the plaintext must be refused");
+      assertEquals(SW_INVALID_PARAMETER, cmdSet.sendRawSecure(INS_IMPORT_ENCRYPTED_SECRET, 0x00, 0x00,
+          encryptedSecret(TYPE_SEED, concat(new byte[]{(byte) 0x90}, seed), sharedX, -1, false)).getSw(),
+          "a negative seed size must be refused");
+      assertEquals(SW_INVALID_PARAMETER, cmdSet.sendRawSecure(INS_IMPORT_ENCRYPTED_SECRET, 0x00, 0x00,
+          encryptedSecret(TYPE_2FA, concat(new byte[]{19}, Arrays.copyOf(KEY_2FA, 19)), sharedX, -1, false)).getSw(),
+          "a 2FA secret must be exactly 20 bytes");
+      assertEquals(SW_INVALID_PARAMETER, cmdSet.sendRawSecure(INS_IMPORT_ENCRYPTED_SECRET, 0x00, 0x00,
+          encryptedSecret(TYPE_2FA, concat(new byte[]{(byte) 0x80}, KEY_2FA), sharedX, -1, false)).getSw(),
+          "a negative 2FA secret size must be refused");
+
+      // a valid 2FA secret enables 2FA with that key
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_IMPORT_ENCRYPTED_SECRET, 0x00, 0x00,
+          encryptedSecret(TYPE_2FA, concat(new byte[]{20}, KEY_2FA), sharedX, -1, false)).getSw());
+      twoFactorSet = true;
+      reset2FA();   // only succeeds if the imported key is KEY_2FA
+      twoFactorSet = false;
+
+      // a valid seed restores the baseline
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_IMPORT_ENCRYPTED_SECRET, 0x00, 0x00,
+          encryptedSecret(TYPE_SEED, concat(new byte[]{(byte) seed.length}, seed), sharedX, -1, false)).getSw());
+    } finally {
+      // a failure may have left the session closed (e.g. an uncaught exception on the card)
+      resetSession();
+      if (twoFactorSet) reset2FA();
+      if (!isSeeded(cmdSet)) {
+        assertEquals(SW_OK, cmdSet.sendRawSecure(INS_BIP32_IMPORT_SEED, Vectors.BIP32_SEED.length, 0x00,
+            Vectors.BIP32_SEED).getSw(), "could not restore the baseline seed");
+      }
+    }
+    assertArrayEquals(baselinePub, cmdSet.cardBip32GetExtendedKeyRaw("m/44'/0'/0'/0/0"),
+        "the encrypted import should restore the same seed");
+  }
+
+  /**
+   * Builds a SeedKeeper encrypted secret blob:
+   * [header(12b) | IV(16b) | size(2b) | AES-CBC(plaintext + PKCS#7) | 20 | HMAC-SHA1(mackey, sha256(header | ciphertext))],
+   * with key = HMAC-SHA1(x, "seckey")[0..16) and mackey = HMAC-SHA1(x, "secmac").
+   *
+   * @param padOverride if >= 0, the value written in the last padding byte instead of the correct one
+   * @param badMac if true, the HMAC is corrupted
+   */
+  private static byte[] encryptedSecret(byte type, byte[] plaintext, byte[] sharedX, int padOverride, boolean badMac)
+      throws Exception {
+    byte[] header = new byte[12];
+    header[0] = type;
+    System.arraycopy(sha256(plaintext), 0, header, 6, 4);   // fingerprint
+    int pad = 16 - plaintext.length % 16;
+    byte[] padded = Arrays.copyOf(plaintext, plaintext.length + pad);
+    Arrays.fill(padded, plaintext.length, padded.length, (byte) pad);
+    if (padOverride >= 0) padded[padded.length - 1] = (byte) padOverride;
+
+    byte[] key = Arrays.copyOf(hmacSha1(sharedX, "seckey".getBytes()), 16);
+    byte[] macKey = hmacSha1(sharedX, "secmac".getBytes());
+    byte[] iv = sha256("iv".getBytes());
+    iv = Arrays.copyOf(iv, 16);
+    javax.crypto.Cipher aes = javax.crypto.Cipher.getInstance("AES/CBC/NoPadding");
+    aes.init(javax.crypto.Cipher.ENCRYPT_MODE, new javax.crypto.spec.SecretKeySpec(key, "AES"),
+        new javax.crypto.spec.IvParameterSpec(iv));
+    byte[] ct = aes.doFinal(padded);
+    byte[] mac = hmacSha1(macKey, sha256(concat(header, ct)));
+    if (badMac) mac[0] ^= 0x01;
+    return concat(header, iv, new byte[]{(byte) (ct.length >> 8), (byte) ct.length}, ct, new byte[]{20}, mac);
+  }
+
   /** Generates a MuSig2 nonce for the given path and returns the 144-byte encrypted secnonce. */
   private byte[] musig2NewSecnonce(String path) {
     cmdSet.cardBip32GetExtendedKeyRaw(path);

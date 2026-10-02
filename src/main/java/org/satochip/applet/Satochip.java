@@ -3264,6 +3264,8 @@ public class Satochip extends javacard.framework.Applet {
                     return (short)(IVlength + 20);
                 }
                 if (ciph_dir==Cipher.MODE_DECRYPT){
+                    if (bytesLeft < IVlength)
+                        ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
                     aes128_cbc.init(key_2FA, Cipher.MODE_DECRYPT, buffer, dataOffset, IVlength);
                     return (short)0;
                 }
@@ -3273,7 +3275,7 @@ public class Satochip extends javacard.framework.Applet {
                 if (bytesLeft < 2)
                     ISOException.throwIt(SW_INVALID_PARAMETER); 
                 short size = Util.getShort(buffer, dataOffset);
-                if (bytesLeft < (short) (2 + size))
+                if (size < 0 || bytesLeft < (short) (2 + size))
                     ISOException.throwIt(SW_INVALID_PARAMETER); 
                 
                 short sizeout=0;
@@ -3464,8 +3466,8 @@ public class Satochip extends javacard.framework.Applet {
         if (!arrayCompareConstantTime(buffer, hmac_offset, recvBuffer, (short)(85), (short)20))
             ISOException.throwIt(SW_SECURE_IMPORT_WRONG_MAC);
 
-        // decrypt secret
-        dec_size = sc_aes128_cbc.update(buffer, buffer_offset, data_size, buffer, buffer_offset);
+        // decrypt secret (data_size is a multiple of the block size, so doFinal() returns all of it)
+        dec_size = sc_aes128_cbc.doFinal(buffer, buffer_offset, data_size, buffer, buffer_offset);
         // padding (PKCS#7): pad length must be in [1, 16] and cannot exceed the decrypted size
         short padsize = buffer[ (short)(buffer_offset+dec_size-1) ];
         if (padsize < 1 || padsize > 16 || padsize > dec_size)
@@ -3479,21 +3481,27 @@ public class Satochip extends javacard.framework.Applet {
             ISOException.throwIt(SW_SECURE_IMPORT_WRONG_FINGERPRINT);
         }
         
+        // the plaintext is [secret_size(1b) | secret]: the secret must fit in the plaintext
+        // (seed size range is checked by importBIP32Seed(), the 2FA secret must be 20 bytes)
+        if (data_size < 1)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        byte secret_size = buffer[buffer_offset];
+        if (secret_size < 0 || (short)(1+secret_size) > data_size)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        if (type == SECRET_TYPE_2FA && secret_size != (byte)20)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+
         // rewrite buffer and call the standard import method
-        if (type == SECRET_TYPE_MASTER_SEED){ 
-            byte bip32_seedsize = buffer[buffer_offset];
-            buffer[ISO7816.OFFSET_LC] = bip32_seedsize;
-            buffer[ISO7816.OFFSET_P1] = bip32_seedsize;
-            Util.arrayCopyNonAtomic(buffer, (short)(buffer_offset+1), buffer, ISO7816.OFFSET_CDATA, bip32_seedsize);
+        Util.arrayCopyNonAtomic(buffer, (short)(buffer_offset+1), buffer, ISO7816.OFFSET_CDATA, secret_size);
+        if (type == SECRET_TYPE_MASTER_SEED){
+            buffer[ISO7816.OFFSET_LC] = secret_size;
+            buffer[ISO7816.OFFSET_P1] = secret_size;
             return importBIP32Seed(apdu, buffer);
         }
-        else if (type == SECRET_TYPE_2FA){
-            byte size_2FA = buffer[buffer_offset];
-            Util.arrayCopyNonAtomic(buffer, (short)(buffer_offset+1), buffer, ISO7816.OFFSET_CDATA, size_2FA);
-            Util.arrayFillNonAtomic(buffer, (short)(ISO7816.OFFSET_CDATA+size_2FA), (short)8, (byte)0);
-            return set2FAKey(apdu, buffer);
-        }
-        return (short)0;
+        // type == SECRET_TYPE_2FA: [hmacsha1_key(20b) | RFU-DEPRECATED-amount_limit(8b)]
+        Util.arrayFillNonAtomic(buffer, (short)(ISO7816.OFFSET_CDATA+secret_size), (short)8, (byte)0);
+        buffer[ISO7816.OFFSET_LC] = (byte)(secret_size+8);
+        return set2FAKey(apdu, buffer);
     }
 
     /*********************************************
