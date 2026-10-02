@@ -288,6 +288,40 @@ public class SatochipTest {
   }
 
   @Test
+  @DisplayName("The decrypted inner command is re-validated (CLA, Lc)")
+  void secureChannelInnerApduTest() {
+    final int SW_CLA_NOT_SUPPORTED = 0x6E00;
+    final int SW_WRONG_LENGTH = 0x6700;
+    byte cla = TestSatochipCommandSet.CLA;
+
+    // well-formed: GET RANDOM, 8 bytes
+    assertEquals(SW_OK, cmdSet.sendRawSecureBytes(new byte[]{cla, INS_GET_RANDOM, 8, 0, 0}).getSw());
+    // a trailing Le byte is tolerated
+    assertEquals(SW_OK, cmdSet.sendRawSecureBytes(new byte[]{cla, INS_GET_RANDOM, 8, 0, 0, 0}).getSw());
+
+    // the inner CLA must be the applet's
+    assertEquals(SW_CLA_NOT_SUPPORTED,
+        cmdSet.sendRawSecureBytes(new byte[]{0x00, INS_GET_RANDOM, 8, 0, 0}).getSw());
+
+    // Lc must not point past the decrypted data. The card does not strip the PKCS#7 padding, so
+    // the bound is the padded size: a 32-byte plaintext is padded to 48 bytes.
+    byte[] inner = new byte[32];
+    inner[0] = cla; inner[1] = INS_GET_RANDOM; inner[2] = 8;
+    inner[4] = (byte) (48 - 5);
+    assertEquals(SW_OK, cmdSet.sendRawSecureBytes(inner).getSw(), "Lc up to the padded size is accepted");
+    inner[4] = (byte) (48 - 5 + 1);
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawSecureBytes(inner).getSw(), "one byte past is refused");
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawSecureBytes(
+        new byte[]{cla, INS_GET_RANDOM, 8, 0, (byte) 200, 1, 2, 3}).getSw());
+
+    // Lc >= 128 is read unsigned and accepted: a 130-byte CARD LABEL reaches the handler,
+    // which refuses the oversized label (no state change)
+    byte[] label = new byte[130];
+    label[0] = 100;
+    assertEquals(SW_INVALID_PARAMETER, cmdSet.sendRawSecure(INS_CARD_LABEL, 0x00, 0x00, label).getSw());
+  }
+
+  @Test
   @DisplayName("Replaying an encrypted command is rejected")
   void secureChannelReplayTest() throws Exception {
     APDUCommand encrypted = cmdSet.encrypt(INS_GET_RANDOM, 8, 0x00, new byte[0]);

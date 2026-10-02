@@ -773,10 +773,11 @@ public class Satochip extends javacard.framework.Applet {
             return;
         }
         else if (ins == INS_PROCESS_SECURE_CHANNEL){
+            // decrypts the inner command, and checks that its Lc fits in the decrypted data
             sizeout= secureChannel.unwrap(buffer);
-            //todo: check if sizeout and buffer[ISO7816.OFFSET_LC] matches...
-            //if sizeout>4, buffer[ISO7816.OFFSET_LC] should be equal to (sizeout-5)
-            //todo: remove padding ? (it is actually not used)          
+            // the inner command must use the applet's CLA, like the outer one
+            if (buffer[ISO7816.OFFSET_CLA] != CardEdge_CLA)
+                ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
         }
         else {
             ISOException.throwIt(SW_SECURE_CHANNEL_REQUIRED);

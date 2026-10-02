@@ -203,7 +203,9 @@ class SecureChannel {
      *  p2: 0x00 (RFU)
      *  data: [IV(16b) | data_size(2b) | encrypted_command | mac_size(2b) | mac]
      *
-     *  return: [decrypted command]
+     *  return: [decrypted command] in buffer, and the decrypted size. The decrypted command is
+     *          guaranteed to hold a complete header [CLA | INS | P1 | P2 | Lc] and Lc data bytes,
+     *          so that handlers can trust buffer[OFFSET_LC] (the CLA is checked by the applet).
      *
      */
     short unwrap(byte[] buffer){
@@ -252,6 +254,15 @@ class SecureChannel {
         if (bytesLeft<sizein)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         short sizeout=sc_aes128_cbc.doFinal(buffer, offset, sizein, buffer, (short) (0));
+
+        // validate the decrypted command: [CLA | INS | P1 | P2 | Lc | data(Lc) | padding]
+        // Lc must not exceed the decrypted data, otherwise the handlers would read stale buffer
+        // content. The padding added by the client is not removed (the cipher is NOPAD), so
+        // sizeout may exceed 5+Lc: only check the bound.
+        if (sizeout < (short)ISO7816.OFFSET_CDATA)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        if ((short)(ISO7816.OFFSET_CDATA + Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC])) > sizeout)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         return sizeout;
     }
 

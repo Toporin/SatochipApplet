@@ -55,6 +55,25 @@ public class TestSatochipCommandSet extends SatochipCommandSet {
     return response;
   }
 
+  /**
+   * Like {@link #sendRawSecure}, but encrypts {@code innerApdu} verbatim instead of a well-formed
+   * APDU, so that a malformed inner command (wrong CLA, Lc not matching the data...) reaches the card.
+   */
+  public APDUResponse sendRawSecureBytes(byte[] innerApdu) {
+    SecureChannelSession sc = openedSecureChannel();
+    APDUCommand plain = new APDUCommand(CLA & 0xff, 0, 0, 0, new byte[0]) {
+      @Override
+      public byte[] serialize() {
+        return innerApdu.clone();
+      }
+    };
+    APDUResponse response = send(sc.encrypt_secure_channel(plain));
+    if (response.getSw() == 0x9000) {
+      return sc.decrypt_secure_channel(response);
+    }
+    return response;
+  }
+
   /** Drops the current secure channel so the next secure command negotiates a fresh one. */
   public void forgetSecureChannel() {
     try {
