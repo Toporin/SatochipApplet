@@ -1230,6 +1230,68 @@ public class Satochip extends javacard.framework.Applet {
         return (ECPrivateKey) key;
     }
 
+    /**
+     * Returns the private key selected by P1 for a signing operation: either the
+     * last derived BIP32 extended key (0xFF), or the key stored in the given keyslot.
+     * Note: uses tmpBuffer as scratch (see getInitializedECKey()).
+     *
+     * @param key_nb the keyslot number (0x00-0x0F), or 0xFF for the BIP32 extended key
+     * @throws ISOException SW_INCORRECT_P1 if key_nb is out of range or the keyslot is empty,
+     *         SW_BIP32_UNINITIALIZED_SEED if 0xFF is selected but no seed is imported
+     */
+    private ECPrivateKey getSigningKey(byte key_nb) {
+        if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
+            ISOException.throwIt(SW_INCORRECT_P1);
+        if (key_nb==(byte)0xFF){
+            if (!bip32_seeded)
+                ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
+            return bip32_extendedkey;
+        }
+        return getInitializedECKey(key_nb);
+    }
+
+    /**
+     * Checks a 2FA approval: the 20-byte HMAC-SHA1 at hmac[hmacOffset] must match the HMAC,
+     * keyed with the 2FA secret, of the 64-byte message staged by the caller in
+     * recvBuffer[msgOffset..msgOffset+64). The expected HMAC is computed into
+     * recvBuffer[msgOffset+64..msgOffset+84). See the 2FA message layouts near data2FA.
+     *
+     * @throws ISOException SW_SIGNATURE_INVALID if the HMAC does not match
+     */
+    private void check2FAHmac(short msgOffset, byte[] hmac, short hmacOffset){
+        short macOffset = (short)(msgOffset+64);
+        HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, msgOffset, (short)64, recvBuffer, macOffset);
+        if (!arrayCompareConstantTime(hmac, hmacOffset, recvBuffer, macOffset, (short)20))
+            ISOException.throwIt(SW_SIGNATURE_INVALID);
+    }
+
+    /**
+     * Checks the 2FA approval of a signing operation, provided in the APDU as
+     * [32b value at hashOffset | ... | 2FA-flag(2b) at flagOffset | hmac(20b)].
+     * The HMAC is computed over [ 32b value | 32-byte padding ], staged at
+     * recvBuffer[msgOffset]. The caller is responsible for the length checks.
+     *
+     * @throws ISOException SW_INCORRECT_ALG if the 2FA flag is wrong,
+     *         SW_SIGNATURE_INVALID if the HMAC does not match
+     */
+    private void check2FAHash(byte[] buffer, short hashOffset, short flagOffset, byte padding, short msgOffset){
+        // check flag for 2fa_hmac_chalresp
+        if (Util.getShort(buffer, flagOffset)!=HMAC_CHALRESP_2FA)
+            ISOException.throwIt(SW_INCORRECT_ALG);
+        // hmac of 64-bytes msg: ( 32bytes value | 32bytes padding)
+        Util.arrayCopyNonAtomic(buffer, hashOffset, recvBuffer, msgOffset, (short)32);
+        Util.arrayFillNonAtomic(recvBuffer, (short)(msgOffset+32), (short)32, padding);
+        check2FAHmac(msgOffset, buffer, (short)(flagOffset+2));
+    }
+
+    /**
+     * Turns the uncompressed public key [0x04 | x(32b) | y(32b)] at buf[off] into the
+     * prefix of its compressed form, by replacing 0x04 with 0x02 (even y) or 0x03 (odd y).
+     */
+    private static void setCompressionByte(byte[] buf, short off){
+        buf[off] = (byte)(0x02 | (buf[(short)(off+64)] & 0x01));
+    }
+
     /** Checks if PIN policies are satisfied for a PIN code */
     private boolean CheckPINPolicy(byte[] pin_buffer, short pin_offset, byte pin_size) {
         if ((pin_size < PIN_MIN_SIZE) || (pin_size > PIN_MAX_SIZE))
@@ -1392,9 +1454,7 @@ public class Satochip extends javacard.framework.Applet {
             keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65b)
             // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x10^key_nb)-padding)
             Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte)(0x10^key_nb));
-            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
-            if (!arrayCompareConstantTime(buffer, (short)(dataOffset+blob_size), recvBuffer, (short)65, (short)20))
-                ISOException.throwIt(SW_SIGNATURE_INVALID);
+            check2FAHmac((short)1, buffer, (short)(dataOffset+blob_size));
         }
         
         // set key from secret value & set flag
@@ -1440,9 +1500,7 @@ public class Satochip extends javacard.framework.Applet {
             keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65b)
             // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x20^key_nb)-padding)
             Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte) (0x20^key_nb));
-            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
-            if (!arrayCompareConstantTime(buffer, ISO7816.OFFSET_CDATA, recvBuffer, (short)65, (short)20))
-                ISOException.throwIt(SW_SIGNATURE_INVALID);         
+            check2FAHmac((short)1, buffer, ISO7816.OFFSET_CDATA);
         }
         
         // clear key & reset flag
@@ -2061,10 +2119,8 @@ public class Satochip extends javacard.framework.Applet {
             // hmac of 64-bytes msg: ( authentikey-coordx(32b) | 32bytes 0xFF-padding)
             authentikey_public.getW(recvBuffer, (short)0);
             Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte)0xFF);
-            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
-            if (!arrayCompareConstantTime(buffer, offset, recvBuffer, (short)65, (short)20))
-                ISOException.throwIt(SW_SIGNATURE_INVALID);
-        }   
+            check2FAHmac((short)1, buffer, offset);
+        }
         
         resetSeed();
         
@@ -2387,41 +2443,24 @@ public class Satochip extends javacard.framework.Applet {
         if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
         
-        byte key_nb = buffer[ISO7816.OFFSET_P1];
-        if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
-            ISOException.throwIt(SW_INCORRECT_P1);
-        
+        // P1 defines which privkey is used
+        ECPrivateKey privkey = getSigningKey(buffer[ISO7816.OFFSET_P1]);
+
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         if (bytesLeft<MessageDigest.LENGTH_SHA_256)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        
-        // check whether the seed is initialized
-        if (key_nb==(byte)0xFF && !bip32_seeded)
-            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
-        
+
         // check 2FA if required
         if(needs_2FA){
             // check data length
             if (bytesLeft<MessageDigest.LENGTH_SHA_256+MessageDigest.LENGTH_SHA+(short)2)
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-            // check flag for 2fa_hmac_chalresp
-            short hmac_flags= Util.getShort(buffer, (short)(ISO7816.OFFSET_CDATA+32));
-            if (hmac_flags!=HMAC_CHALRESP_2FA)
-                ISOException.throwIt(SW_INCORRECT_ALG);
             // hmac of 64-bytes msg: ( 32bytes tx_hash | 32bytes 0xCC-padding)
-            Util.arrayCopyNonAtomic(buffer, (short)ISO7816.OFFSET_CDATA, recvBuffer, (short)0, (short)32);
-            Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0xCC);
-            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
-            if (!arrayCompareConstantTime(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20))
-                ISOException.throwIt(SW_SIGNATURE_INVALID);
+            check2FAHash(buffer, ISO7816.OFFSET_CDATA, (short)(ISO7816.OFFSET_CDATA+32), (byte)0xCC, (short)0);
         }
-        
+
         // hash+sign singlehash
-        if (key_nb==(byte)0xFF)
-            sigECDSA.init(bip32_extendedkey, Signature.MODE_SIGN);
-        else{
-            sigECDSA.init(getInitializedECKey(key_nb), Signature.MODE_SIGN);
-        }
+        sigECDSA.init(privkey, Signature.MODE_SIGN);
         short sign_size= sigECDSA.signPreComputedHash(buffer, ISO7816.OFFSET_CDATA, MessageDigest.LENGTH_SHA_256, buffer, (short)0);
         return sign_size;
     }
@@ -2474,25 +2513,11 @@ public class Satochip extends javacard.framework.Applet {
         if (!pin.isValidated())
             ISOException.throwIt(SW_UNAUTHORIZED);
 
-        // P1 defines which privkey is used to derive Taproot tweaked privkey 
-        byte key_nb = buffer[ISO7816.OFFSET_P1];
-        if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
-            ISOException.throwIt(SW_INCORRECT_P1);
+        // P1 defines which privkey is used to derive Taproot tweaked privkey
+        ECPrivateKey privkey = getSigningKey(buffer[ISO7816.OFFSET_P1]);
 
         // P2 can be used to bypass tweaking and copy private as is
         byte p2 = buffer[ISO7816.OFFSET_P2];
-
-        // check whether the seed is initialized
-        if (key_nb==(byte)0xFF && !bip32_seeded)
-            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
-
-        // get privkey from either bip32 derivation or single privkey
-        ECPrivateKey privkey;
-        if (key_nb==(byte)0xFF)
-            privkey = bip32_extendedkey;
-        else{
-            privkey = getInitializedECKey(key_nb);
-        } 
 
         // the tweaked (or plain) secret key is staged at this offset in recvBuffer
         short seckeyOffset = (short) 97;
@@ -2636,16 +2661,8 @@ public class Satochip extends javacard.framework.Applet {
             // check data length
             if (bytesLeft<MessageDigest.LENGTH_SHA_256+MessageDigest.LENGTH_SHA+(short)2)
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-            // check flag for 2fa_hmac_chalresp
-            short hmac_flags= Util.getShort(buffer, (short)(ISO7816.OFFSET_CDATA+32));
-            if (hmac_flags!=HMAC_CHALRESP_2FA)
-                ISOException.throwIt(SW_INCORRECT_ALG);
-            // hmac of 64-bytes msg: ( 32bytes tx_hash | 32bytes 0xDD-padding)
-            Util.arrayCopyNonAtomic(buffer, (short)ISO7816.OFFSET_CDATA, recvBuffer, (short)0, (short)32);
-            Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0xDD); // 0xDD for Schnorr sig
-            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
-            if (!arrayCompareConstantTime(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20))
-                ISOException.throwIt(SW_SIGNATURE_INVALID);
+            // hmac of 64-bytes msg: ( 32bytes tx_hash | 32bytes 0xDD-padding), 0xDD for Schnorr sig
+            check2FAHash(buffer, ISO7816.OFFSET_CDATA, (short)(ISO7816.OFFSET_CDATA+32), (byte)0xDD, (short)0);
         }
 
         // generate randomness
@@ -2807,21 +2824,7 @@ public class Satochip extends javacard.framework.Applet {
         // OP_INIT
 
         // P1 defines which privkey is used
-        byte key_nb = buffer[ISO7816.OFFSET_P1];
-        if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
-            ISOException.throwIt(SW_INCORRECT_P1);
-
-        // check whether the seed is initialized
-        if (key_nb==(byte)0xFF && !bip32_seeded)
-            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
-
-        // get privkey from either bip32 derivation or single privkey
-        ECPrivateKey privkey;
-        if (key_nb==(byte)0xFF)
-            privkey = bip32_extendedkey;
-        else{
-            privkey = getInitializedECKey(key_nb);
-        }
+        ECPrivateKey privkey = getSigningKey(buffer[ISO7816.OFFSET_P1]);
 
         // generate 32-byte randomness (rand')
         randomData.generateData(recvBuffer,OFFSET_BIP327_RAND, (short)32);
@@ -2843,12 +2846,7 @@ public class Satochip extends javacard.framework.Applet {
         recvBuffer[OFFSET_BIP327_RAND_HASH] = (byte)33; // size_pk
         keyAgreement.init(privkey);
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, OFFSET_BIP327_PK); //pubkey in uncompressed form (65bytes)
-        // compute compression byte
-        if (recvBuffer[(short)(OFFSET_BIP327_PK+64)]%2 == 0){
-            recvBuffer[OFFSET_BIP327_PK] = (byte)0x02;
-        } else {
-            recvBuffer[OFFSET_BIP327_PK] = (byte)0x03;
-        }
+        setCompressionByte(recvBuffer, OFFSET_BIP327_PK);
         short recvOffset = OFFSET_BIP327_PK;
         recvOffset+=33;
 
@@ -2937,24 +2935,14 @@ public class Satochip extends javacard.framework.Applet {
         ephemeral_privkey.setS(recvBuffer, OFFSET_BIP327_K1, BIP32_KEY_SIZE);
         keyAgreement.init(ephemeral_privkey);
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)0); //pubkey in uncompressed form (65bytes)
-        // compute compression byte
-        if (buffer[64]%2 == 0){
-            buffer[0] = (byte)0x02;
-        } else {
-            buffer[0] = (byte)0x03;
-        }
+        setCompressionByte(buffer, (short)0);
 
         // compute R2
         buffer_offset = (short)33;
         ephemeral_privkey.setS(recvBuffer, OFFSET_BIP327_K2, BIP32_KEY_SIZE);
         keyAgreement.init(ephemeral_privkey);
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, buffer_offset); //pubkey in uncompressed form (65bytes)
-        // compute compression byte
-        if (buffer[(short)(buffer_offset+64)]%2 == 0){
-            buffer[buffer_offset] = (byte)0x02;
-        } else {
-            buffer[buffer_offset] = (byte)0x03;
-        }
+        setCompressionByte(buffer, buffer_offset);
         buffer_offset+=33;
 
         // save id counter to buffer
@@ -3067,18 +3055,10 @@ public class Satochip extends javacard.framework.Applet {
             // check data length
             if (bytesLeft<(short)(66+2+20))
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-            // check flag for 2fa_hmac_chalresp
-            short hmac_flags= Util.getShort(buffer, (short)(ISO7816.OFFSET_CDATA+66));
-            if (hmac_flags!=HMAC_CHALRESP_2FA)
-                ISOException.throwIt(SW_INCORRECT_ALG);
-            // hmac of 64-bytes msg: ( 32bytes nonce coefficient b | 32bytes 0xEE-padding)
+            // hmac of 64-bytes msg: ( 32bytes nonce coefficient b | 32bytes 0xEE-padding), 0xEE for MuSig2 partial sig
             // b commits to the MuSig2 session (aggnonce, aggpk, message) and plays the role of the signed hash
             // the message is staged after the 144-byte encrypted secnonce in recvBuffer, to keep it intact
-            Util.arrayCopyNonAtomic(buffer, (short)ISO7816.OFFSET_CDATA, recvBuffer, (short)144, (short)32);
-            Util.arrayFillNonAtomic(recvBuffer, (short)(144+32), (short)32, (byte)0xEE); // 0xEE for MuSig2 partial sig
-            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)144, (short)64, recvBuffer, (short)(144+64));
-            if (!arrayCompareConstantTime(buffer, (short)(ISO7816.OFFSET_CDATA+66+2), recvBuffer, (short)(144+64), (short)20))
-                ISOException.throwIt(SW_SIGNATURE_INVALID);
+            check2FAHash(buffer, OFFSET_BIP327_SIGN_B, (short)(ISO7816.OFFSET_CDATA+66), (byte)0xEE, (short)144);
         }
 
         // validate integrity then decrypt secnonce stored in recvBuffer during OP_INIT step
@@ -3113,31 +3093,12 @@ public class Satochip extends javacard.framework.Applet {
         // at this point, buffer = [cla, ins, p1, p2, lc] + [b(32b) | ea(32b) | r_has_even_y(1b) | ggacc_is_1(1b) | k1(32b) | k2(32b) | pk(33b)]
 
         // P1 defines which privkey is used
-        byte key_nb = buffer[ISO7816.OFFSET_P1];
-        if ( (key_nb!=(byte)0xFF) && ((key_nb < 0) || (key_nb >= MAX_NUM_KEYS)) )
-            ISOException.throwIt(SW_INCORRECT_P1);
-
-        // check whether the seed is initialized
-        if (key_nb==(byte)0xFF && !bip32_seeded)
-            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
-
-        // get privkey from either bip32 derivation or single privkey
-        ECPrivateKey privkey;
-        if (key_nb==(byte)0xFF)
-            privkey = bip32_extendedkey;
-        else{
-            privkey = getInitializedECKey(key_nb);
-        }
+        ECPrivateKey privkey = getSigningKey(buffer[ISO7816.OFFSET_P1]);
 
         // compute pubkey pk from sk
         keyAgreement.init(privkey);
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65bytes)
-        // compute compression byte
-        if (recvBuffer[(short)(64)]%2 == 0){
-            recvBuffer[(short)0] = (byte)0x02;
-        } else {
-            recvBuffer[(short)0] = (byte)0x03;
-        }
+        setCompressionByte(recvBuffer, (short)0);
 
         // check pubkey from secnonce match pubkey derived from sk
         if (0 != Util.arrayCompare(buffer, OFFSET_BIP327_SIGN_PK, recvBuffer, (short)0, (short)33)) {
@@ -3274,9 +3235,7 @@ public class Satochip extends javacard.framework.Applet {
         short offset= ISO7816.OFFSET_CDATA;
         Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)64, (byte)0xAA);
         Util.arrayCopyNonAtomic(data2FA, OFFSET_2FA_ID, recvBuffer, (short)0, (short)20);
-        HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
-        if (!arrayCompareConstantTime(buffer, offset, recvBuffer, (short)64, (short)20))
-            ISOException.throwIt(SW_SIGNATURE_INVALID);
+        check2FAHmac((short)0, buffer, offset);
         
         // reset flag and data
         needs_2FA= false;   
