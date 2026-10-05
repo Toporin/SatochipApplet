@@ -87,6 +87,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Rename the main applet class from `CardEdge` to `Satochip` (`CardEdge.java` -> `Satochip.java`). The old name came from the MUSCLE CardEdge applet this code was derived from in 2015 and no longer described the class; the sibling projects already follow this convention (`SeedKeeper`, `Satodime`, `Satocash`). **No impact on clients or on installed cards:** the applet AID (`5361746F4368697000`), the package AID, the CLA byte and the whole APDU protocol are unchanged, and applets are selected by AID, so the class name never reaches the wire. The MUSCLE attribution header and the `CardEdge_CLA` constant keep the old name on purpose, the latter because it is shared with the other applets and with pysatochip's `JCconstants`.
 
+* Log the PIN out when a secure channel is initiated: the PIN validation used to be cleared only on applet select/deselect, so it survived a new INIT_SECURE_CHANNEL in the same card session. Anyone sharing that session (e.g. another process on the same PC/SC reader) could open their own channel and use the PIN validated by the legitimate client, without knowing it. INIT_SECURE_CHANNEL now logs the PIN out and closes the previous channel first. Clients already verify the PIN after opening a channel, so they are not affected.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.

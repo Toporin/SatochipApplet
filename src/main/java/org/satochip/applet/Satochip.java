@@ -768,6 +768,11 @@ public class Satochip extends javacard.framework.Applet {
             return;
         }
         else if (ins == INS_INIT_SECURE_CHANNEL){
+            // the PIN authentication is bound to the channel it was performed in: otherwise anyone
+            // sharing the card session (e.g. another process on the same reader) could open a new
+            // channel and use the PIN validated by the legitimate client
+            LogOutAll();
+            secureChannel.close();
             sizeout= secureChannel.initiate(buffer);
             apdu.setOutgoingAndSend((short) 0, sizeout);
             return;

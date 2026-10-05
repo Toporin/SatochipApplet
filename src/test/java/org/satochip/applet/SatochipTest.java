@@ -404,6 +404,19 @@ public class SatochipTest {
   }
 
   @Test
+  @DisplayName("Opening a new secure channel logs the PIN out")
+  void secureChannelReinitLogsOutTest() {
+    // the PIN was verified in init(); a second channel opened in the same card session (e.g. by
+    // another process on the same reader) must not inherit that authentication
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_GET_RANDOM, 8, 0x00, new byte[0]).getSw());
+    cmdSet.forgetSecureChannel();
+    assertEquals(SW_UNAUTHORIZED, cmdSet.sendRawSecure(INS_GET_RANDOM, 8, 0x00, new byte[0]).getSw(),
+        "a new secure channel must start unauthenticated");
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw());
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_GET_RANDOM, 8, 0x00, new byte[0]).getSw());
+  }
+
+  @Test
   @DisplayName("VERIFY PIN counts down and resets")
   void verifyPinTest() {
     // Wrong PIN decrements the counter and reports the remaining tries in the low nibble.
