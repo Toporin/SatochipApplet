@@ -100,6 +100,8 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
   * Biginteger.subtract() now computes the borrow without a branch, since it is used on secret values.
   * Cost: 6 multiplications on the RSA engine per Schnorr signature (was 1), 10 per MuSig2 partial signature (was 2).
 
+* importTrustedPubkey() now refuses the pubkey (SW_UNSUPPORTED_FEATURE) on cards without the RSA engine used by Biginteger.mult_rsa_trick(). On those cards Secp256k1.isOnCurve() cannot check the curve equation and only checks that the coordinates are in range. The trusted pubkey is used in a static ECDH with the authentikey, and importEncryptedSecret() reveals whether a MAC computed with the shared key verifies, so an off-curve point would let an attacker recover the authentikey modulo small orders, one query at a time (invalid-curve attack). The secure channel keeps accepting such points: its card key is ephemeral and used only once.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.

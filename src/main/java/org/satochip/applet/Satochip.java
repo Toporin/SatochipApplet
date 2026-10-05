@@ -3409,6 +3409,12 @@ public class Satochip extends javacard.framework.Applet {
         if (buffer[buffer_offset] != 0x04) {
             ISOException.throwIt(SW_INVALID_PARAMETER);
         }
+        // the trusted pubkey is used in a static ECDH with the authentikey, and importEncryptedSecret()
+        // reveals whether a MAC computed with the shared key verifies: an off-curve point would let
+        // an attacker recover the authentikey (invalid-curve attack). Without the RSA engine,
+        // isOnCurve() cannot check the curve equation, so refuse the import instead.
+        if (!Biginteger.FLAG_FAST_MULT_VIA_RSA)
+            ISOException.throwIt(SW_UNSUPPORTED_FEATURE);
         // check that the point is on secp256k1 (mitigates invalid-curve attacks on the authentikey via ECDH)
         if (!Secp256k1.isOnCurve(buffer, buffer_offset, recvBuffer, (short)0)) {
             ISOException.throwIt(SW_INVALID_PARAMETER);

@@ -1100,6 +1100,7 @@ public class SatochipTest {
     final byte TYPE_SEED = 0x10;
     final byte TYPE_2FA = (byte) 0xB0;
     final int SW_SECURE_IMPORT_WRONG_MAC = 0x9C33;
+    final int SW_UNSUPPORTED_FEATURE = 0x9C05;
 
     // play the SeedKeeper: the shared key is ECDH between its authentikey and the card's
     ECNamedCurveParameterSpec spec = ECNamedCurveTable.getParameterSpec("secp256k1");
@@ -1117,6 +1118,13 @@ public class SatochipTest {
     assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw());
     boolean twoFactorSet = false;
     try {
+      if (!FeaturePolicyCondition.availableCapabilities.contains("rsaMult")) {
+        // without the RSA engine the card cannot check that the trusted pubkey is on the curve,
+        // so it refuses it rather than expose the authentikey to an invalid-curve attack
+        assertEquals(SW_UNSUPPORTED_FEATURE, cmdSet.sendRawSecure(INS_IMPORT_TRUSTED_PUBKEY, 0x00, 0x00,
+            concat(new byte[]{0x00, 0x41}, hostPub)).getSw());
+        return; // the seed is restored in the finally block
+      }
       assertEquals(SW_OK, cmdSet.sendRawSecure(INS_IMPORT_TRUSTED_PUBKEY, 0x00, 0x00,
           concat(new byte[]{0x00, 0x41}, hostPub)).getSw());
 
