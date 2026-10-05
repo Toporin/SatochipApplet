@@ -262,6 +262,7 @@ class SecureChannel {
         // strictly greater, so no value at or below this one is ever accepted again. The +1 also
         // makes the response IV counter even (requests use odd ones), so that request and response
         // IVs never collide under the same session key: do not set local = received.
+        // (atomic on purpose: sc_buffer falls back to EEPROM on cards without enough transient memory)
         Util.arrayCopy(buffer, (short)(offset+SIZE_SC_IV_RANDOM), sc_buffer, OFFSET_SC_IV_COUNTER, SIZE_SC_IV_COUNTER);
         if (Biginteger.add1_carry(sc_buffer, OFFSET_SC_IV_COUNTER, SIZE_SC_IV_COUNTER)){
             // the counter wrapped to 0, which would make old counters acceptable again:
@@ -272,13 +273,9 @@ class SecureChannel {
         randomData.generateData(sc_buffer, OFFSET_SC_IV_RANDOM, SIZE_SC_IV_RANDOM);
         sc_aes128_cbc.init(sc_sessionkey, Cipher.MODE_DECRYPT, buffer, offset, SIZE_SC_IV);
         offset+=SIZE_SC_IV;
-        bytesLeft-=SIZE_SC_IV;
 
-        //decrypt command
+        //decrypt command (sizein was checked against bytesLeft above)
         offset+=2;
-        bytesLeft-=2;
-        if (bytesLeft<sizein)
-            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         short sizeout=sc_aes128_cbc.doFinal(buffer, offset, sizein, buffer, (short) (0));
 
         // validate the decrypted command: [CLA | INS | P1 | P2 | Lc | data(Lc) | padding]
@@ -308,7 +305,7 @@ class SecureChannel {
         short blocksize=(short)16;
         short padsize= (short) (blocksize - (sizeout%blocksize));
 
-        Util.arrayCopy(buffer, (short)0, tmpBuffer, (short)0, sizeout);
+        Util.arrayCopyNonAtomic(buffer, (short)0, tmpBuffer, (short)0, sizeout);
         Util.arrayFillNonAtomic(tmpBuffer, sizeout, padsize, (byte)padsize);//padding
         Util.arrayCopy(sc_buffer, OFFSET_SC_IV, buffer, (short)0, SIZE_SC_IV);
         sc_aes128_cbc.init(sc_sessionkey, Cipher.MODE_ENCRYPT, sc_buffer, OFFSET_SC_IV, SIZE_SC_IV);

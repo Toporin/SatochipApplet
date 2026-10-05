@@ -352,12 +352,23 @@ public class Biginteger {
     }    
     
     /**
+     * Computes z = x^2 with a single RSA operation (x^2 mod n == x^2, since n is larger than 2^512).
+     * x is a size-byte operand (size <= 48), z receives 96 bytes (BUFFER_SIZE).
+     * Used by Secp256k1.isOnCurve(), on public operands.
+     */
+    public static short square_rsa(byte[] x, short offsetx, short size, byte[] z, short offsetz) {
+        Util.arrayFillNonAtomic(buffer1, (short) 0, (short) buffer1.length, (byte) 0);
+        Util.arrayCopyNonAtomic(x, offsetx, buffer1, (short)(buffer1.length-size), size);
+        rsa_cipher.doFinal(buffer1, (short) 0, (short) buffer1.length, z, offsetz);
+        return (short)buffer1.length;
+    }
+
+    /**
      * Compute x mod y
      * <P>
      * x and y are copied to local arrays Biginteger.buffer1 and Biginteger.buffer2.
      * After computation, modulo is located in x buffer, at provided offset and size.
-     * After computation, x may contain many leading zeros, this can be further processed 
-     * using the shrink() method.
+     * After computation, x may contain many leading zeros (the modulo is in its last sizey bytes).
      * <P>
      * Uses schoolbook division inside and has O^2 complexity in the difference
      * of significant digits of the divident (in this number) and the divisor.
@@ -451,17 +462,14 @@ public class Biginteger {
          // trouble with negative numbers. If quotient != null multiple is
          // added to the quotient. This addition is done with quotient_digit.
          short multiple, quotient_digit;
-         short numLoops = 0;
-         short numLoops2 = 0;
          while (divisor_shift >= 0) {
-             numLoops++; // CTO number of outer loops is constant (for given length of divisor)
              // Keep subtracting from this until
              // divisor * 2^(8 * divisor_shift) is bigger than this.
              while (!shift_lesser(dividend, dividend_offset, dividend_size, 
                                  divisor, divisor_offset, divisor_size, 
                                  divisor_shift, (short) (division_round > 0 ? division_round - 1 : 0))) 
              {
-                 numLoops2++; // BUGBUG: CTO - number of these loops fluctuates heavily => strong impact on operation time 
+                 // not constant time: the number of these loops depends on the data (callers blind secret operands)
                  // this is bigger or equal than the shifted divisor.
                  // Need to subtract some multiple of divisor from this.
                  // Make a conservative estimation of the multiple to subtract.
@@ -612,23 +620,6 @@ public class Biginteger {
          return high;
      }
     
-    /**
-     * Return the number of leading zeroes (if any) from Biginteger value 
-     */
-    public static short shrink(byte[] x, short offsetx, short sizex) {
-        // todo: make it time constant!
-        short i = 0;
-        for (i = 0; i < sizex; i++) { // Find first non-zero byte
-            if (x[(short)(offsetx+i)] != (byte)0) {
-                break;
-            }
-        }
-
-        // return number of zero elements that can be skipped
-        // new_offset will be offset+i, new_size is size-i
-        return i; 
-    }
-     
     /**
      * Scaled comparison. Compares this number with {@code other * 2^(}
      * {@link #digit_len} {@code * shift)}. That is, shifts {@code other}

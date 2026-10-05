@@ -50,7 +50,7 @@ SatoChip-v*.cap           Pre-built CAP artifacts in the worktree (untracked, ig
 
 ## Technology stack and build
 
-- **Language**: JavaCard — a strict subset of Java (no `int`/`long` arithmetic assumed, no garbage collection guarantees, no recursion in practice, `short` everywhere). Target API: JavaCard Classic 3.0.4 (some code paths were originally written against 2.2.2, hence local constant redefinitions in `Secp256k1.java`).
+- **Language**: JavaCard — a strict subset of Java (no `int`/`long` arithmetic assumed, no garbage collection guarantees, no recursion in practice, `short` everywhere). Target API: JavaCard Classic 3.0.4 (constants added in later versions, such as `ALG_EC_SVDP_DH_PLAIN_XY` from 3.0.5, are redefined locally in `Satochip.java`).
 - **Build tool**: Gradle 8.10 (wrapper included). There is no JavaCard Gradle plugin: `build.gradle` drives [ant-javacard](https://github.com/martinpaljak/ant-javacard) through Gradle's Ant integration, resolving it as `com.github.martinpaljak:ant-javacard` from `mvn.javacard.pro`. The legacy Ant build was removed; `./gradlew convertJavacard` is the only way to produce a CAP.
 - **SDKs**: `sdks/` is a git submodule (https://github.com/martinpaljak/oracle_javacard_sdks). After cloning: `git submodule update --init --recursive`.
 

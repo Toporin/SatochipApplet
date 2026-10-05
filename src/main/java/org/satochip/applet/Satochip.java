@@ -302,8 +302,6 @@ public class Satochip extends javacard.framework.Applet {
     private final static short SW_RESET_TO_FACTORY = (short) 0xFF00;
     /** For instructions that have been deprecated*/
     private final static short SW_INS_DEPRECATED = (short) 0x9C26;
-    /** For debugging purposes 2 */
-    private final static short SW_DEBUG_FLAG = (short) 0x9FFF;
     
     /** Taproot very low probability error*/
     private final static short SW_TAPROOT_TWEAK_ERROR = (short) 0x9C43;
@@ -330,12 +328,9 @@ public class Satochip extends javacard.framework.Applet {
     private final static byte OP_PROCESS = (byte) 0x02;
     private final static byte OP_FINALIZE = (byte) 0x03;
 
-    // JC API 2.2.2 does not define these constants:
-    private final static byte ALG_ECDSA_SHA_256= (byte) 33;
+    // JC API 3.0.4 does not define this constant (added in 3.0.5):
     private final static byte ALG_EC_SVDP_DH_PLAIN_XY= (byte) 6; //https://docs.oracle.com/javacard/3.0.5/api/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN_XY
-    private final static short LENGTH_EC_FP_256= (short) 256;
-    private final static byte TYPE_AES_TRANSIENT_DESELECT = (byte) 14;
-    private final static byte TYPE_AES_TRANSIENT_RESET = (byte) 13;
+    private final static short LENGTH_EC_FP_256= KeyBuilder.LENGTH_EC_FP_256;
 
     /****************************************
      *    Instance variables declaration    *
@@ -343,7 +338,6 @@ public class Satochip extends javacard.framework.Applet {
     
     // Key objects (allocated on demand)
     private Key[] eckeys;
-    short eckeys_flag=0x0000; //flag bit set to 1 when corresponding key is initialised 
     
     // PIN and PUK objects, allocated during setup, and their try limits (not readable from OwnerPIN)
     private OwnerPIN pin, puk;
@@ -584,7 +578,7 @@ public class Satochip extends javacard.framework.Applet {
         
         // common cryptographic objects
         randomData = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
-        sigECDSA= Signature.getInstance(ALG_ECDSA_SHA_256, false);
+        sigECDSA= Signature.getInstance(Signature.ALG_ECDSA_SHA_256, false);
         sigAESMAC= Signature.getInstance(Signature.ALG_AES_MAC_128_NOPAD, false);
         sha256= MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
         HmacSha160.init(tmpBuffer);
@@ -622,8 +616,7 @@ public class Satochip extends javacard.framework.Applet {
         //authentikey_pair.genKeyPair(); //=> cap file fails to load!
         randomData.generateData(recvBuffer, (short)0, BIP32_KEY_SIZE);
         authentikey_private.setS(recvBuffer, (short)0, BIP32_KEY_SIZE); //random value first
-        keyAgreement.init(authentikey_private);   
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form => silently fail after cap loaded
+        getPublicKey(authentikey_private, recvBuffer, (short)0); // uncompressed pubkey (65b)
         authentikey_public.setW(recvBuffer, (short)0, (short)65);
 
         // secure channel: requires the authentikey
@@ -684,11 +677,11 @@ public class Satochip extends javacard.framework.Applet {
     static AESKey buildTransientAES128Key() {
         try {
             // Put the AES key in RAM if we can.
-            return (AESKey) KeyBuilder.buildKey(TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, false);
+            return (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, false);
         } catch (CryptoException e) {
             try {
                 // This uses a bit more RAM, but at least it isn't using flash.
-                return (AESKey) KeyBuilder.buildKey(TYPE_AES_TRANSIENT_RESET, KeyBuilder.LENGTH_AES_128, false);
+                return (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_RESET, KeyBuilder.LENGTH_AES_128, false);
             } catch (CryptoException e1) {
                 // Last option as it will wear out the flash eventually
                 return (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
@@ -697,7 +690,7 @@ public class Satochip extends javacard.framework.Applet {
     }
 
     public static void install(byte[] bArray, short bOffset, byte bLength) {
-        Satochip wal = new Satochip(bArray, bOffset, bLength);
+        new Satochip(bArray, bOffset, bLength);
     }
 
     public boolean select() {
@@ -1123,7 +1116,6 @@ public class Satochip extends javacard.framework.Applet {
             if (eckeys[nb_key] != null)
                 eckeys[nb_key].clearKey();
         }
-        eckeys_flag=(short)0;
 
         // 2. 2FA: only once the secrets it protects are gone
         needs_2FA= false;
@@ -1251,6 +1243,27 @@ public class Satochip extends javacard.framework.Applet {
             return bip32_extendedkey;
         }
         return getInitializedECKey(key_nb);
+    }
+
+    /**
+     * Computes the uncompressed public key [0x04 | x(32b) | y(32b)] of a private key, at out[off].
+     * ALG_EC_SVDP_DH_PLAIN_XY returns the whole point k*G when the "public key" is the generator.
+     * @return the size of the public key (65)
+     */
+    private short getPublicKey(ECPrivateKey key, byte[] out, short off){
+        keyAgreement.init(key);
+        return keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, out, off);
+    }
+
+    /**
+     * Signs buffer[0..offset) with the authentikey, and appends [sig_size(2b) | sig] at offset.
+     * @return the offset following the signature
+     */
+    private short appendAuthentikeySignature(byte[] buffer, short offset){
+        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
+        short sign_size = sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
+        Util.setShort(buffer, offset, sign_size);
+        return (short)(offset+2+sign_size);
     }
 
     /**
@@ -1508,8 +1521,7 @@ public class Satochip extends javacard.framework.Applet {
             // set from secret value
             ephemeral_privkey.setS(buffer, dataOffset, blob_size);
             // compute the corresponding partial public key...
-            keyAgreement.init(ephemeral_privkey);
-            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65b)
+            getPublicKey(ephemeral_privkey, recvBuffer, (short)0); // uncompressed pubkey (65b)
             // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x10^key_nb)-padding)
             Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte)(0x10^key_nb));
             HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
@@ -1518,9 +1530,8 @@ public class Satochip extends javacard.framework.Applet {
                 ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
         
-        // set key from secret value & set flag
+        // set key from secret value
         ec_prv_key.setS(buffer, dataOffset, blob_size);
-        eckeys_flag |= (short) (0x0001 << key_nb);// set corresponding bit flag;
         // nothing is returned, so the key would stay in the APDU buffer
         Util.arrayFillNonAtomic(buffer, dataOffset, blob_size, (byte)0);
         return (short)0;
@@ -1557,8 +1568,7 @@ public class Satochip extends javacard.framework.Applet {
             // compute the corresponding partial public key...
             // note: the pubkey must be staged in recvBuffer (not tmpBuffer), since
             // tmpBuffer is used as scratch memory by computeHmacSha160() below
-            keyAgreement.init(key);
-            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65b)
+            getPublicKey(key, recvBuffer, (short)0); // uncompressed pubkey (65b)
             // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x20^key_nb)-padding)
             Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte) (0x20^key_nb));
             HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
@@ -1566,9 +1576,8 @@ public class Satochip extends javacard.framework.Applet {
                 ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
         
-        // clear key & reset flag
+        // clear key
         key.clearKey();
-        eckeys_flag &= (short) ~(0x0001 << key_nb);// reset corresponding bit flag;
         
         return (short)0;
     }
@@ -1596,8 +1605,7 @@ public class Satochip extends javacard.framework.Applet {
         ECPrivateKey key = getInitializedECKey(key_nb);
                 
         // compute the corresponding partial public key...
-        keyAgreement.init(key);
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
+        getPublicKey(key, buffer, (short)1); // uncompressed pubkey (65b)
         Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
         
         // sign fixed message
@@ -2122,19 +2130,8 @@ public class Satochip extends javacard.framework.Applet {
         // clear recvBuffer
         Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)128, (byte)0);
         
-        // compute the partial authentikey public key...
-        authentikey_public.getW(buffer, (short)1);
-        Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
-        // self signed public key
-        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
-        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2), buffer, (short)(BIP32_KEY_SIZE+4));
-        Util.setShort(buffer, (short)(2+BIP32_KEY_SIZE), sign_size);
-        
-        // return x-coordinate of public key+signature
-        // the client can recover full public-key from the signature or
-        // by guessing the compression value () and verifying the signature... 
-        // buffer= [coordx_size(2) | coordx | sigsize(2) | sig]
-        return (short)(2+BIP32_KEY_SIZE+2+sign_size);
+        // return the self-signed authentikey: [coordx_size(2) | coordx | sigsize(2) | sig]
+        return computeAuthentikey(buffer);
     }
     
     /**
@@ -2249,16 +2246,11 @@ public class Satochip extends javacard.framework.Applet {
         // compute the partial authentikey public key...
         authentikey_public.getW(buffer, (short)1);
         Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
-        // self signed public key
-        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
-        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2), buffer, (short)(BIP32_KEY_SIZE+4));
-        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+2), sign_size);
-        
-        // return x-coordinate of public key+signature
+        // return x-coordinate of public key + self signature
         // the client can recover full public-key from the signature or
         // by guessing the compression value () and verifying the signature... 
         // buffer= [coordx_size(2) | coordx | sigsize(2) | sig]
-        return (short)(BIP32_KEY_SIZE+sign_size+4);
+        return appendAuthentikeySignature(buffer, (short)(2+BIP32_KEY_SIZE));
     }
     
     /**
@@ -2347,10 +2339,7 @@ public class Satochip extends javacard.framework.Applet {
                     Secp256k1.setCommonCurveParameters(ephemeral_privkey);
                 }
                 ephemeral_privkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
-                keyAgreement.init(ephemeral_privkey);
-
-                // keyAgreement.generateSecret() recovers X and Y coordinates
-                keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, BIP32_OFFSET_PUB); //pubkey in uncompressed form
+                getPublicKey(ephemeral_privkey, recvBuffer, BIP32_OFFSET_PUB); // uncompressed pubkey (65b)
                 byte compbyte = (byte)(0x02 | (recvBuffer[(short)(BIP32_OFFSET_PUBY+31)] & 0x01));
 
                 // compute HMAC of compressed pubkey + index
@@ -2393,8 +2382,7 @@ public class Satochip extends javacard.framework.Applet {
         Util.arrayFillNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_OFFSET_END, (byte)0);
 
         // compute the corresponding partial public key...
-        keyAgreement.init(bip32_extendedkey);
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)33); //pubkey in uncompressed form
+        getPublicKey(bip32_extendedkey, buffer, (short)33); // uncompressed pubkey (65b)
         Util.setShort(buffer, BIP32_KEY_SIZE, BIP32_KEY_SIZE);
 
         // self-sign coordx
@@ -2402,15 +2390,10 @@ public class Satochip extends javacard.framework.Applet {
         short sign_size= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+2+BIP32_KEY_SIZE), buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+4));
         Util.setShort(buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+2), sign_size);
 
-        // coordx signed by authentikey
-        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
-        short sign_size2= sigECDSA.sign(buffer, (short)0, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+4), buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+6));
-        Util.setShort(buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+4), sign_size2);
-
-        // return x-coordinate of public key+signatures
+        // return x-coordinate of public key+signatures, signed by the authentikey
         // the client can recover full public-key by guessing the compression value () and verifying the signature... 
         // buffer=[chaincode(32) | coordx_size(2) | coordx | sign_size(2) | self-sign | sign_size(2) | auth_sign]
-        return (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+sign_size2+6);
+        return appendAuthentikeySignature(buffer, (short)(BIP32_KEY_SIZE+BIP32_KEY_SIZE+sign_size+4));
 
     }// end of getBip32ExtendedKey()
     
@@ -2477,11 +2460,7 @@ public class Satochip extends javacard.framework.Applet {
         Util.arrayCopyNonAtomic(liquid_master_blinding_key, (short) 0, buffer, (short) 2, (short) 32);
         buffer_offset += (short) 32;
         // sign with authentikey
-        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
-        short sign_size = sigECDSA.sign(buffer, (short) 0, buffer_offset, buffer, (short) (buffer_offset + 2));
-        Util.setShort(buffer, buffer_offset, sign_size);
-        buffer_offset += (short) (2 + sign_size);
-        return buffer_offset;
+        return appendAuthentikeySignature(buffer, buffer_offset);
     }
 
     /**
@@ -2607,8 +2586,7 @@ public class Satochip extends javacard.framework.Applet {
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
 
             // compute pubkey corresponding to private key
-            keyAgreement.init(privkey);
-            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65bytes)
+            getPublicKey(privkey, recvBuffer, (short)0); // uncompressed pubkey (65b)
             // recvBuffer= [ 0x04(1b) | coordx(32b) | coordy(32b) ]
 
             // save the parity of y(P) now, as coordy is overwritten below
@@ -2663,18 +2641,13 @@ public class Satochip extends javacard.framework.Applet {
         // As a precaution, we should avoid to use ECDSA signature with tweakedkey...
         // https://bitcoin.stackexchange.com/questions/107924/are-there-risks-to-using-the-same-private-key-for-both-ecdsa-and-schnorr-signatu
         // format: [pubkey_size(2b) | uncompressed_pubkey(65b) |  sig_size(2b) | sig_authentikey]
-        keyAgreement.init(taproot_tweakedkey);
-        short pubkey_size = keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)2); //pubkey in uncompressed form (65bytes)
+        short pubkey_size = getPublicKey(taproot_tweakedkey, buffer, (short)2); // uncompressed pubkey (65b)
         buffer_offset = (short) 0;
         Util.setShort(buffer, buffer_offset, pubkey_size);
         buffer_offset += 2;
         buffer_offset += pubkey_size;
         // sign with authentikey
-        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
-        short sign_size = sigECDSA.sign(buffer, (short) 0, buffer_offset, buffer, (short) (buffer_offset + 2));
-        Util.setShort(buffer, buffer_offset, sign_size);
-        buffer_offset += (short) (2 + sign_size);
-        return buffer_offset;
+        return appendAuthentikeySignature(buffer, buffer_offset);
     }
 
     /**
@@ -2740,8 +2713,7 @@ public class Satochip extends javacard.framework.Applet {
             // copy message hash to buffer
             Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, recvBuffer, OFFSET_BIP340_m, (short)32);
             // compute the corresponding partial public key...
-            keyAgreement.init(taproot_tweakedkey);
-            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)31); //pubkey in uncompressed form (65bytes) 
+            getPublicKey(taproot_tweakedkey, buffer, (short)31); // uncompressed pubkey (65b)
             // we leave 32 bytes before coordx for reuse in next steps
             // d = sk if has_even_y(P), else n-sk
             boolean p_has_odd_y = ((buffer[(short)(31+64)] & 0x01) != 0);
@@ -2773,8 +2745,7 @@ public class Satochip extends javacard.framework.Applet {
                 Secp256k1.setCommonCurveParameters(ephemeral_privkey);
             }
             ephemeral_privkey.setS(recvBuffer, OFFSET_BIP340_t, (short)32);
-            keyAgreement.init(ephemeral_privkey);
-            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form (65bytes)
+            getPublicKey(ephemeral_privkey, tmpBuffer, (short)0); // uncompressed pubkey (65b)
             // k = rand if has_even_y(R), else n-rand
             boolean r_has_odd_y = ((tmpBuffer[64] & 0x01) != 0);
             // e = int(hashBIP0340/challenge(bytes(R) || bytes(P) || m))
@@ -2899,8 +2870,7 @@ public class Satochip extends javacard.framework.Applet {
 
         // compute pubkey pk and overwrite hashed randomness
         recvBuffer[OFFSET_BIP327_RAND_HASH] = (byte)33; // size_pk
-        keyAgreement.init(privkey);
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, OFFSET_BIP327_PK); //pubkey in uncompressed form (65bytes)
+        getPublicKey(privkey, recvBuffer, OFFSET_BIP327_PK); // uncompressed pubkey (65b)
         setCompressionByte(recvBuffer, OFFSET_BIP327_PK);
         short recvOffset = OFFSET_BIP327_PK;
         recvOffset+=33;
@@ -2988,15 +2958,13 @@ public class Satochip extends javacard.framework.Applet {
             Secp256k1.setCommonCurveParameters(ephemeral_privkey);
         }
         ephemeral_privkey.setS(recvBuffer, OFFSET_BIP327_K1, BIP32_KEY_SIZE);
-        keyAgreement.init(ephemeral_privkey);
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)0); //pubkey in uncompressed form (65bytes)
+        getPublicKey(ephemeral_privkey, buffer, (short)0); // uncompressed pubkey (65b)
         setCompressionByte(buffer, (short)0);
 
         // compute R2
         buffer_offset = (short)33;
         ephemeral_privkey.setS(recvBuffer, OFFSET_BIP327_K2, BIP32_KEY_SIZE);
-        keyAgreement.init(ephemeral_privkey);
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, buffer_offset); //pubkey in uncompressed form (65bytes)
+        getPublicKey(ephemeral_privkey, buffer, buffer_offset); // uncompressed pubkey (65b)
         setCompressionByte(buffer, buffer_offset);
         buffer_offset+=33;
         // the scratch EC key holds the secret nonce k2
@@ -3167,8 +3135,7 @@ public class Satochip extends javacard.framework.Applet {
             ECPrivateKey privkey = getSigningKey(buffer[ISO7816.OFFSET_P1]);
 
             // compute pubkey pk from sk
-            keyAgreement.init(privkey);
-            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65bytes)
+            getPublicKey(privkey, recvBuffer, (short)0); // uncompressed pubkey (65b)
             setCompressionByte(recvBuffer, (short)0);
 
             // check pubkey from secnonce match pubkey derived from sk
@@ -3476,11 +3443,7 @@ public class Satochip extends javacard.framework.Applet {
         Util.arrayCopyNonAtomic(trusted_pubkey, (short) 0, buffer, buffer_offset, PUBKEY_SIZE);
         buffer_offset += PUBKEY_SIZE;
         // sign with authentikey
-        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
-        short sign_size = sigECDSA.sign(buffer, (short) 0, buffer_offset, buffer, (short) (buffer_offset + 2));
-        Util.setShort(buffer, buffer_offset, sign_size);
-        buffer_offset += (short) (2 + sign_size);
-        return buffer_offset;
+        return appendAuthentikeySignature(buffer, buffer_offset);
     }
 
     /**

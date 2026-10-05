@@ -26,11 +26,6 @@ import javacard.security.ECPrivateKey;
 
 public class Secp256k1 {
     
-    // JC API 2.2.2 does not define these constants:
-    public final static byte ALG_ECDSA_SHA_256= (byte) 33;
-    public final static byte ALG_EC_SVDP_DH_PLAIN= (byte) 3; //https://javacard.kenai.com/javadocs/connected/javacard/security/KeyAgreement.html#ALG_EC_SVDP_DH_PLAIN
-    public final static short LENGTH_EC_FP_256= (short) 256;
-    
     //Bitcoin: default parameters for EC curve secp256k1
     public final static byte[] SECP256K1 = {
             // P - offset 0
@@ -143,12 +138,12 @@ public class Secp256k1 {
         }
         
         // y^2 mod p
-        Biginteger.mult_rsa_trick(pubkey, (short)(pubkey_offset+33), pubkey, (short)(pubkey_offset+33), (short)32, scratch, offset_product);
+        Biginteger.square_rsa(pubkey, (short)(pubkey_offset+33), (short)32, scratch, offset_product);
         Biginteger.mod(scratch, offset_product, (short)96, SECP256K1, OFFSET_SECP256K1_P, (short)32);
         Util.arrayCopyNonAtomic(scratch, (short)(offset_product+64), scratch, offset_y2, (short)32);
         
         // x^2 mod p
-        Biginteger.mult_rsa_trick(pubkey, (short)(pubkey_offset+1), pubkey, (short)(pubkey_offset+1), (short)32, scratch, offset_product);
+        Biginteger.square_rsa(pubkey, (short)(pubkey_offset+1), (short)32, scratch, offset_product);
         Biginteger.mod(scratch, offset_product, (short)96, SECP256K1, OFFSET_SECP256K1_P, (short)32);
         Util.arrayCopyNonAtomic(scratch, (short)(offset_product+64), scratch, offset_x3, (short)32);
         

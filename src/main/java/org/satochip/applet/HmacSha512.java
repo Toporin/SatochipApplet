@@ -21,7 +21,6 @@
 package org.satochip.applet;
 
 import javacard.framework.ISOException;
-import javacard.framework.JCSystem;
 import javacard.framework.Util;
 import javacard.security.CryptoException;
 import javacard.security.MessageDigest;
@@ -75,7 +74,8 @@ public class HmacSha512 {
         
         // erase the scratch area: it holds key^opad, the inner hash and the end of the message
         // (e.g. the parent private key for a hardened BIP32 child)
-        Util.arrayFillNonAtomic(data, (short)0, (short)(BLOCKSIZE + ((message_length > HASHSIZE) ? message_length : HASHSIZE)), (byte)0);
+        // (message_length <= HASHSIZE, checked above)
+        Util.arrayFillNonAtomic(data, (short)0, (short)(BLOCKSIZE + HASHSIZE), (byte)0);
         return HASHSIZE;
     }   
     

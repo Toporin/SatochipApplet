@@ -117,6 +117,13 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
   * TaprootTweakPrivateKey() negates the key with the copyScalar() helper (branching only on the public parity of P).
   * Secrets are erased once used: the shared secret and derived keys of the secure channel (recvBuffer[0..65)) and its ephemeral private key; the static ECDH secret and derived keys of importEncryptedSecret() (recvBuffer[0..105), on every exit), as well as the decrypted secret left in the APDU buffer; the 2FA secret and derived key in set2FAKey(); the imported private key left in the APDU buffer by ImportKey(); and the secret left in the scratch EC key (`ephemeral_privkey`) by ImportKey(), getBIP32ExtendedKey(), Musig2GenerateNonce() (the nonce k2) and SignSchnorrHash() (the nonce). The scratch EC key is only cleared when it is transient: a persistent fallback key would lose its curve parameters, which are only set again for transient keys.
 
+* Code cleanup (no functional change):
+  * New getPublicKey() and appendAuthentikeySignature() helpers replace 14 copies of the public key computation and 6 copies of the authentikey signature; importBIP32Seed() reuses computeAuthentikey().
+  * HmacSha160 fills and copies its scratch buffer with Util.arrayFillNonAtomic()/arrayCopyNonAtomic() instead of byte loops, like HmacSha512 (it runs twice for every secure channel command).
+  * Secp256k1.isOnCurve() computes x^2 and y^2 with one RSA operation each (new Biginteger.square_rsa()) instead of three, saving 4 of the 9 RSA operations of each secure channel initiation.
+  * Removed dead code and constants: the `eckeys_flag` field (written on every key import/reset, never read), Biginteger.shrink() and the mod() loop counters, SW_DEBUG_FLAG, the unused constants of Secp256k1, and the local redefinitions of ALG_ECDSA_SHA_256, LENGTH_EC_FP_256 and TYPE_AES_TRANSIENT_* (available in the 3.0.4 API); removed unused imports.
+  * SecureChannel: the response is copied to the scratch buffer non-atomically, and a redundant length check is removed. The IV counter update stays atomic on purpose (sc_buffer falls back to EEPROM on cards without enough transient memory).
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.

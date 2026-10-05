@@ -459,6 +459,22 @@ public class SatochipTest {
   }
 
   @Test
+  @DisplayName("A client pubkey that is not on secp256k1 is refused")
+  @FeaturePolicies({"rsaMult"})
+  void secureChannelOffCurvePointTest() {
+    final byte INS_INIT_SECURE_CHANNEL = (byte) 0x81;
+    ECNamedCurveParameterSpec spec = ECNamedCurveTable.getParameterSpec("secp256k1");
+    byte[] point = spec.getG().multiply(java.math.BigInteger.valueOf(12345)).normalize().getEncoded(false);
+    assertEquals(SW_OK, cmdSet.sendRawPlain(INS_INIT_SECURE_CHANNEL, 0x00, 0x00, point).getSw(),
+        "a valid point must be accepted");
+    point[64] ^= 0x01; // y+1 or y-1: (x, y') is not on the curve
+    assertEquals(SW_INVALID_PARAMETER, cmdSet.sendRawPlain(INS_INIT_SECURE_CHANNEL, 0x00, 0x00, point).getSw(),
+        "an off-curve point must be refused");
+    // the card's channel is now closed: the next secure command opens a new one (see tearDown)
+    cmdSet.forgetSecureChannel();
+  }
+
+  @Test
   @DisplayName("Opening a new secure channel logs the PIN out")
   void secureChannelReinitLogsOutTest() {
     // the PIN was verified in init(); a second channel opened in the same card session (e.g. by
