@@ -168,6 +168,8 @@ class SecureChannel {
         Util.arrayCopyNonAtomic(recvBuffer, (short)33, sc_buffer, OFFSET_SC_MACKEY, SIZE_SC_MACKEY);
         HmacSha160.computeHmacSha160(recvBuffer, (short)1, COORD_SIZE, CST_SC, (short)0, (short)6, recvBuffer, (short)33);
         sc_sessionkey.setKey(recvBuffer,(short)33); // AES-128: 16-bytes key!!
+        // erase the shared secret and the derived keys from the scratch buffer
+        Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)65, (byte)0);
 
         //reset IV counter
         Util.arrayFillNonAtomic(sc_buffer, OFFSET_SC_IV, SIZE_SC_IV, (byte) 0);
@@ -178,6 +180,12 @@ class SecureChannel {
         sigECDSA.init(ephemeral_privkey, Signature.MODE_SIGN);
         short sign_size= sigECDSA.sign(buffer, (short)0, (short)(COORD_SIZE+2), buffer, (short)(COORD_SIZE+4));
         Util.setShort(buffer, (short)(COORD_SIZE+2), sign_size);
+        // the ephemeral private key is not needed anymore (forward secrecy within the card
+        // session). A persistent fallback key keeps its value: clearKey() would also erase the
+        // curve parameters, which are only set again for transient keys.
+        if (ephemeral_privkey_transient) {
+            ephemeral_privkey.clearKey();
+        }
 
         // hash signed by authentikey
         short offset= (short)(2+COORD_SIZE+2+sign_size);

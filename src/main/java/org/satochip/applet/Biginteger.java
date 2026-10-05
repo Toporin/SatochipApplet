@@ -206,6 +206,61 @@ public class Biginteger {
         return true;
     }
     
+    /*
+     * Constant-time variants, for secret operands: no branch and no early exit depends on the
+     * value of the operands (only on their size).
+     */
+
+    /**
+     * Returns true if (unsigned)x is strictly smaller than (unsigned)y, in constant time.
+     * operands are stored Most Significant Byte First, size is the size in bytes of both operands
+     */
+    public static boolean lessThanCT(byte[] x, short offsetx, byte[] y, short offsety, short size) {
+        short borrow = 0;
+        for (short i = (short)(size-1); i >= 0; i--) {
+            short r = (short)((x[(short)(offsetx+i)] & digit_mask) - (y[(short)(offsety+i)] & digit_mask) - borrow);
+            borrow = (short)((r >> digit_len) & 1);
+        }
+        return borrow != 0;
+    }
+
+    /** Returns true if x is equal to 0, in constant time. */
+    public static boolean isZeroCT(byte[] x, short offsetx, short size) {
+        byte acc = 0;
+        for (short i = 0; i < size; i++) {
+            acc |= x[(short)(offsetx+i)];
+        }
+        return acc == 0;
+    }
+
+    /**
+     * Computes x = (x + y) mod n in constant time, for x, y < n (all operands of the same size,
+     * stored Most Significant Byte First). Uses scratch[offsets..offsets+size).
+     */
+    public static void addModCT(byte[] x, short offsetx, byte[] y, short offsety, byte[] n, short offsetn,
+            short size, byte[] scratch, short offsets) {
+        short i;
+        // x = x + y, carry = overflow bit
+        short carry = 0;
+        for (i = (short)(size-1); i >= 0; i--) {
+            carry = (short)((x[(short)(offsetx+i)] & digit_mask) + (y[(short)(offsety+i)] & digit_mask) + carry);
+            x[(short)(offsetx+i)] = (byte)carry;
+            carry = (short)((carry >> digit_len) & 1);
+        }
+        // scratch = x - n, borrow = underflow bit
+        short borrow = 0;
+        for (i = (short)(size-1); i >= 0; i--) {
+            short r = (short)((x[(short)(offsetx+i)] & digit_mask) - (n[(short)(offsetn+i)] & digit_mask) - borrow);
+            scratch[(short)(offsets+i)] = (byte)r;
+            borrow = (short)((r >> digit_len) & 1);
+        }
+        // the sum is >= n if it overflowed or if subtracting n did not underflow: then keep x - n
+        byte mask = (byte)(-(carry | (short)(1 - borrow)));
+        for (i = 0; i < size; i++) {
+            x[(short)(offsetx+i)] = (byte)((x[(short)(offsetx+i)] & ~mask) | (scratch[(short)(offsets+i)] & mask));
+        }
+    }
+
     /**
      *  UNDER CONSTRUCTION   
      *  Biginteger multiplication and modulo computation

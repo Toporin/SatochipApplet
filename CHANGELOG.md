@@ -112,6 +112,11 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
   * setFeaturePolicy() refuses an unknown feature id with SW_INCORRECT_P1, instead of returning success without doing anything.
   * NDEFApplet: install parameters with a record too large for the shared 224-byte buffer are refused with SW_WRONG_LENGTH, instead of an ArrayIndexOutOfBoundsException.
 
+* Constant-time arithmetic on secret scalars, and erasure of secret residue:
+  * New Biginteger.lessThanCT(), isZeroCT() and addModCT() (no branch or early exit depending on the operand values) are now used for the BIP32 child key (IL check and IL + k mod n), the taproot tweak (seckey + t mod n) and the ImportKey() range check. The previous code branched on the carry and on comparisons with n, leaking one bit about the secrets per operation through timing.
+  * TaprootTweakPrivateKey() negates the key with the copyScalar() helper (branching only on the public parity of P).
+  * Secrets are erased once used: the shared secret and derived keys of the secure channel (recvBuffer[0..65)) and its ephemeral private key; the static ECDH secret and derived keys of importEncryptedSecret() (recvBuffer[0..105), on every exit), as well as the decrypted secret left in the APDU buffer; the 2FA secret and derived key in set2FAKey(); the imported private key left in the APDU buffer by ImportKey(); and the secret left in the scratch EC key (`ephemeral_privkey`) by ImportKey(), getBIP32ExtendedKey(), Musig2GenerateNonce() (the nonce k2) and SignSchnorrHash() (the nonce). The scratch EC key is only cleared when it is transient: a persistent fallback key would lose its curve parameters, which are only set again for transient keys.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.

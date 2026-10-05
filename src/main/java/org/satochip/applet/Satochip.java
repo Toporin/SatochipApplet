@@ -1268,11 +1268,22 @@ public class Satochip extends javacard.framework.Applet {
      * Called from a finally block, so that error exits are covered too.
      */
     private void clearSigningScratch(byte[] buffer, short from, short to){
+        clearEphemeralKey();
         Util.arrayFillNonAtomic(buffer, from, (short)(to-from), (byte)0);
         Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)recvBuffer.length, (byte)0);
         Util.arrayFillNonAtomic(tmpBuffer, (short)0, (short)tmpBuffer.length, (byte)0);
         Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
         Util.arrayFillNonAtomic(Biginteger.buffer2, (short)0, (short)Biginteger.buffer2.length, (byte)0);
+    }
+
+    /**
+     * Erases the secret left in the scratch EC key (a nonce, a parent BIP32 key, an imported
+     * key...). A persistent fallback key keeps its value: clearKey() would also erase the curve
+     * parameters, which are only set again before use for transient keys.
+     */
+    private void clearEphemeralKey(){
+        if (ephemeral_privkey_transient)
+            ephemeral_privkey.clearKey();
     }
 
     /**
@@ -1478,9 +1489,9 @@ public class Satochip extends javacard.framework.Applet {
         
         // check that the private key scalar is in range [1, n-1] for secp256k1
         // (avoids an uncaught CryptoException from setS() with an invalid scalar)
-        if (Biginteger.equalZero(buffer, dataOffset, BIP32_KEY_SIZE))
+        if (Biginteger.isZeroCT(buffer, dataOffset, BIP32_KEY_SIZE))
             ISOException.throwIt(SW_INVALID_PARAMETER);
-        if (!Biginteger.lessThan(buffer, dataOffset, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE))
+        if (!Biginteger.lessThanCT(buffer, dataOffset, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE))
             ISOException.throwIt(SW_INVALID_PARAMETER);
         
         // check that the key slot is available and in the correct format
@@ -1502,6 +1513,7 @@ public class Satochip extends javacard.framework.Applet {
             // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x10^key_nb)-padding)
             Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte)(0x10^key_nb));
             HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
+            clearEphemeralKey();
             if (!arrayCompareConstantTime(buffer, (short)(dataOffset+blob_size), recvBuffer, (short)65, (short)20))
                 ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
@@ -1509,6 +1521,8 @@ public class Satochip extends javacard.framework.Applet {
         // set key from secret value & set flag
         ec_prv_key.setS(buffer, dataOffset, blob_size);
         eckeys_flag |= (short) (0x0001 << key_nb);// set corresponding bit flag;
+        // nothing is returned, so the key would stay in the APDU buffer
+        Util.arrayFillNonAtomic(buffer, dataOffset, blob_size, (byte)0);
         return (short)0;
     }
     
@@ -2350,25 +2364,16 @@ public class Satochip extends javacard.framework.Applet {
                 HmacSha512.computeHmacSha512(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, BIP32_KEY_SIZE, recvBuffer, BIP32_OFFSET_PARENT_SEPARATOR, (short)(1+BIP32_KEY_SIZE+4), recvBuffer, BIP32_OFFSET_CHILD_KEY);
             }
 
-            // addition with parent_key...
-            // First check that parse256(IL) < SECP256K1_R
-            if(!Biginteger.lessThan(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE)){
+            // child key = parse256(IL) + parent_key (mod n), in constant time (both are secret).
+            // BIP32: the child is invalid if IL >= n or if the result is 0 (probability < 2^-127)
+            if(!Biginteger.lessThanCT(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE)){
                 ISOException.throwIt(SW_BIP32_DERIVATION_ERROR);
             }
-            // add parent_key (mod SECP256K1_R)
-            if(Biginteger.add_carry(recvBuffer, BIP32_OFFSET_CHILD_KEY, recvBuffer, (short) (BIP32_KEY_SIZE+1), BIP32_KEY_SIZE)){
-                // in case of final carry, we must substract SECP256K1_R
-                // we have IL<SECP256K1_R and parent_key<SECP256K1_R, so IL+parent_key<2*SECP256K1_R
-                Biginteger.subtract(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE);
-            }else{
-                // in the unlikely case where SECP256K1_R<=IL+parent_key<2^256
-                if(!Biginteger.lessThan(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE)){
-                    Biginteger.subtract(recvBuffer, BIP32_OFFSET_CHILD_KEY, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE);
-                }
-                // check that value is not 0
-                if(Biginteger.equalZero(recvBuffer, BIP32_OFFSET_CHILD_KEY, BIP32_KEY_SIZE)){
-                    ISOException.throwIt(SW_BIP32_DERIVATION_ERROR);
-                }
+            // the index area is free once the HMAC is computed: use it as scratch
+            Biginteger.addModCT(recvBuffer, BIP32_OFFSET_CHILD_KEY, recvBuffer, BIP32_OFFSET_PARENT_KEY,
+                    Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, BIP32_KEY_SIZE, recvBuffer, BIP32_OFFSET_INDEX);
+            if(Biginteger.isZeroCT(recvBuffer, BIP32_OFFSET_CHILD_KEY, BIP32_KEY_SIZE)){
+                ISOException.throwIt(SW_BIP32_DERIVATION_ERROR);
             }
 
             // at this point, recvBuffer contains the extended key at depth i
@@ -2378,6 +2383,8 @@ public class Satochip extends javacard.framework.Applet {
             recvBuffer[BIP32_OFFSET_PARENT_SEPARATOR]=0x00;
         } // end for
 
+        // the scratch EC key holds the last parent key of a non-hardened child
+        clearEphemeralKey();
         // instantiate elliptic curve with last extended key
         bip32_extendedkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
 
@@ -2622,29 +2629,15 @@ public class Satochip extends javacard.framework.Applet {
                 ISOException.throwIt(SW_TAPROOT_TWEAK_ERROR);
             }
 
-            //seckey = seckey0 if has_even_y(P) else SECP256K1_ORDER - seckey0
-            if (p_has_even_y) {
-                privkey.getS(recvBuffer, seckeyOffset);
-            } else {
-                privkey.getS(recvBuffer, (short)129);
-                // copy SECP256K1_ORDER
-                Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, seckeyOffset, (short)32);
-                // SECP256K1_ORDER - seckey0
-                Biginteger.subtract(recvBuffer, seckeyOffset, recvBuffer, (short)129, (short) 32);
-            }
+            // seckey = seckey0 if has_even_y(P) else n - seckey0
+            privkey.getS(recvBuffer, (short)129);
+            copyScalar(!p_has_even_y, recvBuffer, (short)129, recvBuffer, seckeyOffset);
 
-            // compute ((seckey + t) % SECP256K1_ORDER)
-            if (Biginteger.add_carry(recvBuffer, seckeyOffset, recvBuffer, (short)65, (short) 32)){
-                // in case of final carry, we must substract SECP256K1_R
-                Biginteger.subtract(recvBuffer, seckeyOffset, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32); 
-            } else {
-                // in the unlikely case where SECP256K1_R <= (seckey + t) <2^256
-                if(!Biginteger.lessThan(recvBuffer, seckeyOffset, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32)){
-                    Biginteger.subtract(recvBuffer, seckeyOffset, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
-                }
-            }
+            // seckey = (seckey + t) mod n, in constant time (recvBuffer[129..161) as scratch)
+            Biginteger.addModCT(recvBuffer, seckeyOffset, recvBuffer, (short)65,
+                    Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32, recvBuffer, (short)129);
             // fails if seckey + t = 0 mod n (low probability), which setS() would refuse
-            if (Biginteger.equalZero(recvBuffer, seckeyOffset, (short)32)){
+            if (Biginteger.isZeroCT(recvBuffer, seckeyOffset, (short)32)){
                 ISOException.throwIt(SW_TAPROOT_TWEAK_ERROR);
             }
 
@@ -3006,6 +2999,8 @@ public class Satochip extends javacard.framework.Applet {
         keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, buffer_offset); //pubkey in uncompressed form (65bytes)
         setCompressionByte(buffer, buffer_offset);
         buffer_offset+=33;
+        // the scratch EC key holds the secret nonce k2
+        clearEphemeralKey();
 
         // save id counter to buffer
         Util.setShort(buffer, buffer_offset, bip327_counter);
@@ -3263,6 +3258,9 @@ public class Satochip extends javacard.framework.Applet {
         HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, CST_2FA, (short)0, (short)6, data2FA, OFFSET_2FA_ID);
         HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, CST_2FA, (short)6, (short)7, recvBuffer, (short)0);
         key_2FA.setKey(recvBuffer,(short)0); // AES-128: 16-bytes key!!
+        // erase the derived key, and the 2FA secret (nothing is returned, so it would stay in the APDU buffer)
+        Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)20, (byte)0);
+        Util.arrayFillNonAtomic(buffer, ISO7816.OFFSET_CDATA, (short)20, (byte)0);
         needs_2FA= true;    
         return (short)0;
     }
@@ -3535,78 +3533,93 @@ public class Satochip extends javacard.framework.Applet {
         // compute shared static key
         if (bytes_left < AES_IV_SIZE)// IV
             ISOException.throwIt(SW_INVALID_PARAMETER);
-        keyAgreement.init(authentikey_private);
-        keyAgreement.generateSecret(trusted_pubkey, (short)0, (short)65, recvBuffer, (short)0); // pubkey in uncompressed form
-        // derive secret_sessionkey & secret_mackey
-        HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)0, (short)6, recvBuffer, (short)33);
-        secret_sc_sessionkey.setKey(recvBuffer, (short)33); // AES-128:
-        // 16-bytes key!!
-        HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)6, (short)6, recvBuffer, (short)33);
-        sc_aes128_cbc.init(secret_sc_sessionkey, Cipher.MODE_DECRYPT, buffer, buffer_offset, AES_IV_SIZE);
-        buffer_offset += AES_IV_SIZE;
-        bytes_left -= AES_IV_SIZE;
+        // recvBuffer holds the static ECDH secret and the derived keys: erase them on every exit
+        byte secret_size = 0;
+        try {
+            keyAgreement.init(authentikey_private);
+            keyAgreement.generateSecret(trusted_pubkey, (short)0, (short)65, recvBuffer, (short)0); // pubkey in uncompressed form
+            // derive secret_sessionkey & secret_mackey
+            HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)0, (short)6, recvBuffer, (short)33);
+            secret_sc_sessionkey.setKey(recvBuffer, (short)33); // AES-128:
+            // 16-bytes key!!
+            HmacSha160.computeHmacSha160(recvBuffer, (short)1, (short)32, SECRET_CST_SC, (short)6, (short)6, recvBuffer, (short)33);
+            sc_aes128_cbc.init(secret_sc_sessionkey, Cipher.MODE_DECRYPT, buffer, buffer_offset, AES_IV_SIZE);
+            buffer_offset += AES_IV_SIZE;
+            bytes_left -= AES_IV_SIZE;
 
-        // load the new (sensitive) data
-        data_size = Util.getShort(buffer, buffer_offset);
-        buffer_offset += 2;
-        bytes_left -= 2;
-        // data_size must be positive and a multiple of the AES block size (16 bytes)
-        if (data_size <= 0 || (data_size % 16) != 0 || bytes_left < data_size) {
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        }
+            // load the new (sensitive) data
+            data_size = Util.getShort(buffer, buffer_offset);
+            buffer_offset += 2;
+            bytes_left -= 2;
+            // data_size must be positive and a multiple of the AES block size (16 bytes)
+            if (data_size <= 0 || (data_size % 16) != 0 || bytes_left < data_size) {
+                ISOException.throwIt(SW_INVALID_PARAMETER);
+            }
 
-        // hash the ciphertext to check hmac
-        sha256.doFinal(buffer, buffer_offset, data_size, recvBuffer, (short) (53));
-        short hmac_offset = (short) (buffer_offset + data_size);
-        bytes_left -= data_size;
-        if (bytes_left < 1)
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        short hmac_size = buffer[hmac_offset];
-        hmac_offset++;
-        bytes_left--;
-        if (hmac_size != (short) 20 || bytes_left < hmac_size) {
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        }
-        short sign_size = HmacSha160.computeHmacSha160(recvBuffer, (short)33, (short)20, recvBuffer, (short)53, (short)32, recvBuffer, (short)85);
-        if (!arrayCompareConstantTime(buffer, hmac_offset, recvBuffer, (short)(85), (short)20))
-            ISOException.throwIt(SW_SECURE_IMPORT_WRONG_MAC);
+            // hash the ciphertext to check hmac
+            sha256.doFinal(buffer, buffer_offset, data_size, recvBuffer, (short) (53));
+            short hmac_offset = (short) (buffer_offset + data_size);
+            bytes_left -= data_size;
+            if (bytes_left < 1)
+                ISOException.throwIt(SW_INVALID_PARAMETER);
+            short hmac_size = buffer[hmac_offset];
+            hmac_offset++;
+            bytes_left--;
+            if (hmac_size != (short) 20 || bytes_left < hmac_size) {
+                ISOException.throwIt(SW_INVALID_PARAMETER);
+            }
+            short sign_size = HmacSha160.computeHmacSha160(recvBuffer, (short)33, (short)20, recvBuffer, (short)53, (short)32, recvBuffer, (short)85);
+            if (!arrayCompareConstantTime(buffer, hmac_offset, recvBuffer, (short)(85), (short)20))
+                ISOException.throwIt(SW_SECURE_IMPORT_WRONG_MAC);
 
-        // decrypt secret (data_size is a multiple of the block size, so doFinal() returns all of it)
-        dec_size = sc_aes128_cbc.doFinal(buffer, buffer_offset, data_size, buffer, buffer_offset);
-        // padding (PKCS#7): pad length must be in [1, 16] and cannot exceed the decrypted size
-        short padsize = buffer[ (short)(buffer_offset+dec_size-1) ];
-        if (padsize < 1 || padsize > 16 || padsize > dec_size)
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        data_size = (short)(dec_size-padsize);
-        // hash for fingerprinting
-        sha256.reset();
-        sha256.doFinal(buffer, buffer_offset, data_size, recvBuffer, (short)0);
-        // compare with fingerprint in header
-        if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA + SECRET_OFFSET_FINGERPRINT), recvBuffer, (short)0, SECRET_FINGERPRINT_SIZE) != (byte)0) {
-            ISOException.throwIt(SW_SECURE_IMPORT_WRONG_FINGERPRINT);
-        }
+            // decrypt secret (data_size is a multiple of the block size, so doFinal() returns all of it)
+            dec_size = sc_aes128_cbc.doFinal(buffer, buffer_offset, data_size, buffer, buffer_offset);
+            // padding (PKCS#7): pad length must be in [1, 16] and cannot exceed the decrypted size
+            short padsize = buffer[ (short)(buffer_offset+dec_size-1) ];
+            if (padsize < 1 || padsize > 16 || padsize > dec_size)
+                ISOException.throwIt(SW_INVALID_PARAMETER);
+            data_size = (short)(dec_size-padsize);
+            // hash for fingerprinting
+            sha256.reset();
+            sha256.doFinal(buffer, buffer_offset, data_size, recvBuffer, (short)0);
+            // compare with fingerprint in header
+            if (Util.arrayCompare(buffer, (short)(ISO7816.OFFSET_CDATA + SECRET_OFFSET_FINGERPRINT), recvBuffer, (short)0, SECRET_FINGERPRINT_SIZE) != (byte)0) {
+                ISOException.throwIt(SW_SECURE_IMPORT_WRONG_FINGERPRINT);
+            }
         
-        // the plaintext is [secret_size(1b) | secret]: the secret must fit in the plaintext
-        // (seed size range is checked by importBIP32Seed(), the 2FA secret must be 20 bytes)
-        if (data_size < 1)
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        byte secret_size = buffer[buffer_offset];
-        if (secret_size < 0 || (short)(1+secret_size) > data_size)
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        if (type == SECRET_TYPE_2FA && secret_size != (byte)20)
-            ISOException.throwIt(SW_INVALID_PARAMETER);
+            // the plaintext is [secret_size(1b) | secret]: the secret must fit in the plaintext
+            // (seed size range is checked by importBIP32Seed(), the 2FA secret must be 20 bytes)
+            if (data_size < 1)
+                ISOException.throwIt(SW_INVALID_PARAMETER);
+            secret_size = buffer[buffer_offset];
+            if (secret_size < 0 || (short)(1+secret_size) > data_size)
+                ISOException.throwIt(SW_INVALID_PARAMETER);
+            if (type == SECRET_TYPE_2FA && secret_size != (byte)20)
+                ISOException.throwIt(SW_INVALID_PARAMETER);
+
+        } finally {
+            Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)105, (byte)0);
+        }
 
         // rewrite buffer and call the standard import method
         Util.arrayCopyNonAtomic(buffer, (short)(buffer_offset+1), buffer, ISO7816.OFFSET_CDATA, secret_size);
         if (type == SECRET_TYPE_MASTER_SEED){
             buffer[ISO7816.OFFSET_LC] = secret_size;
             buffer[ISO7816.OFFSET_P1] = secret_size;
-            return importBIP32Seed(apdu, buffer);
+            short sizeout = importBIP32Seed(apdu, buffer);
+            // erase what the response did not overwrite of the decrypted plaintext (the seed)
+            short end = (short)(buffer_offset + dec_size);
+            if (sizeout < end)
+                Util.arrayFillNonAtomic(buffer, sizeout, (short)(end - sizeout), (byte)0);
+            return sizeout;
         }
         // type == SECRET_TYPE_2FA: [hmacsha1_key(20b) | RFU-DEPRECATED-amount_limit(8b)]
         Util.arrayFillNonAtomic(buffer, (short)(ISO7816.OFFSET_CDATA+secret_size), (short)8, (byte)0);
         buffer[ISO7816.OFFSET_LC] = (byte)(secret_size+8);
-        return set2FAKey(apdu, buffer);
+        short sizeout = set2FAKey(apdu, buffer);
+        // nothing is returned: erase the decrypted plaintext, which holds the 2FA secret
+        Util.arrayFillNonAtomic(buffer, buffer_offset, dec_size, (byte)0);
+        return sizeout;
     }
 
     /*********************************************
