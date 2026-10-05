@@ -53,6 +53,13 @@ class SecureChannel {
 
     private final static short COORD_SIZE = (short) 32; // size of a secp256k1 coordinate
 
+    /**
+     * Largest plaintext response that wrap() can send: the PKCS#7-padded plaintext must fit in
+     * tmpBuffer (256b), and [IV(16b) | size(2b) | ciphertext] in a short R-APDU (256b), i.e. a
+     * ciphertext of at most 224 bytes. Handlers returning variable-size data must respect it.
+     */
+    final static short MAX_WRAP_SIZE = (short) 223;
+
     private static final byte[] CST_SC = {'s','c','_','k','e','y', 's','c','_','m','a','c'};
 
     // sc_buffer=[ IV(16b) | mackey(20b) ], where IV=[ random(12b) | counter(4b) ]
@@ -203,7 +210,9 @@ class SecureChannel {
      *  p2: 0x00 (RFU)
      *  data: [IV(16b) | data_size(2b) | encrypted_command | mac_size(2b) | mac]
      *
-     *  return: [decrypted command]
+     *  return: [decrypted command] in buffer, and the decrypted size. The decrypted command is
+     *          guaranteed to hold a complete header [CLA | INS | P1 | P2 | Lc] and Lc data bytes,
+     *          so that handlers can trust buffer[OFFSET_LC] (the CLA is checked by the applet).
      *
      */
     short unwrap(byte[] buffer){
@@ -219,6 +228,9 @@ class SecureChannel {
         if (bytesLeft<18)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         short sizein = Util.getShort(buffer, (short) (offset+SIZE_SC_IV));
+        // the ciphertext is AES-CBC without padding removal: a whole number of blocks
+        if (sizein < 0 || (sizein % SIZE_SC_IV) != 0)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         if (bytesLeft<(short)(SIZE_SC_IV+2+sizein+2))
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         short sizemac= Util.getShort(buffer, (short) (offset+SIZE_SC_IV+2+sizein));
@@ -238,9 +250,17 @@ class SecureChannel {
             ISOException.throwIt(SW_SECURE_CHANNEL_WRONG_IV);
         if ( !Biginteger.lessThan(sc_buffer, OFFSET_SC_IV_COUNTER, buffer, (short)(offset+SIZE_SC_IV_RANDOM), SIZE_SC_IV_COUNTER ) ) //and greater than local IV
             ISOException.throwIt(SW_SECURE_CHANNEL_WRONG_IV);
-        // update local IV
+        // update local IV: local counter = received counter + 1. The next command must use a counter
+        // strictly greater, so no value at or below this one is ever accepted again. The +1 also
+        // makes the response IV counter even (requests use odd ones), so that request and response
+        // IVs never collide under the same session key: do not set local = received.
         Util.arrayCopy(buffer, (short)(offset+SIZE_SC_IV_RANDOM), sc_buffer, OFFSET_SC_IV_COUNTER, SIZE_SC_IV_COUNTER);
-        Biginteger.add1_carry(sc_buffer, OFFSET_SC_IV_COUNTER, SIZE_SC_IV_COUNTER);
+        if (Biginteger.add1_carry(sc_buffer, OFFSET_SC_IV_COUNTER, SIZE_SC_IV_COUNTER)){
+            // the counter wrapped to 0, which would make old counters acceptable again:
+            // the session is exhausted, a new one must be initiated
+            initialized_secure_channel = false;
+            ISOException.throwIt(SW_SECURE_CHANNEL_WRONG_IV);
+        }
         randomData.generateData(sc_buffer, OFFSET_SC_IV_RANDOM, SIZE_SC_IV_RANDOM);
         sc_aes128_cbc.init(sc_sessionkey, Cipher.MODE_DECRYPT, buffer, offset, SIZE_SC_IV);
         offset+=SIZE_SC_IV;
@@ -252,6 +272,15 @@ class SecureChannel {
         if (bytesLeft<sizein)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         short sizeout=sc_aes128_cbc.doFinal(buffer, offset, sizein, buffer, (short) (0));
+
+        // validate the decrypted command: [CLA | INS | P1 | P2 | Lc | data(Lc) | padding]
+        // Lc must not exceed the decrypted data, otherwise the handlers would read stale buffer
+        // content. The padding added by the client is not removed (the cipher is NOPAD), so
+        // sizeout may exceed 5+Lc: only check the bound.
+        if (sizeout < (short)ISO7816.OFFSET_CDATA)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        if ((short)(ISO7816.OFFSET_CDATA + Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC])) > sizeout)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         return sizeout;
     }
 
@@ -263,6 +292,9 @@ class SecureChannel {
      * return: [IV(16b) | data_size(2b) | encrypted_response] in buffer, and its size
      */
     short wrap(byte[] buffer, short sizeout){
+        // handlers are expected to bound their response; this is a last line of defense
+        if (sizeout > MAX_WRAP_SIZE)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         // buffer contains the data (sizeout)
         // for encryption, data is padded with PKCS#7
         short blocksize=(short)16;

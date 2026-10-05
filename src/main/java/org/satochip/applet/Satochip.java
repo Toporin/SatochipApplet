@@ -773,10 +773,11 @@ public class Satochip extends javacard.framework.Applet {
             return;
         }
         else if (ins == INS_PROCESS_SECURE_CHANNEL){
+            // decrypts the inner command, and checks that its Lc fits in the decrypted data
             sizeout= secureChannel.unwrap(buffer);
-            //todo: check if sizeout and buffer[ISO7816.OFFSET_LC] matches...
-            //if sizeout>4, buffer[ISO7816.OFFSET_LC] should be equal to (sizeout-5)
-            //todo: remove padding ? (it is actually not used)          
+            // the inner command must use the applet's CLA, like the outer one
+            if (buffer[ISO7816.OFFSET_CLA] != CardEdge_CLA)
+                ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
         }
         else {
             ISOException.throwIt(SW_SECURE_CHANNEL_REQUIRED);
@@ -957,14 +958,11 @@ public class Satochip extends javacard.framework.Applet {
         if (sizeout==0){
             return;
         }
-        else if ((ins == INS_GET_STATUS) || (ins == INS_INIT_SECURE_CHANNEL)) {
-            apdu.setOutgoingAndSend((short) 0, sizeout);
-        }
-        else { // encrypt response through the Secure Channel
-            sizeout= secureChannel.wrap(buffer, sizeout);
-            //send back
-            apdu.setOutgoingAndSend((short) 0, sizeout);
-        }
+        // the command arrived through the secure channel, so the response goes back through it,
+        // whatever the inner INS (the plaintext GET_STATUS and INIT_SECURE_CHANNEL commands
+        // have already returned above)
+        sizeout= secureChannel.wrap(buffer, sizeout);
+        apdu.setOutgoingAndSend((short) 0, sizeout);
 
         
     } // end of process method
@@ -1228,45 +1226,25 @@ public class Satochip extends javacard.framework.Applet {
     }
 
     /**
-     * Checks a 2FA approval: the 20-byte HMAC-SHA1 at hmac[hmacOffset] must match the HMAC,
-     * keyed with the 2FA secret, of the 64-byte message staged by the caller in
-     * recvBuffer[msgOffset..msgOffset+64). The expected HMAC is computed into
-     * recvBuffer[msgOffset+64..msgOffset+84). See the 2FA message layouts near data2FA.
-     *
-     * @throws ISOException SW_SIGNATURE_INVALID if the HMAC does not match
-     */
-    private void check2FAHmac(short msgOffset, byte[] hmac, short hmacOffset){
-        short macOffset = (short)(msgOffset+64);
-        HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, msgOffset, (short)64, recvBuffer, macOffset);
-        if (!arrayCompareConstantTime(hmac, hmacOffset, recvBuffer, macOffset, (short)20))
-            ISOException.throwIt(SW_SIGNATURE_INVALID);
-    }
-
-    /**
-     * Checks the 2FA approval of a signing operation, provided in the APDU as
-     * [32b value at hashOffset | ... | 2FA-flag(2b) at flagOffset | hmac(20b)].
-     * The HMAC is computed over [ 32b value | 32-byte padding ], staged at
-     * recvBuffer[msgOffset]. The caller is responsible for the length checks.
-     *
-     * @throws ISOException SW_INCORRECT_ALG if the 2FA flag is wrong,
-     *         SW_SIGNATURE_INVALID if the HMAC does not match
-     */
-    private void check2FAHash(byte[] buffer, short hashOffset, short flagOffset, byte padding, short msgOffset){
-        // check flag for 2fa_hmac_chalresp
-        if (Util.getShort(buffer, flagOffset)!=HMAC_CHALRESP_2FA)
-            ISOException.throwIt(SW_INCORRECT_ALG);
-        // hmac of 64-bytes msg: ( 32bytes value | 32bytes padding)
-        Util.arrayCopyNonAtomic(buffer, hashOffset, recvBuffer, msgOffset, (short)32);
-        Util.arrayFillNonAtomic(recvBuffer, (short)(msgOffset+32), (short)32, padding);
-        check2FAHmac(msgOffset, buffer, (short)(flagOffset+2));
-    }
-
-    /**
      * Turns the uncompressed public key [0x04 | x(32b) | y(32b)] at buf[off] into the
      * prefix of its compressed form, by replacing 0x04 with 0x02 (even y) or 0x03 (odd y).
      */
     private static void setCompressionByte(byte[] buf, short off){
         buf[off] = (byte)(0x02 | (buf[(short)(off+64)] & 0x01));
+    }
+
+    /**
+     * Erases the secret intermediate values of a Schnorr or MuSig2 signature (private key,
+     * nonces, partial sums) from the shared scratch buffers: recvBuffer, tmpBuffer[0..65),
+     * Biginteger.buffer1/buffer2 and buffer[from..to) of the APDU buffer.
+     * Called from a finally block, so that error exits are covered too.
+     */
+    private void clearSigningScratch(byte[] buffer, short from, short to){
+        Util.arrayFillNonAtomic(buffer, from, (short)(to-from), (byte)0);
+        Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)recvBuffer.length, (byte)0);
+        Util.arrayFillNonAtomic(tmpBuffer, (short)0, (short)65, (byte)0);
+        Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
+        Util.arrayFillNonAtomic(Biginteger.buffer2, (short)0, (short)Biginteger.buffer2.length, (byte)0);
     }
 
     /** Checks if PIN policies are satisfied for a PIN code */
@@ -1429,7 +1407,9 @@ public class Satochip extends javacard.framework.Applet {
             keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65b)
             // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x10^key_nb)-padding)
             Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte)(0x10^key_nb));
-            check2FAHmac((short)1, buffer, (short)(dataOffset+blob_size));
+            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
+            if (!arrayCompareConstantTime(buffer, (short)(dataOffset+blob_size), recvBuffer, (short)65, (short)20))
+                ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
         
         // set key from secret value & set flag
@@ -1473,7 +1453,9 @@ public class Satochip extends javacard.framework.Applet {
             keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65b)
             // hmac of 64-bytes msg: (pubkey-x | 32bytes (0x20^key_nb)-padding)
             Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte) (0x20^key_nb));
-            check2FAHmac((short)1, buffer, ISO7816.OFFSET_CDATA);
+            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
+            if (!arrayCompareConstantTime(buffer, ISO7816.OFFSET_CDATA, recvBuffer, (short)65, (short)20))
+                ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
         
         // clear key & reset flag
@@ -1764,15 +1746,16 @@ public class Satochip extends javacard.framework.Applet {
                     buffer[ISO7816.OFFSET_LC]);
             short buffer_offset = ISO7816.OFFSET_CDATA;
             if (bytes_left > 0) {
+                // data: [label_size(1b) | label]
                 short label_size = Util.makeShort((byte) 0x00,
                         buffer[buffer_offset]);
+                bytes_left--;
+                buffer_offset++;
                 if (label_size > bytes_left)
                     ISOException.throwIt(SW_INVALID_PARAMETER);
                 if (label_size > MAX_CARD_LABEL_SIZE)
                     ISOException.throwIt(SW_INVALID_PARAMETER);
-                card_label_size = buffer[buffer_offset];
-                bytes_left--;
-                buffer_offset++;
+                card_label_size = (byte) label_size;
                 Util.arrayCopyNonAtomic(buffer, buffer_offset, card_label,
                         (short) 0, label_size);
             } else if (bytes_left == 0) {// reset label
@@ -2090,7 +2073,9 @@ public class Satochip extends javacard.framework.Applet {
             // hmac of 64-bytes msg: ( authentikey-coordx(32b) | 32bytes 0xFF-padding)
             authentikey_public.getW(recvBuffer, (short)0);
             Util.arrayFillNonAtomic(recvBuffer, (short)33, (short)32, (byte)0xFF);
-            check2FAHmac((short)1, buffer, offset);
+            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)1, (short)64, recvBuffer, (short)65);
+            if (!arrayCompareConstantTime(buffer, offset, recvBuffer, (short)65, (short)20))
+                ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
         
         resetSeed();
@@ -2426,8 +2411,16 @@ public class Satochip extends javacard.framework.Applet {
             // check data length
             if (bytesLeft<MessageDigest.LENGTH_SHA_256+MessageDigest.LENGTH_SHA+(short)2)
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+            // check flag for 2fa_hmac_chalresp
+            short hmac_flags= Util.getShort(buffer, (short)(ISO7816.OFFSET_CDATA+32));
+            if (hmac_flags!=HMAC_CHALRESP_2FA)
+                ISOException.throwIt(SW_INCORRECT_ALG);
             // hmac of 64-bytes msg: ( 32bytes tx_hash | 32bytes 0xCC-padding)
-            check2FAHash(buffer, ISO7816.OFFSET_CDATA, (short)(ISO7816.OFFSET_CDATA+32), (byte)0xCC, (short)0);
+            Util.arrayCopyNonAtomic(buffer, (short)ISO7816.OFFSET_CDATA, recvBuffer, (short)0, (short)32);
+            Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0xCC);
+            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
+            if (!arrayCompareConstantTime(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20))
+                ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
 
         // hash+sign singlehash
@@ -2632,111 +2625,120 @@ public class Satochip extends javacard.framework.Applet {
             // check data length
             if (bytesLeft<MessageDigest.LENGTH_SHA_256+MessageDigest.LENGTH_SHA+(short)2)
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-            // hmac of 64-bytes msg: ( 32bytes tx_hash | 32bytes 0xDD-padding), 0xDD for Schnorr sig
-            check2FAHash(buffer, ISO7816.OFFSET_CDATA, (short)(ISO7816.OFFSET_CDATA+32), (byte)0xDD, (short)0);
+            // check flag for 2fa_hmac_chalresp
+            short hmac_flags= Util.getShort(buffer, (short)(ISO7816.OFFSET_CDATA+32));
+            if (hmac_flags!=HMAC_CHALRESP_2FA)
+                ISOException.throwIt(SW_INCORRECT_ALG);
+            // hmac of 64-bytes msg: ( 32bytes tx_hash | 32bytes 0xDD-padding)
+            Util.arrayCopyNonAtomic(buffer, (short)ISO7816.OFFSET_CDATA, recvBuffer, (short)0, (short)32);
+            Util.arrayFillNonAtomic(recvBuffer, (short)32, (short)32, (byte)0xDD); // 0xDD for Schnorr sig
+            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
+            if (!arrayCompareConstantTime(buffer, (short)(ISO7816.OFFSET_CDATA+32+2), recvBuffer, (short)64, (short)20))
+                ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
 
-        // generate randomness
-        randomData.generateData(recvBuffer, OFFSET_BIP340_aux, (short)32);
+        // from here on, the scratch buffers hold secrets (sk, d, the nonce): they are erased in the
+        // finally block below, also on error. buffer[0..64) is kept on success (the signature).
+        short sizeout = (short)0;
+        try {
+            // generate randomness
+            randomData.generateData(recvBuffer, OFFSET_BIP340_aux, (short)32);
         
-        // copy message hash to buffer
-        Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, recvBuffer, OFFSET_BIP340_m, (short)32);
-        // compute the corresponding partial public key...
-        keyAgreement.init(taproot_tweakedkey);
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)31); //pubkey in uncompressed form (65bytes) 
-        // we leave 32 bytes before coordx for reuse in next steps
-        // Keep a copy of the tweaked secret: taproot_tweakedkey is borrowed
-        // below as scratch storage to compute R = rand*G, which overwrites it,
-        // and it must be restored so that it survives this signature.
-        taproot_tweakedkey.getS(recvBuffer, OFFSET_BIP340_sk);
-        // check evenness
-        if (buffer[31+64]%2 == 0){
-            // d= sk
-            Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_sk, recvBuffer, OFFSET_BIP340_d, (short)32);
-        } else {
-            // d= n-sk
-            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, OFFSET_BIP340_d, (short)32);
-            Biginteger.subtract(recvBuffer, OFFSET_BIP340_d, recvBuffer, OFFSET_BIP340_sk, (short)32);
+            // copy message hash to buffer
+            Util.arrayCopyNonAtomic(buffer, ISO7816.OFFSET_CDATA, recvBuffer, OFFSET_BIP340_m, (short)32);
+            // compute the corresponding partial public key...
+            keyAgreement.init(taproot_tweakedkey);
+            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)31); //pubkey in uncompressed form (65bytes) 
+            // we leave 32 bytes before coordx for reuse in next steps
+            // Keep a copy of the tweaked secret: taproot_tweakedkey is borrowed
+            // below as scratch storage to compute R = rand*G, which overwrites it,
+            // and it must be restored so that it survives this signature.
+            taproot_tweakedkey.getS(recvBuffer, OFFSET_BIP340_sk);
+            // check evenness
+            if (buffer[31+64]%2 == 0){
+                // d= sk
+                Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_sk, recvBuffer, OFFSET_BIP340_d, (short)32);
+            } else {
+                // d= n-sk
+                Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, OFFSET_BIP340_d, (short)32);
+                Biginteger.subtract(recvBuffer, OFFSET_BIP340_d, recvBuffer, OFFSET_BIP340_sk, (short)32);
+            }
+            // t = bytes(d) ^ hashBIP0340/aux(a)
+            schnorr_hash_tag(tags, (short)0, (short)11, recvBuffer, OFFSET_BIP340_aux, (short)32, recvBuffer, OFFSET_BIP340_t);
+            short i;
+            for (i = (short)0; i < (short)32; i++){
+                recvBuffer[(short)(OFFSET_BIP340_t+i)] = (byte) (recvBuffer[(short)(OFFSET_BIP340_t+i)] ^ recvBuffer[(short)(OFFSET_BIP340_d+i)]);
+            }
+            // Let rand = hashBIP0340/nonce(t || bytes(P) || m)
+            short offset = 0;
+            Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_t, buffer, offset, (short)32);
+            offset+=32;
+            offset+=32; // bytes(P) is alread there from previous steps
+            Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_m, buffer, offset, (short)32);
+            schnorr_hash_tag(tags, (short)11, (short)13, buffer, (short)0, (short)96, recvBuffer, OFFSET_BIP340_t); // reuse t to store rand
+            // k', k
+            if (Biginteger.equalZero(recvBuffer, OFFSET_BIP340_t, (short)32)){
+                ISOException.throwIt(SW_SCHNORR_INVALID_NONCE);
+            }
+            // todo: rand = rand % n
+            // compute R = rand*G using the scratch ephemeral key (same pattern as in
+            // InitiateSecureChannel, ImportKey and Musig2GenerateNonce), so that the
+            // tweaked private key never has to be borrowed and restored.
+            if (ephemeral_privkey_transient) {
+                Secp256k1.setCommonCurveParameters(ephemeral_privkey);
+            }
+            ephemeral_privkey.setS(recvBuffer, OFFSET_BIP340_t, (short)32);
+            keyAgreement.init(ephemeral_privkey);
+            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form (65bytes)
+            // check evenness
+            if (tmpBuffer[64]%2 == 0){
+                // k = rand
+                Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_t, recvBuffer, OFFSET_BIP340_k, (short)32);
+            } else {
+                // k = n-rand
+                Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, OFFSET_BIP340_k, (short)32);
+                Biginteger.subtract(recvBuffer, OFFSET_BIP340_k, recvBuffer, OFFSET_BIP340_t, (short)32);
+            }
+            // e = int(hashBIP0340/challenge(bytes(R) || bytes(P) || m)) mod n
+            Util.arrayCopyNonAtomic(tmpBuffer, (short)1, buffer, (short)0, (short)32); // copy R coordx to buffer
+            schnorr_hash_tag(tags, (short)24, (short)17, buffer, (short)0, (short)96, recvBuffer, OFFSET_BIP340_e); 
+            // todo: e = e mod n
+        
+            //compute (k+e*d) mod n
+            //e*d => buffer2
+            short sizez = Biginteger.mult_rsa_trick(recvBuffer, OFFSET_BIP340_e, recvBuffer, OFFSET_BIP340_d, (short)32, Biginteger.buffer2, (short)0); 
+        
+            // (e*d +k) => buffer1
+            Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
+            Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_k, Biginteger.buffer1, (short)(Biginteger.buffer1.length-32), (short)32); // copy 32bytes k to 96bytes buffer 
+            boolean carry = Biginteger.add_carry(Biginteger.buffer1, (short)0, Biginteger.buffer2, (short)0, (short)Biginteger.buffer1.length);
+        
+            // (e*d + k) mod n => buffer1
+            sizez= Biginteger.mod(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
+        
+            // return bytes(R) || e*d + k mod n
+            // bytes(R) is already in buffer[0..<32]
+            Util.arrayCopyNonAtomic(Biginteger.buffer1, (short)64, buffer, (short)32, (short)32);
+            sizeout = (short)64;
+        } finally {
+            // buffer[0..96) held t (derived from d) and the hashed messages
+            clearSigningScratch(buffer, sizeout, (short)96);
         }
-        // t = bytes(d) ^ hashBIP0340/aux(a)
-        schnorr_hash_tag(tags, (short)0, (short)11, recvBuffer, OFFSET_BIP340_aux, (short)32, recvBuffer, OFFSET_BIP340_t);
-        short i;
-        for (i = (short)0; i < (short)32; i++){
-            recvBuffer[(short)(OFFSET_BIP340_t+i)] = (byte) (recvBuffer[(short)(OFFSET_BIP340_t+i)] ^ recvBuffer[(short)(OFFSET_BIP340_d+i)]);
-        }
-        // Let rand = hashBIP0340/nonce(t || bytes(P) || m)
-        short offset = 0;
-        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_t, buffer, offset, (short)32);
-        offset+=32;
-        offset+=32; // bytes(P) is alread there from previous steps
-        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_m, buffer, offset, (short)32);
-        schnorr_hash_tag(tags, (short)11, (short)13, buffer, (short)0, (short)96, recvBuffer, OFFSET_BIP340_t); // reuse t to store rand
-        // k', k
-        if (Biginteger.equalZero(recvBuffer, OFFSET_BIP340_t, (short)32)){
-            ISOException.throwIt(SW_SCHNORR_INVALID_NONCE);
-        }
-        // todo: rand = rand % n
-        // compute R = rand*G using the scratch ephemeral key (same pattern as in
-        // InitiateSecureChannel, ImportKey and Musig2GenerateNonce), so that the
-        // tweaked private key never has to be borrowed and restored.
-        if (ephemeral_privkey_transient) {
-            Secp256k1.setCommonCurveParameters(ephemeral_privkey);
-        }
-        ephemeral_privkey.setS(recvBuffer, OFFSET_BIP340_t, (short)32);
-        keyAgreement.init(ephemeral_privkey);
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form (65bytes)
-        // check evenness
-        if (tmpBuffer[64]%2 == 0){
-            // k = rand
-            Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_t, recvBuffer, OFFSET_BIP340_k, (short)32);
-        } else {
-            // k = n-rand
-            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, OFFSET_BIP340_k, (short)32);
-            Biginteger.subtract(recvBuffer, OFFSET_BIP340_k, recvBuffer, OFFSET_BIP340_t, (short)32);
-        }
-        // e = int(hashBIP0340/challenge(bytes(R) || bytes(P) || m)) mod n
-        Util.arrayCopyNonAtomic(tmpBuffer, (short)1, buffer, (short)0, (short)32); // copy R coordx to buffer
-        schnorr_hash_tag(tags, (short)24, (short)17, buffer, (short)0, (short)96, recvBuffer, OFFSET_BIP340_e); 
-        // todo: e = e mod n
-        
-        //compute (k+e*d) mod n
-        //e*d => buffer2
-        short sizez = Biginteger.mult_rsa_trick(recvBuffer, OFFSET_BIP340_e, recvBuffer, OFFSET_BIP340_d, (short)32, Biginteger.buffer2, (short)0); 
-        
-        // (e*d +k) => buffer1
-        Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
-        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_k, Biginteger.buffer1, (short)(Biginteger.buffer1.length-32), (short)32); // copy 32bytes k to 96bytes buffer 
-        boolean carry = Biginteger.add_carry(Biginteger.buffer1, (short)0, Biginteger.buffer2, (short)0, (short)Biginteger.buffer1.length);
-        
-        // (e*d + k) mod n => buffer1
-        sizez= Biginteger.mod(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
-        
-        // return bytes(R) || e*d + k mod n
-        // bytes(R) is already in buffer[0..<32]
-        Util.arrayCopyNonAtomic(Biginteger.buffer1, (short)64, buffer, (short)32, (short)32);
-       
-        // clean buffers
-        Util.arrayFillNonAtomic(buffer, (short)64, (short)32, (byte)0);
-        Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)256, (byte)0);
-        Util.arrayFillNonAtomic(tmpBuffer, (short)0, (short)65, (byte)0);
-        Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
-        Util.arrayFillNonAtomic(Biginteger.buffer2, (short)0, (short)Biginteger.buffer2.length, (byte)0);
-        
-        return (short)64;
+        return sizeout;
     }
     
-    // BIP0340 hashtag function for Schnorr signatures
-    // This function uses tmpBuffer for intermediate results, hence it should not be used for msg buffer.
+    // BIP0340 tagged hash: dst = SHA256(SHA256(tag) || SHA256(tag) || msg)
+    // The message is hashed in place (streamed), so its length is not bounded by a scratch buffer.
+    // This function uses tmpBuffer[0..32) for the tag hash, hence msg must not be stored there.
     public short schnorr_hash_tag(
             byte[] tag, short tag_offset, short tag_length,
-            byte[] msg, short msg_offset, short msg_length, 
+            byte[] msg, short msg_offset, short msg_length,
             byte[] dst, short dst_offset){
-        sha256.reset(); 
+        sha256.reset();
         sha256.doFinal(tag, tag_offset, tag_length, tmpBuffer, (short)0);
-        Util.arrayCopyNonAtomic(tmpBuffer, (short)0, tmpBuffer, (short)32, (short)32);
-        Util.arrayCopyNonAtomic(msg, msg_offset, tmpBuffer, (short)64, msg_length);
-        sha256.reset(); 
-        sha256.doFinal(tmpBuffer, (short)0, (short)(64+msg_length), dst, dst_offset);
+        sha256.update(tmpBuffer, (short)0, (short)32);
+        sha256.update(tmpBuffer, (short)0, (short)32);
+        sha256.doFinal(msg, msg_offset, msg_length, dst, dst_offset);
         return (short)32;
     }
 
@@ -3026,10 +3028,18 @@ public class Satochip extends javacard.framework.Applet {
             // check data length
             if (bytesLeft<(short)(66+2+20))
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-            // hmac of 64-bytes msg: ( 32bytes nonce coefficient b | 32bytes 0xEE-padding), 0xEE for MuSig2 partial sig
+            // check flag for 2fa_hmac_chalresp
+            short hmac_flags= Util.getShort(buffer, (short)(ISO7816.OFFSET_CDATA+66));
+            if (hmac_flags!=HMAC_CHALRESP_2FA)
+                ISOException.throwIt(SW_INCORRECT_ALG);
+            // hmac of 64-bytes msg: ( 32bytes nonce coefficient b | 32bytes 0xEE-padding)
             // b commits to the MuSig2 session (aggnonce, aggpk, message) and plays the role of the signed hash
             // the message is staged after the 144-byte encrypted secnonce in recvBuffer, to keep it intact
-            check2FAHash(buffer, OFFSET_BIP327_SIGN_B, (short)(ISO7816.OFFSET_CDATA+66), (byte)0xEE, (short)144);
+            Util.arrayCopyNonAtomic(buffer, (short)ISO7816.OFFSET_CDATA, recvBuffer, (short)144, (short)32);
+            Util.arrayFillNonAtomic(recvBuffer, (short)(144+32), (short)32, (byte)0xEE); // 0xEE for MuSig2 partial sig
+            HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)144, (short)64, recvBuffer, (short)(144+64));
+            if (!arrayCompareConstantTime(buffer, (short)(ISO7816.OFFSET_CDATA+66+2), recvBuffer, (short)(144+64), (short)20))
+                ISOException.throwIt(SW_SIGNATURE_INVALID);
         }
 
         // validate integrity then decrypt secnonce stored in recvBuffer during OP_INIT step
@@ -3040,101 +3050,111 @@ public class Satochip extends javacard.framework.Applet {
         if (!isOk)
             ISOException.throwIt(SW_BIP327_WRONG_SECNONCE);
 
-        // decrypt [ k1 | k2 | pk | id | padding ] using a key only known to the applet
-        // we reuse the cipher object of the secure channel, since it is used in a stateless way.
-        sc_aes128_cbc.init(bip327_encryptkey, Cipher.MODE_DECRYPT, recvBuffer, OFFSET_BIP327_IV, AES_IV_SIZE);
-        sc_aes128_cbc.doFinal(recvBuffer, OFFSET_BIP327_K1, (short)112, recvBuffer, OFFSET_BIP327_K1);
+        // from here on, the scratch buffers hold secrets (decrypted secnonce, sk, partial sums):
+        // they are erased in the finally block below, also on error. Before this point, the
+        // encrypted secnonce is kept in recvBuffer, so that OP_FINALIZE can be retried (e.g. after
+        // a failed 2FA attempt). buffer[0..32) is kept on success (the partial signature).
+        short sizeout = (short)0;
+        try {
+            // decrypt [ k1 | k2 | pk | id | padding ] using a key only known to the applet
+            // we reuse the cipher object of the secure channel, since it is used in a stateless way.
+            sc_aes128_cbc.init(bip327_encryptkey, Cipher.MODE_DECRYPT, recvBuffer, OFFSET_BIP327_IV, AES_IV_SIZE);
+            sc_aes128_cbc.doFinal(recvBuffer, OFFSET_BIP327_K1, (short)112, recvBuffer, OFFSET_BIP327_K1);
 
-        // check that the secnonce id is in list of valid ids (not used yet)
-        short id = Util.getShort(recvBuffer, OFFSET_BIP327_ID);
-        isOk = false;
-        for (short i=0; i<BIP327_MAX_NB_ID; i++){
-            if (bip327_valid_ids[i] == id) {
-                // invalidate id so it cannot be reused in the future
-                bip327_valid_ids[i] = 0x0000;
-                isOk = true;
-                break;
+            // check that the secnonce id is in list of valid ids (not used yet)
+            short id = Util.getShort(recvBuffer, OFFSET_BIP327_ID);
+            isOk = false;
+            for (short i=0; i<BIP327_MAX_NB_ID; i++){
+                if (bip327_valid_ids[i] == id) {
+                    // invalidate id so it cannot be reused in the future
+                    bip327_valid_ids[i] = 0x0000;
+                    isOk = true;
+                    break;
+                }
             }
+            if (!isOk)
+                ISOException.throwIt(SW_BIP327_INVALID_ID);
+
+            // append decrypted secnonce to buffer
+            Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_K1, buffer, OFFSET_BIP327_SIGN_K1_, (short)97);
+            // at this point, buffer = [cla, ins, p1, p2, lc] + [b(32b) | ea(32b) | r_has_even_y(1b) | ggacc_is_1(1b) | k1(32b) | k2(32b) | pk(33b)]
+
+            // P1 defines which privkey is used
+            ECPrivateKey privkey = getSigningKey(buffer[ISO7816.OFFSET_P1]);
+
+            // compute pubkey pk from sk
+            keyAgreement.init(privkey);
+            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65bytes)
+            setCompressionByte(recvBuffer, (short)0);
+
+            // check pubkey from secnonce match pubkey derived from sk
+            if (0 != Util.arrayCompare(buffer, OFFSET_BIP327_SIGN_PK, recvBuffer, (short)0, (short)33)) {
+                ISOException.throwIt(SW_BIP327_PUBKEY_MISMATCH); // buffers are erased in the finally block
+            }
+            // we don't need pk from recvBuffer anymore
+
+            // recover has_even_y(R)
+            boolean r_has_even_y = (buffer[OFFSET_BIP327_SIGN_R_EVENNESS] == 0x00); // even if bit is set to 0, odd otherwise
+
+            // compute k1, k2 from secnonce k1_, k2_
+            if (!r_has_even_y){
+                // R y-coordinate is odd
+                // k1 = n-k1_
+                Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, (short)0, (short)32);
+                Biginteger.subtract(recvBuffer, (short)0, buffer, OFFSET_BIP327_SIGN_K1_, (short)32);
+
+                // k2 = n-k2_
+                Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, (short)32, (short)32);
+                Biginteger.subtract(recvBuffer, (short)32, buffer, OFFSET_BIP327_SIGN_K2_, (short)32);
+
+                // overwrite k1_, k2_ with k1, k2
+                Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, OFFSET_BIP327_SIGN_K1_, (short)64);
+            }
+
+            // compute d = ggacc * d' mod n (negation of the private key according to g*gacc)
+            boolean ggacc_equal_1 = ( buffer[OFFSET_BIP327_SIGN_GGAC]== 0x01);
+            if (!ggacc_equal_1){
+                // g*gacc = -1 => we must negate the private key
+                // sk = n - sk
+                Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, (short)0, (short)32);
+                privkey.getS(recvBuffer, (short)32);
+                Biginteger.subtract(recvBuffer, (short)0, recvBuffer, (short)32, (short)32);
+                // the copy of sk at recvBuffer[32..64) is erased in the finally block
+            } else {
+                // copy privkey as is in recvBuffer
+                privkey.getS(recvBuffer, (short)0);
+            }
+
+            // compute (e*a)*d => buffer2
+            short size = Biginteger.mult_rsa_trick(buffer, OFFSET_BIP327_SIGN_EA, recvBuffer, (short)0, (short)32, Biginteger.buffer2, (short)0);
+
+            // (e*a)*d + k1 => buffer1
+            Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
+            Util.arrayCopyNonAtomic(buffer, OFFSET_BIP327_SIGN_K1_, Biginteger.buffer1, (short)(Biginteger.buffer1.length-32), (short)32); // copy 32bytes k to 96bytes buffer
+            boolean carry = Biginteger.add_carry(Biginteger.buffer1, (short)0, Biginteger.buffer2, (short)0, (short)Biginteger.buffer1.length);
+
+            // copy to recvBuffer as Biginteger.buffer1 can be overwritten by biginteger operations.
+            Util.arrayCopyNonAtomic(Biginteger.buffer1, (short)0, recvBuffer, (short)0, (short)Biginteger.buffer1.length);
+
+            // compute b*k2 => buffer 2
+            size = Biginteger.mult_rsa_trick(buffer, OFFSET_BIP327_SIGN_B , buffer, OFFSET_BIP327_SIGN_K2_, (short)32, Biginteger.buffer2, (short)0);
+
+            // compute [(e*a)*d + k1] + b*k2 => buffer1
+            carry = Biginteger.add_carry(recvBuffer, (short)0, Biginteger.buffer2, (short)0, (short)Biginteger.buffer2.length);
+
+            // compute (e*a)*d + k1 + b*k2  mod n=> buffer1
+            size= Biginteger.mod(recvBuffer, (short)0, (short)Biginteger.buffer2.length, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
+
+            // copy to output buffer
+            Util.arrayCopyNonAtomic(recvBuffer, (short)64, buffer, (short)(0), (short)32);
+            sizeout = (short)32;
+        } finally {
+            // buffer[0..168) held k1, k2 and pk (see OFFSET_BIP327_SIGN_*)
+            clearSigningScratch(buffer, sizeout, (short)(OFFSET_BIP327_SIGN_PK+33));
         }
-        if (!isOk)
-            ISOException.throwIt(SW_BIP327_INVALID_ID);
-
-        // append decrypted secnonce to buffer
-        Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP327_K1, buffer, OFFSET_BIP327_SIGN_K1_, (short)97);
-        // at this point, buffer = [cla, ins, p1, p2, lc] + [b(32b) | ea(32b) | r_has_even_y(1b) | ggacc_is_1(1b) | k1(32b) | k2(32b) | pk(33b)]
-
-        // P1 defines which privkey is used
-        ECPrivateKey privkey = getSigningKey(buffer[ISO7816.OFFSET_P1]);
-
-        // compute pubkey pk from sk
-        keyAgreement.init(privkey);
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form (65bytes)
-        setCompressionByte(recvBuffer, (short)0);
-
-        // check pubkey from secnonce match pubkey derived from sk
-        if (0 != Util.arrayCompare(buffer, OFFSET_BIP327_SIGN_PK, recvBuffer, (short)0, (short)33)) {
-            // todo clean up the buffers we used.
-            ISOException.throwIt(SW_BIP327_PUBKEY_MISMATCH);
-        }
-        // we don't need pk from recvBuffer anymore
-
-        // recover has_even_y(R)
-        boolean r_has_even_y = (buffer[OFFSET_BIP327_SIGN_R_EVENNESS] == 0x00); // even if bit is set to 0, odd otherwise
-
-        // compute k1, k2 from secnonce k1_, k2_
-        if (!r_has_even_y){
-            // R y-coordinate is odd
-            // k1 = n-k1_
-            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, (short)0, (short)32);
-            Biginteger.subtract(recvBuffer, (short)0, buffer, OFFSET_BIP327_SIGN_K1_, (short)32);
-
-            // k2 = n-k2_
-            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, (short)32, (short)32);
-            Biginteger.subtract(recvBuffer, (short)32, buffer, OFFSET_BIP327_SIGN_K2_, (short)32);
-
-            // overwrite k1_, k2_ with k1, k2
-            Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, OFFSET_BIP327_SIGN_K1_, (short)64);
-        }
-
-        // compute d = ggacc * d' mod n (negation of the private key according to g*gacc)
-        boolean ggacc_equal_1 = ( buffer[OFFSET_BIP327_SIGN_GGAC]== 0x01);
-        if (!ggacc_equal_1){
-            // g*gacc = -1 => we must negate the private key
-            // sk = n - sk
-            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, (short)0, (short)32);
-            privkey.getS(recvBuffer, (short)32);
-            Biginteger.subtract(recvBuffer, (short)0, recvBuffer, (short)32, (short)32);
-            // todo: erase old sk
-        } else {
-            // copy privkey as is in recvBuffer
-            privkey.getS(recvBuffer, (short)0);
-        }
-
-        // compute (e*a)*d => buffer2
-        short size = Biginteger.mult_rsa_trick(buffer, OFFSET_BIP327_SIGN_EA, recvBuffer, (short)0, (short)32, Biginteger.buffer2, (short)0);
-
-        // (e*a)*d + k1 => buffer1
-        Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
-        Util.arrayCopyNonAtomic(buffer, OFFSET_BIP327_SIGN_K1_, Biginteger.buffer1, (short)(Biginteger.buffer1.length-32), (short)32); // copy 32bytes k to 96bytes buffer
-        boolean carry = Biginteger.add_carry(Biginteger.buffer1, (short)0, Biginteger.buffer2, (short)0, (short)Biginteger.buffer1.length);
-
-        // copy to recvBuffer as Biginteger.buffer1 can be overwritten by biginteger operations.
-        Util.arrayCopyNonAtomic(Biginteger.buffer1, (short)0, recvBuffer, (short)0, (short)Biginteger.buffer1.length);
-
-        // compute b*k2 => buffer 2
-        size = Biginteger.mult_rsa_trick(buffer, OFFSET_BIP327_SIGN_B , buffer, OFFSET_BIP327_SIGN_K2_, (short)32, Biginteger.buffer2, (short)0);
-
-        // compute [(e*a)*d + k1] + b*k2 => buffer1
-        carry = Biginteger.add_carry(recvBuffer, (short)0, Biginteger.buffer2, (short)0, (short)Biginteger.buffer2.length);
-
-        // compute (e*a)*d + k1 + b*k2  mod n=> buffer1
-        size= Biginteger.mod(recvBuffer, (short)0, (short)Biginteger.buffer2.length, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
-
-        // copy to output buffer
-        Util.arrayCopyNonAtomic(recvBuffer, (short)64, buffer, (short)(0), (short)32);
 
         // todo: sign with authentikey?
-        return (short)32;
+        return sizeout;
     }
 
 
@@ -3206,7 +3226,9 @@ public class Satochip extends javacard.framework.Applet {
         short offset= ISO7816.OFFSET_CDATA;
         Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)64, (byte)0xAA);
         Util.arrayCopyNonAtomic(data2FA, OFFSET_2FA_ID, recvBuffer, (short)0, (short)20);
-        check2FAHmac((short)0, buffer, offset);
+        HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)0, (short)64, recvBuffer, (short)64);
+        if (!arrayCompareConstantTime(buffer, offset, recvBuffer, (short)64, (short)20))
+            ISOException.throwIt(SW_SIGNATURE_INVALID);
         
         // reset flag and data
         needs_2FA= false;   
@@ -3598,7 +3620,7 @@ public class Satochip extends javacard.framework.Applet {
                 short chunk_size= Util.getShort(buffer, buffer_offset);
                 buffer_offset+=2;
                 bytesLeft-=4;
-                if (bytesLeft < chunk_size)
+                if ((chunk_size < 0) || (bytesLeft < chunk_size))
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
                 if ((chunk_offset<0) || (chunk_offset>=authentikey_certificate_size))
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
@@ -3645,7 +3667,11 @@ public class Satochip extends javacard.framework.Applet {
                 
                 if ((chunk_offset<0) || (chunk_offset>=authentikey_certificate_size))
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-                if (((short)(chunk_offset+chunk_size))>authentikey_certificate_size)
+                // the chunk is returned through the secure channel, which bounds the response size
+                if ((chunk_size<0) || (chunk_size>SecureChannel.MAX_WRAP_SIZE))
+                    ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+                // written as a difference, so that chunk_offset+chunk_size cannot overflow
+                if (chunk_size > (short)(authentikey_certificate_size-chunk_offset))
                     ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
                 Util.arrayCopyNonAtomic(authentikey_certificate, chunk_offset, buffer, (short)0, chunk_size);
                 return chunk_size; 

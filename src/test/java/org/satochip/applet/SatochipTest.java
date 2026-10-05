@@ -126,6 +126,11 @@ public class SatochipTest {
     boot.cardSelect().checkOK();
 
     if (!isSetupDone(boot)) {
+      if (TARGET == TARGET_SIMULATOR) {
+        // personalization is only possible before setup: give the simulator a certificate, like
+        // a real card gets at the factory, so that the certificate export can be tested
+        importTestCertificate(boot);
+      }
       setupCard(boot);
     }
     boot.setPin0(PIN);
@@ -210,6 +215,27 @@ public class SatochipTest {
     FeaturePolicyCondition.availableCapabilities = caps;
   }
 
+  static final byte INS_IMPORT_PKI_CERTIFICATE = (byte) 0x92;
+  static final byte INS_EXPORT_PKI_CERTIFICATE = (byte) 0x93;
+  /** Test certificate for the simulator, larger than the largest chunk the secure channel can return. */
+  static final byte[] TEST_CERTIFICATE = new byte[300];
+  static {
+    for (int i = 0; i < TEST_CERTIFICATE.length; i++) TEST_CERTIFICATE[i] = (byte) (i * 7);
+  }
+
+  private static void importTestCertificate(TestSatochipCommandSet cmd) {
+    int size = TEST_CERTIFICATE.length;
+    assertEquals(SW_OK, cmd.sendRawSecure(INS_IMPORT_PKI_CERTIFICATE, 0x00, 0x01,
+        new byte[]{(byte) (size >> 8), (byte) size}).getSw());
+    for (int off = 0; off < size; off += 128) {
+      int len = Math.min(128, size - off);
+      byte[] data = concat(new byte[]{(byte) (off >> 8), (byte) off, (byte) (len >> 8), (byte) len},
+          Arrays.copyOfRange(TEST_CERTIFICATE, off, off + len));
+      assertEquals(SW_OK, cmd.sendRawSecure(INS_IMPORT_PKI_CERTIFICATE, 0x00, 0x02, data).getSw(),
+          "could not import the test certificate");
+    }
+  }
+
   private static boolean isSetupDone(TestSatochipCommandSet cmd) {
     byte[] status = cmd.cardGetStatus().getData();
     return status.length > 10 && status[10] == 0x01;
@@ -285,6 +311,82 @@ public class SatochipTest {
           cmdSet.sendRawPlain(ins, 0x00, 0x00, new byte[0]).getSw(),
           String.format("INS 0x%02X should require the secure channel", ins));
     }
+  }
+
+  @Test
+  @DisplayName("The decrypted inner command is re-validated (CLA, Lc)")
+  void secureChannelInnerApduTest() {
+    final int SW_CLA_NOT_SUPPORTED = 0x6E00;
+    final int SW_WRONG_LENGTH = 0x6700;
+    byte cla = TestSatochipCommandSet.CLA;
+
+    // well-formed: GET RANDOM, 8 bytes
+    assertEquals(SW_OK, cmdSet.sendRawSecureBytes(new byte[]{cla, INS_GET_RANDOM, 8, 0, 0}).getSw());
+    // a trailing Le byte is tolerated
+    assertEquals(SW_OK, cmdSet.sendRawSecureBytes(new byte[]{cla, INS_GET_RANDOM, 8, 0, 0, 0}).getSw());
+
+    // the inner CLA must be the applet's
+    assertEquals(SW_CLA_NOT_SUPPORTED,
+        cmdSet.sendRawSecureBytes(new byte[]{0x00, INS_GET_RANDOM, 8, 0, 0}).getSw());
+
+    // Lc must not point past the decrypted data. The card does not strip the PKCS#7 padding, so
+    // the bound is the padded size: a 32-byte plaintext is padded to 48 bytes.
+    byte[] inner = new byte[32];
+    inner[0] = cla; inner[1] = INS_GET_RANDOM; inner[2] = 8;
+    inner[4] = (byte) (48 - 5);
+    assertEquals(SW_OK, cmdSet.sendRawSecureBytes(inner).getSw(), "Lc up to the padded size is accepted");
+    inner[4] = (byte) (48 - 5 + 1);
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawSecureBytes(inner).getSw(), "one byte past is refused");
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawSecureBytes(
+        new byte[]{cla, INS_GET_RANDOM, 8, 0, (byte) 200, 1, 2, 3}).getSw());
+
+    // Lc >= 128 is read unsigned and accepted: a 130-byte CARD LABEL reaches the handler,
+    // which refuses the oversized label (no state change)
+    byte[] label = new byte[130];
+    label[0] = 100;
+    assertEquals(SW_INVALID_PARAMETER, cmdSet.sendRawSecure(INS_CARD_LABEL, 0x00, 0x00, label).getSw());
+  }
+
+  @Test
+  @DisplayName("Secure channel: wrapped GET STATUS is answered encrypted, IV counter and size checks")
+  void secureChannelHardeningTest() throws Exception {
+    final int SW_WRONG_LENGTH = 0x6700;
+    final int SW_SECURE_CHANNEL_UNINITIALIZED = 0x9C21;
+    final int SW_SECURE_CHANNEL_WRONG_IV = 0x9C22;
+    final byte INS_PROCESS_SECURE_CHANNEL = (byte) 0x82;
+
+    // a GET STATUS sent through the secure channel is answered through it (it used to come back
+    // in cleartext, which the client cannot decrypt)
+    byte[] plainStatus = cmdSet.cardGetStatus().getData();
+    APDUResponse wrapped = cmdSet.sendRawSecure(INS_GET_STATUS, 0x00, 0x00, new byte[0]);
+    assertEquals(SW_OK, wrapped.getSw());
+    assertArrayEquals(plainStatus, wrapped.getData());
+
+    // the counter may jump ahead, but no counter at or below the last one is accepted afterwards
+    cmdSet.setIvCounter(101);
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_GET_RANDOM, 8, 0x00, new byte[0]).getSw());
+    cmdSet.setIvCounter(51);
+    assertEquals(SW_SECURE_CHANNEL_WRONG_IV, cmdSet.sendRawSecure(INS_GET_RANDOM, 8, 0x00, new byte[0]).getSw());
+    cmdSet.setIvCounter(101);
+    assertEquals(SW_SECURE_CHANNEL_WRONG_IV, cmdSet.sendRawSecure(INS_GET_RANDOM, 8, 0x00, new byte[0]).getSw());
+
+    // the last counter value would wrap the card's counter to 0: the session is closed instead
+    resetSession();
+    cmdSet.setIvCounter(0xFFFFFFFF);
+    assertEquals(SW_SECURE_CHANNEL_WRONG_IV, cmdSet.sendRawSecure(INS_GET_RANDOM, 8, 0x00, new byte[0]).getSw());
+    cmdSet.setIvCounter(3);
+    assertEquals(SW_SECURE_CHANNEL_UNINITIALIZED,
+        cmdSet.sendRawSecure(INS_GET_RANDOM, 8, 0x00, new byte[0]).getSw(), "the session must be closed");
+
+    // the ciphertext must be a whole number of AES blocks (checked before the MAC)
+    resetSession();
+    byte[] iv = new byte[16];
+    byte[] mac = concat(new byte[]{0x00, 0x14}, new byte[20]);
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawPlain(INS_PROCESS_SECURE_CHANNEL, 0x00, 0x00,
+        concat(iv, new byte[]{0x00, 0x0F}, new byte[15], mac)).getSw());
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawPlain(INS_PROCESS_SECURE_CHANNEL, 0x00, 0x00,
+        concat(iv, new byte[]{(byte) 0xFF, (byte) 0xF0}, new byte[16], mac)).getSw());
+    resetSession();
   }
 
   @Test
@@ -465,6 +567,12 @@ public class SatochipTest {
     assertEquals(label.length, r.getData()[0]);
     assertArrayEquals(label, Arrays.copyOfRange(r.getData(), 1, 1 + label.length));
 
+    // a label size one byte larger than the label must be refused, not padded with a stale byte
+    byte[] truncated = concat(new byte[]{(byte) (label.length + 1)}, label);
+    assertEquals(SW_INVALID_PARAMETER, cmdSet.sendRawSecure(INS_CARD_LABEL, 0x00, 0x00, truncated).getSw());
+    r = cmdSet.sendRawSecure(INS_CARD_LABEL, 0x00, 0x01, new byte[0]);
+    assertEquals(label.length, r.getData()[0], "a refused label must leave the current one unchanged");
+
     assertEquals(SW_INCORRECT_P2, cmdSet.sendRawSecure(INS_CARD_LABEL, 0x00, 0x7F, new byte[0]).getSw());
   }
 
@@ -617,6 +725,31 @@ public class SatochipTest {
   }
 
   @Test
+  @DisplayName("Taproot tweak output key matches BIP341, with and without a merkle root")
+  @FeaturePolicies({"schnorr"})
+  void taprootTweakVectorTest() {
+    // runs without the RSA multiplication trick, so it also covers the BIP340 tagged hash on the simulator
+    ECNamedCurveParameterSpec spec = ECNamedCurveTable.getParameterSpec("secp256k1");
+    byte[] pub = cmdSet.cardBip32GetExtendedKeyRaw("m/86'/0'/0'/0/0");
+    byte[] px = Arrays.copyOfRange(pub, 1, 33);
+    ECPoint p = liftX(spec, new java.math.BigInteger(1, px));
+    byte[] merkleRoot = sha256("some merkle root".getBytes());
+
+    for (byte[] h : new byte[][]{new byte[0], merkleRoot}) {
+      // Q = lift_x(x(P)) + t*G, with t = tagged_hash("TapTweak", x(P) || h)
+      java.math.BigInteger t = new java.math.BigInteger(1, taggedHash("TapTweak", concat(px, h)));
+      byte[] expected = p.add(spec.getG().multiply(t)).normalize().getEncoded(false);
+
+      APDUResponse r = cmdSet.sendRawSecure(INS_TAPROOT_TWEAK_PRIVKEY, 0xFF, 0x00,
+          concat(new byte[]{(byte) h.length}, h));
+      assertEquals(SW_OK, r.getSw());
+      // Response: [pubkey_size(2b) | uncompressed pubkey(65b) | sig_size(2b) | authentikey sig]
+      assertArrayEquals(expected, Arrays.copyOfRange(r.getData(), 2, 67),
+          "tweaked output key, merkle root of " + h.length + " bytes");
+    }
+  }
+
+  @Test
   @DisplayName("SDK taproot tweak: BIP86 (tweak_size=0) and script-path both verify")
   @FeaturePolicies({"schnorr", "rsaMult"})
   void taprootTweakViaSdkTest() throws Exception {
@@ -760,7 +893,31 @@ public class SatochipTest {
         assertEquals(SW_OK, schnorr.getSw());
         assertTrue(verifyBip340(tweaked, hash, schnorr.getData()));
       }
+
+      // --- resetBIP32Seed: [pin | hmac(authentikey_x | 0xFF*32)], P1 = pin size
+      final byte INS_BIP32_RESET_SEED = (byte) 0x77;
+      final byte INS_EXPORT_PKI_PUBKEY = (byte) 0x98;
+      byte[] authentikey = cmdSet.sendRawSecure(INS_EXPORT_PKI_PUBKEY, 0x00, 0x00, new byte[0]).getData();
+      byte[] authentikeyX = Arrays.copyOfRange(authentikey, 1, 33);
+      byte[] baselinePub = cmdSet.cardBip32GetExtendedKeyRaw("m/44'/0'/0'/0/0");
+      assertEquals(SW_SIGNATURE_INVALID, cmdSet.sendRawSecure(INS_BIP32_RESET_SEED, PIN.length, 0x00,
+          concat(PIN, hmac2FA(authentikeyX, 0xAA))).getSw());
+      assertTrue(isSeeded(cmdSet), "a refused seed reset must leave the card seeded");
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_BIP32_RESET_SEED, PIN.length, 0x00,
+          concat(PIN, hmac2FA(authentikeyX, 0xFF))).getSw());
+      assertFalse(isSeeded(cmdSet));
+      // a seed reset logs the user out; the seed is re-imported (no 2FA needed for that)
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw());
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_BIP32_IMPORT_SEED, Vectors.BIP32_SEED.length, 0x00,
+          Vectors.BIP32_SEED).getSw());
+      assertArrayEquals(baselinePub, cmdSet.cardBip32GetExtendedKeyRaw("m/44'/0'/0'/0/0"));
     } finally {
+      // a failure may have left the session closed or the user logged out
+      resetSession();
+      if (!isSeeded(cmdSet)) {
+        assertEquals(SW_OK, cmdSet.sendRawSecure(INS_BIP32_IMPORT_SEED, Vectors.BIP32_SEED.length, 0x00,
+            Vectors.BIP32_SEED).getSw(), "could not restore the baseline seed");
+      }
       reset2FA();
     }
     // 2FA is gone: the plain form works again
@@ -964,6 +1121,45 @@ public class SatochipTest {
     byte[] mac = hmacSha1(macKey, sha256(concat(header, ct)));
     if (badMac) mac[0] ^= 0x01;
     return concat(header, iv, new byte[]{(byte) (ct.length >> 8), (byte) ct.length}, ct, new byte[]{20}, mac);
+  }
+
+  @Test
+  @DisplayName("Certificate export bounds the requested chunk")
+  void exportCertificateChunkTest() {
+    final int SW_WRONG_LENGTH = 0x6700;
+    APDUResponse init = cmdSet.sendRawSecure(INS_EXPORT_PKI_CERTIFICATE, 0x00, 0x01, new byte[0]);
+    assertEquals(SW_OK, init.getSw());
+    int size = ((init.getData()[0] & 0xff) << 8) | (init.getData()[1] & 0xff);
+    Assumptions.assumeTrue(size >= 224, "needs a certificate of at least 224 bytes, card has " + size);
+
+    // the largest chunk that fits a secure channel response is accepted...
+    APDUResponse chunk = cmdSet.sendRawSecure(INS_EXPORT_PKI_CERTIFICATE, 0x00, 0x02, chunkRequest(0, 223));
+    assertEquals(SW_OK, chunk.getSw());
+    assertEquals(223, chunk.getData().length);
+    // ... one more byte, a negative size, or an offset+size overflowing a short are refused
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawSecure(INS_EXPORT_PKI_CERTIFICATE, 0x00, 0x02, chunkRequest(0, 224)).getSw());
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawSecure(INS_EXPORT_PKI_CERTIFICATE, 0x00, 0x02, chunkRequest(0, 0xFFFF)).getSw());
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawSecure(INS_EXPORT_PKI_CERTIFICATE, 0x00, 0x02, chunkRequest(size - 1, 0x7FFF)).getSw());
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawSecure(INS_EXPORT_PKI_CERTIFICATE, 0x00, 0x02, chunkRequest(size - 10, 11)).getSw());
+
+    // the whole certificate still exports in 128-byte chunks, as the SDK does
+    byte[] cert = new byte[0];
+    for (int off = 0; off < size; off += 128) {
+      APDUResponse r = cmdSet.sendRawSecure(INS_EXPORT_PKI_CERTIFICATE, 0x00, 0x02,
+          chunkRequest(off, Math.min(128, size - off)));
+      assertEquals(SW_OK, r.getSw());
+      cert = concat(cert, r.getData());
+    }
+    assertEquals(size, cert.length);
+    assertArrayEquals(Arrays.copyOfRange(cert, 0, 223), chunk.getData());
+    if (TARGET == TARGET_SIMULATOR) {
+      assertArrayEquals(TEST_CERTIFICATE, cert);
+    }
+  }
+
+  /** Certificate export request: [chunk_offset(2b) | chunk_size(2b)]. */
+  private static byte[] chunkRequest(int offset, int size) {
+    return new byte[]{(byte) (offset >> 8), (byte) offset, (byte) (size >> 8), (byte) size};
   }
 
   /** Generates a MuSig2 nonce for the given path and returns the 144-byte encrypted secnonce. */

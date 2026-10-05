@@ -55,6 +55,40 @@ public class TestSatochipCommandSet extends SatochipCommandSet {
     return response;
   }
 
+  /**
+   * Like {@link #sendRawSecure}, but encrypts {@code innerApdu} verbatim instead of a well-formed
+   * APDU, so that a malformed inner command (wrong CLA, Lc not matching the data...) reaches the card.
+   */
+  public APDUResponse sendRawSecureBytes(byte[] innerApdu) {
+    SecureChannelSession sc = openedSecureChannel();
+    APDUCommand plain = new APDUCommand(CLA & 0xff, 0, 0, 0, new byte[0]) {
+      @Override
+      public byte[] serialize() {
+        return innerApdu.clone();
+      }
+    };
+    APDUResponse response = send(sc.encrypt_secure_channel(plain));
+    if (response.getSw() == 0x9000) {
+      return sc.decrypt_secure_channel(response);
+    }
+    return response;
+  }
+
+  /**
+   * Sets the IV counter of the SDK secure channel (opening one first if needed), so that the next
+   * secure command is sent with this counter. The SDK sends odd counters, starting at 1, +2 each time.
+   */
+  public void setIvCounter(int counter) {
+    SecureChannelSession sc = openedSecureChannel();
+    try {
+      Field f = SecureChannelSession.class.getDeclaredField("ivCounter");
+      f.setAccessible(true);
+      f.setInt(sc, counter);
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalStateException("Cannot reach the SDK IV counter", e);
+    }
+  }
+
   /** Drops the current secure channel so the next secure command negotiates a fresh one. */
   public void forgetSecureChannel() {
     try {
