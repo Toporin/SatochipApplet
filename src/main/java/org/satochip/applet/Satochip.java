@@ -1253,16 +1253,82 @@ public class Satochip extends javacard.framework.Applet {
 
     /**
      * Erases the secret intermediate values of a Schnorr or MuSig2 signature (private key,
-     * nonces, partial sums) from the shared scratch buffers: recvBuffer, tmpBuffer[0..65),
+     * nonces, partial sums) from the shared scratch buffers: recvBuffer, tmpBuffer,
      * Biginteger.buffer1/buffer2 and buffer[from..to) of the APDU buffer.
      * Called from a finally block, so that error exits are covered too.
      */
     private void clearSigningScratch(byte[] buffer, short from, short to){
         Util.arrayFillNonAtomic(buffer, from, (short)(to-from), (byte)0);
         Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)recvBuffer.length, (byte)0);
-        Util.arrayFillNonAtomic(tmpBuffer, (short)0, (short)65, (byte)0);
+        Util.arrayFillNonAtomic(tmpBuffer, (short)0, (short)tmpBuffer.length, (byte)0);
         Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
         Util.arrayFillNonAtomic(Biginteger.buffer2, (short)0, (short)Biginteger.buffer2.length, (byte)0);
+    }
+
+    /**
+     * Copies the 32-byte scalar src to dst, negated mod n (dst = n - src) if negate is set.
+     * negate must only depend on public data (e.g. the parity of a public point).
+     * src and dst must not overlap.
+     */
+    private static void copyScalar(boolean negate, byte[] src, short srcOff, byte[] dst, short dstOff){
+        if (negate){
+            Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, dst, dstOff, (short)32);
+            Biginteger.subtract(dst, dstOff, src, srcOff, (short)32);
+        } else {
+            Util.arrayCopyNonAtomic(src, srcOff, dst, dstOff, (short)32);
+        }
+    }
+
+    /*
+     * Blinded scalar arithmetic for the Schnorr and MuSig2 signatures.
+     *
+     * The signatures compute s = k + e*d mod n in software (Biginteger), which processes the
+     * private key d and the nonce k byte by byte, multiplies them with values chosen by the
+     * client (e, or e*a for MuSig2) on the RSA engine as a public-key operation, and reduces the
+     * result with a division whose running time depends on the data. That is the textbook setting
+     * for power analysis (DPA) and timing attacks. So each secret scalar x is replaced with
+     * x + r*n, for a fresh random r < 2^63, before entering the computation: the result mod n is
+     * unchanged, but all the intermediate values (and the quotient of the final division) are
+     * randomized. The operands then take 40 bytes (320 bits), and the products 72 bytes, which
+     * still fits the 96-byte buffers and the 768-bit RSA modulus of Biginteger.mult_rsa_trick().
+     *
+     * Scratch: tmpBuffer[0..208), plus Biginteger.buffer1/buffer2.
+     */
+    private static final short BLIND_OFFSET_PRODUCT = (short)0; // 96b
+    private static final short BLIND_OFFSET_X = (short)96;      // 40b, blinded secret operand
+    private static final short BLIND_OFFSET_A = (short)136;     // 40b, public operand
+    private static final short BLIND_OFFSET_R = (short)176;     // 32b, random multiplier r
+    private static final short BLIND_SIZE = (short)40;
+    private static final short BIGNUM_SIZE = (short)96;         // = Biginteger.BUFFER_SIZE
+
+    /** Writes x + r*n (40 bytes) at tmpBuffer[BLIND_OFFSET_X], for a fresh random r < 2^63. */
+    private void blindScalar(byte[] x, short xOff){
+        Util.arrayFillNonAtomic(tmpBuffer, BLIND_OFFSET_R, (short)24, (byte)0);
+        randomData.generateData(tmpBuffer, (short)(BLIND_OFFSET_R+24), (short)8);
+        tmpBuffer[(short)(BLIND_OFFSET_R+24)] &= (byte)0x7F;
+        // r*n < 2^319 fills the last 40 bytes of the 96-byte product, the others are zero
+        Biginteger.mult_rsa_trick(tmpBuffer, BLIND_OFFSET_R, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32, tmpBuffer, BLIND_OFFSET_PRODUCT);
+        Util.arrayFillNonAtomic(tmpBuffer, BLIND_OFFSET_X, (short)8, (byte)0);
+        Util.arrayCopyNonAtomic(x, xOff, tmpBuffer, (short)(BLIND_OFFSET_X+8), (short)32);
+        // x + r*n < 2^256 + 2^319 < 2^320: no carry
+        Biginteger.add_carry(tmpBuffer, BLIND_OFFSET_X, tmpBuffer, (short)(BLIND_OFFSET_PRODUCT+BIGNUM_SIZE-BLIND_SIZE), BLIND_SIZE);
+    }
+
+    /** acc += x + r*n, where acc is a 96-byte accumulator and x a 32-byte secret scalar. */
+    private void blindedAdd(byte[] acc, short accOff, byte[] x, short xOff){
+        blindScalar(x, xOff);
+        Util.arrayFillNonAtomic(tmpBuffer, BLIND_OFFSET_PRODUCT, (short)(BIGNUM_SIZE-BLIND_SIZE), (byte)0);
+        Util.arrayCopyNonAtomic(tmpBuffer, BLIND_OFFSET_X, tmpBuffer, (short)(BLIND_OFFSET_PRODUCT+BIGNUM_SIZE-BLIND_SIZE), BLIND_SIZE);
+        Biginteger.add_carry(acc, accOff, tmpBuffer, BLIND_OFFSET_PRODUCT, BIGNUM_SIZE);
+    }
+
+    /** acc += a * (x + r*n), where a is a 32-byte public value and x a 32-byte secret scalar. */
+    private void blindedMulAdd(byte[] acc, short accOff, byte[] a, short aOff, byte[] x, short xOff){
+        blindScalar(x, xOff);
+        Util.arrayFillNonAtomic(tmpBuffer, BLIND_OFFSET_A, (short)8, (byte)0);
+        Util.arrayCopyNonAtomic(a, aOff, tmpBuffer, (short)(BLIND_OFFSET_A+8), (short)32);
+        Biginteger.mult_rsa_trick(tmpBuffer, BLIND_OFFSET_A, tmpBuffer, BLIND_OFFSET_X, BLIND_SIZE, tmpBuffer, BLIND_OFFSET_PRODUCT);
+        Biginteger.add_carry(acc, accOff, tmpBuffer, BLIND_OFFSET_PRODUCT, BIGNUM_SIZE);
     }
 
     /** Checks if PIN policies are satisfied for a PIN code */
@@ -2668,19 +2734,10 @@ public class Satochip extends javacard.framework.Applet {
             keyAgreement.init(taproot_tweakedkey);
             keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)31); //pubkey in uncompressed form (65bytes) 
             // we leave 32 bytes before coordx for reuse in next steps
-            // Keep a copy of the tweaked secret: taproot_tweakedkey is borrowed
-            // below as scratch storage to compute R = rand*G, which overwrites it,
-            // and it must be restored so that it survives this signature.
+            // d = sk if has_even_y(P), else n-sk
+            boolean p_has_odd_y = ((buffer[(short)(31+64)] & 0x01) != 0);
             taproot_tweakedkey.getS(recvBuffer, OFFSET_BIP340_sk);
-            // check evenness
-            if (buffer[31+64]%2 == 0){
-                // d= sk
-                Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_sk, recvBuffer, OFFSET_BIP340_d, (short)32);
-            } else {
-                // d= n-sk
-                Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, OFFSET_BIP340_d, (short)32);
-                Biginteger.subtract(recvBuffer, OFFSET_BIP340_d, recvBuffer, OFFSET_BIP340_sk, (short)32);
-            }
+            copyScalar(p_has_odd_y, recvBuffer, OFFSET_BIP340_sk, recvBuffer, OFFSET_BIP340_d);
             // t = bytes(d) ^ hashBIP0340/aux(a)
             schnorr_hash_tag(tags, (short)0, (short)11, recvBuffer, OFFSET_BIP340_aux, (short)32, recvBuffer, OFFSET_BIP340_t);
             short i;
@@ -2708,35 +2765,32 @@ public class Satochip extends javacard.framework.Applet {
             ephemeral_privkey.setS(recvBuffer, OFFSET_BIP340_t, (short)32);
             keyAgreement.init(ephemeral_privkey);
             keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, tmpBuffer, (short)0); //pubkey in uncompressed form (65bytes)
-            // check evenness
-            if (tmpBuffer[64]%2 == 0){
-                // k = rand
-                Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_t, recvBuffer, OFFSET_BIP340_k, (short)32);
-            } else {
-                // k = n-rand
-                Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, OFFSET_BIP340_k, (short)32);
-                Biginteger.subtract(recvBuffer, OFFSET_BIP340_k, recvBuffer, OFFSET_BIP340_t, (short)32);
-            }
-            // e = int(hashBIP0340/challenge(bytes(R) || bytes(P) || m)) mod n
+            // k = rand if has_even_y(R), else n-rand
+            boolean r_has_odd_y = ((tmpBuffer[64] & 0x01) != 0);
+            // e = int(hashBIP0340/challenge(bytes(R) || bytes(P) || m))
             Util.arrayCopyNonAtomic(tmpBuffer, (short)1, buffer, (short)0, (short)32); // copy R coordx to buffer
             schnorr_hash_tag(tags, (short)24, (short)17, buffer, (short)0, (short)96, recvBuffer, OFFSET_BIP340_e); 
-            // todo: e = e mod n
-        
-            //compute (k+e*d) mod n
-            //e*d => buffer2
-            short sizez = Biginteger.mult_rsa_trick(recvBuffer, OFFSET_BIP340_e, recvBuffer, OFFSET_BIP340_d, (short)32, Biginteger.buffer2, (short)0); 
-        
-            // (e*d +k) => buffer1
-            Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
-            Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_k, Biginteger.buffer1, (short)(Biginteger.buffer1.length-32), (short)32); // copy 32bytes k to 96bytes buffer 
-            boolean carry = Biginteger.add_carry(Biginteger.buffer1, (short)0, Biginteger.buffer2, (short)0, (short)Biginteger.buffer1.length);
-        
-            // (e*d + k) mod n => buffer1
-            sizez= Biginteger.mod(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
-        
-            // return bytes(R) || e*d + k mod n
-            // bytes(R) is already in buffer[0..<32]
-            Util.arrayCopyNonAtomic(Biginteger.buffer1, (short)64, buffer, (short)32, (short)32);
+            // e is not reduced mod n: the final reduction of k + e*d covers it
+
+            // s = (k + e*d) mod n, computed twice with independent blinding (see blindScalar()).
+            // Both rounds derive d and k again from the key object and from rand, so that a fault
+            // injected in either computation (which would allow to recover d from s, R and P) is
+            // detected by comparing the results. The accumulator overwrites sk, m and aux.
+            for (short round = (short)0; round < (short)2; round++){
+                taproot_tweakedkey.getS(recvBuffer, OFFSET_BIP340_sk);
+                copyScalar(p_has_odd_y, recvBuffer, OFFSET_BIP340_sk, recvBuffer, OFFSET_BIP340_d);
+                copyScalar(r_has_odd_y, recvBuffer, OFFSET_BIP340_t, recvBuffer, OFFSET_BIP340_k);
+                Util.arrayFillNonAtomic(recvBuffer, (short)0, BIGNUM_SIZE, (byte)0);
+                blindedAdd(recvBuffer, (short)0, recvBuffer, OFFSET_BIP340_k);
+                blindedMulAdd(recvBuffer, (short)0, recvBuffer, OFFSET_BIP340_e, recvBuffer, OFFSET_BIP340_d);
+                Biginteger.mod(recvBuffer, (short)0, BIGNUM_SIZE, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
+                if (round == (short)0){
+                    // return bytes(R) || s, bytes(R) is already in buffer[0..32)
+                    Util.arrayCopyNonAtomic(recvBuffer, (short)(BIGNUM_SIZE-32), buffer, (short)32, (short)32);
+                }
+            }
+            if (!arrayCompareConstantTime(recvBuffer, (short)(BIGNUM_SIZE-32), buffer, (short)32, (short)32))
+                ISOException.throwIt(SW_INTERNAL_ERROR);
             sizeout = (short)64;
         } finally {
             // buffer[0..96) held t (derived from d) and the hashed messages
@@ -3111,60 +3165,40 @@ public class Satochip extends javacard.framework.Applet {
             }
             // we don't need pk from recvBuffer anymore
 
-            // recover has_even_y(R)
-            boolean r_has_even_y = (buffer[OFFSET_BIP327_SIGN_R_EVENNESS] == 0x00); // even if bit is set to 0, odd otherwise
+            // k1, k2 = k1_, k2_ if has_even_y(R), else n-k1_, n-k2_
+            boolean r_has_odd_y = (buffer[OFFSET_BIP327_SIGN_R_EVENNESS] != 0x00); // even if set to 0, odd otherwise
+            // d = g*gacc*d' mod n: the private key is negated if g*gacc = -1
+            boolean negate_sk = (buffer[OFFSET_BIP327_SIGN_GGAC] != 0x01);
 
-            // compute k1, k2 from secnonce k1_, k2_
-            if (!r_has_even_y){
-                // R y-coordinate is odd
-                // k1 = n-k1_
-                Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, (short)0, (short)32);
-                Biginteger.subtract(recvBuffer, (short)0, buffer, OFFSET_BIP327_SIGN_K1_, (short)32);
-
-                // k2 = n-k2_
-                Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, (short)32, (short)32);
-                Biginteger.subtract(recvBuffer, (short)32, buffer, OFFSET_BIP327_SIGN_K2_, (short)32);
-
-                // overwrite k1_, k2_ with k1, k2
-                Util.arrayCopyNonAtomic(recvBuffer, (short)0, buffer, OFFSET_BIP327_SIGN_K1_, (short)64);
+            // psig = (k1 + b*k2 + (e*a)*d) mod n, computed twice with independent blinding (see
+            // blindScalar()). Both rounds derive d, k1 and k2 again from the key object and the
+            // secnonce, so that a fault injected in either computation is detected by comparing
+            // the results. recvBuffer = [ sk | d | k1 | k2 | psig of round 0 | accumulator(96b) ]
+            final short OFFSET_SK = (short)0;
+            final short OFFSET_D = (short)32;
+            final short OFFSET_K1 = (short)64;
+            final short OFFSET_K2 = (short)96;
+            final short OFFSET_PSIG = (short)128;
+            final short OFFSET_ACC = (short)160;
+            for (short round = (short)0; round < (short)2; round++){
+                privkey.getS(recvBuffer, OFFSET_SK);
+                copyScalar(negate_sk, recvBuffer, OFFSET_SK, recvBuffer, OFFSET_D);
+                copyScalar(r_has_odd_y, buffer, OFFSET_BIP327_SIGN_K1_, recvBuffer, OFFSET_K1);
+                copyScalar(r_has_odd_y, buffer, OFFSET_BIP327_SIGN_K2_, recvBuffer, OFFSET_K2);
+                Util.arrayFillNonAtomic(recvBuffer, OFFSET_ACC, BIGNUM_SIZE, (byte)0);
+                blindedAdd(recvBuffer, OFFSET_ACC, recvBuffer, OFFSET_K1);
+                blindedMulAdd(recvBuffer, OFFSET_ACC, buffer, OFFSET_BIP327_SIGN_EA, recvBuffer, OFFSET_D);
+                blindedMulAdd(recvBuffer, OFFSET_ACC, buffer, OFFSET_BIP327_SIGN_B, recvBuffer, OFFSET_K2);
+                Biginteger.mod(recvBuffer, OFFSET_ACC, BIGNUM_SIZE, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
+                if (round == (short)0){
+                    Util.arrayCopyNonAtomic(recvBuffer, (short)(OFFSET_ACC+BIGNUM_SIZE-32), recvBuffer, OFFSET_PSIG, (short)32);
+                }
             }
+            if (!arrayCompareConstantTime(recvBuffer, (short)(OFFSET_ACC+BIGNUM_SIZE-32), recvBuffer, OFFSET_PSIG, (short)32))
+                ISOException.throwIt(SW_INTERNAL_ERROR);
 
-            // compute d = ggacc * d' mod n (negation of the private key according to g*gacc)
-            boolean ggacc_equal_1 = ( buffer[OFFSET_BIP327_SIGN_GGAC]== 0x01);
-            if (!ggacc_equal_1){
-                // g*gacc = -1 => we must negate the private key
-                // sk = n - sk
-                Util.arrayCopyNonAtomic(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, recvBuffer, (short)0, (short)32);
-                privkey.getS(recvBuffer, (short)32);
-                Biginteger.subtract(recvBuffer, (short)0, recvBuffer, (short)32, (short)32);
-                // the copy of sk at recvBuffer[32..64) is erased in the finally block
-            } else {
-                // copy privkey as is in recvBuffer
-                privkey.getS(recvBuffer, (short)0);
-            }
-
-            // compute (e*a)*d => buffer2
-            short size = Biginteger.mult_rsa_trick(buffer, OFFSET_BIP327_SIGN_EA, recvBuffer, (short)0, (short)32, Biginteger.buffer2, (short)0);
-
-            // (e*a)*d + k1 => buffer1
-            Util.arrayFillNonAtomic(Biginteger.buffer1, (short)0, (short)Biginteger.buffer1.length, (byte)0);
-            Util.arrayCopyNonAtomic(buffer, OFFSET_BIP327_SIGN_K1_, Biginteger.buffer1, (short)(Biginteger.buffer1.length-32), (short)32); // copy 32bytes k to 96bytes buffer
-            boolean carry = Biginteger.add_carry(Biginteger.buffer1, (short)0, Biginteger.buffer2, (short)0, (short)Biginteger.buffer1.length);
-
-            // copy to recvBuffer as Biginteger.buffer1 can be overwritten by biginteger operations.
-            Util.arrayCopyNonAtomic(Biginteger.buffer1, (short)0, recvBuffer, (short)0, (short)Biginteger.buffer1.length);
-
-            // compute b*k2 => buffer 2
-            size = Biginteger.mult_rsa_trick(buffer, OFFSET_BIP327_SIGN_B , buffer, OFFSET_BIP327_SIGN_K2_, (short)32, Biginteger.buffer2, (short)0);
-
-            // compute [(e*a)*d + k1] + b*k2 => buffer1
-            carry = Biginteger.add_carry(recvBuffer, (short)0, Biginteger.buffer2, (short)0, (short)Biginteger.buffer2.length);
-
-            // compute (e*a)*d + k1 + b*k2  mod n=> buffer1
-            size= Biginteger.mod(recvBuffer, (short)0, (short)Biginteger.buffer2.length, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
-
-            // copy to output buffer
-            Util.arrayCopyNonAtomic(recvBuffer, (short)64, buffer, (short)(0), (short)32);
+            // copy to output buffer (overwrites b, which is not needed anymore)
+            Util.arrayCopyNonAtomic(recvBuffer, OFFSET_PSIG, buffer, (short)0, (short)32);
             sizeout = (short)32;
         } finally {
             // buffer[0..168) held k1, k2 and pk (see OFFSET_BIP327_SIGN_*)

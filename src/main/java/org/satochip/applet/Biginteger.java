@@ -165,7 +165,8 @@ public class Biginteger {
         for(; i >= offsetx && j >= offsety; i--, j--) {
             subtraction_result = (short) ((x[i] & digit_mask) - (y[j] & digit_mask) - carry);
             x[i] = (byte)(subtraction_result & digit_mask);
-            carry = (short)(subtraction_result < 0 ? 1 : 0);
+            // borrow = sign bit of the result, without a branch (subtract() is used on secrets)
+            carry = (short)((subtraction_result >> 8) & 1);
         }
 
         return carry > 0;

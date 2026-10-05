@@ -775,6 +775,27 @@ public class SatochipTest {
   }
 
   @Test
+  @DisplayName("Blinded Schnorr signatures verify for many keys and messages")
+  @FeaturePolicies({"schnorr", "rsaMult"})
+  void signSchnorrHashManyTest() {
+    // s = k + e*d is computed with randomly blinded scalars, twice: exercise many keys (both
+    // parities of P, hence both signs of d) and messages (random nonces, both parities of R)
+    for (int i = 0; i < 8; i++) {
+      cmdSet.cardBip32GetExtendedKeyRaw("m/86'/0'/0'/0/" + i);
+      APDUResponse tweak = cmdSet.sendRawSecure(INS_TAPROOT_TWEAK_PRIVKEY, 0xFF, 0x00, new byte[]{0x00});
+      assertEquals(SW_OK, tweak.getSw());
+      byte[] tweakedPubkey = Arrays.copyOfRange(tweak.getData(), 2, 2 + 65);
+      for (int j = 0; j < 3; j++) {
+        byte[] hash = sha256(("satochip schnorr test " + i + " " + j).getBytes());
+        APDUResponse sig = cmdSet.sendRawSecure(INS_SIGN_SCHNORR_HASH, 0x00, 0x00, hash);
+        assertEquals(SW_OK, sig.getSw());
+        assertTrue(verifyBip340(tweakedPubkey, hash, sig.getData()),
+            "Schnorr signature " + j + " for key " + i + " does not verify");
+      }
+    }
+  }
+
+  @Test
   @DisplayName("Taproot tweak output key matches BIP341, with and without a merkle root")
   @FeaturePolicies({"schnorr"})
   void taprootTweakVectorTest() {

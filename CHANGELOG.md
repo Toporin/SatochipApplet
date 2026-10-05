@@ -94,6 +94,12 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
   * The data is now erased in an order that is safe against card tearing: secrets first (seed, BIP32 and taproot keys, keyslots), then the 2FA, and the setup flag last. The 2FA used to be cleared first, so pulling the card right after that step left a seeded card with 2FA disabled, which defeats the purpose of 2FA for an attacker who knows the PIN.
   * Removed a redundant `taproot_tweakedkey.clearKey()` after resetSeed(), which also erased the curve parameters that resetSeed() had just restored.
 
+* Harden SignSchnorrHash() and Musig2SignHash() against side-channel and fault attacks:
+  * The signatures compute s = k + e*d mod n in software (Biginteger): the private key and the nonces are processed byte by byte, multiplied with client-chosen values (e, and e*a for MuSig2, which the client provides directly) on the RSA engine as a public-key operation, and reduced with a division whose running time depends on the data. Each secret scalar x (private key, nonces) is now replaced with x + r*n for a fresh random r < 2^63 before entering the computation, which leaves the result mod n unchanged but randomizes all intermediate values, defeating power analysis (DPA) correlation and the timing of the final division.
+  * The result is computed twice, with independent blinding, deriving the private key and the nonces again from the key object and the secnonce in each round, and the two results are compared before anything is returned (SW_INTERNAL_ERROR on mismatch). A fault injected while d is processed would otherwise produce a signature that leaks d.
+  * Biginteger.subtract() now computes the borrow without a branch, since it is used on secret values.
+  * Cost: 6 multiplications on the RSA engine per Schnorr signature (was 1), 10 per MuSig2 partial signature (was 2).
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
