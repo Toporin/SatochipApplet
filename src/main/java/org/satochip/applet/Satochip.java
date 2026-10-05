@@ -1232,12 +1232,17 @@ public class Satochip extends javacard.framework.Applet {
      *
      * @param key_nb the keyslot number (0x00-0x0F), or 0xFF for the BIP32 extended key
      * @throws ISOException SW_INCORRECT_P1 if key_nb is out of range or the keyslot is empty,
-     *         SW_BIP32_UNINITIALIZED_SEED if 0xFF is selected but no seed is imported
+     *         SW_BIP32_UNINITIALIZED_SEED if 0xFF is selected but no seed is imported,
+     *         SW_INCORRECT_INITIALIZATION if 0xFF is selected but no key has been derived yet
      */
     private ECPrivateKey getSigningKey(byte key_nb) {
         if (key_nb==(byte)0xFF){
             if (!bip32_seeded)
                 ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
+            // getBIP32ExtendedKey() must be called first (the key is cleared on seed reset),
+            // otherwise using the key would throw an uncaught CryptoException (0x6F00)
+            if (!bip32_extendedkey.isInitialized())
+                ISOException.throwIt(SW_INCORRECT_INITIALIZATION);
             return bip32_extendedkey;
         }
         return getInitializedECKey(key_nb);
@@ -2630,7 +2635,11 @@ public class Satochip extends javacard.framework.Applet {
                 if(!Biginteger.lessThan(recvBuffer, seckeyOffset, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32)){
                     Biginteger.subtract(recvBuffer, seckeyOffset, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32);
                 }
-            } 
+            }
+            // fails if seckey + t = 0 mod n (low probability), which setS() would refuse
+            if (Biginteger.equalZero(recvBuffer, seckeyOffset, (short)32)){
+                ISOException.throwIt(SW_TAPROOT_TWEAK_ERROR);
+            }
 
         } else if (p2==TAPROOT_BYPASS_TWEAK) {
             // check that feature is enabled
@@ -2751,11 +2760,12 @@ public class Satochip extends javacard.framework.Applet {
             offset+=32; // bytes(P) is alread there from previous steps
             Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_m, buffer, offset, (short)32);
             schnorr_hash_tag(tags, (short)11, (short)13, buffer, (short)0, (short)96, recvBuffer, OFFSET_BIP340_t); // reuse t to store rand
-            // k', k
-            if (Biginteger.equalZero(recvBuffer, OFFSET_BIP340_t, (short)32)){
+            // k' = rand mod n must not be 0. BIP340 reduces rand mod n, but rand >= n has a
+            // negligible probability (< 2^-127): refuse it, setS() would throw an uncaught exception
+            if (Biginteger.equalZero(recvBuffer, OFFSET_BIP340_t, (short)32)
+                    || !Biginteger.lessThan(recvBuffer, OFFSET_BIP340_t, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32)){
                 ISOException.throwIt(SW_SCHNORR_INVALID_NONCE);
             }
-            // todo: rand = rand % n
             // compute R = rand*G using the scratch ephemeral key (same pattern as in
             // InitiateSecureChannel, ImportKey and Musig2GenerateNonce), so that the
             // tweaked private key never has to be borrowed and restored.
@@ -3353,11 +3363,19 @@ public class Satochip extends javacard.framework.Applet {
                     ISOException.throwIt(SW_INVALID_PARAMETER); 
                 
                 short sizeout=0;
-                if (ciph_op == OP_PROCESS){
-                    sizeout=aes128_cbc.update(buffer, (short) (dataOffset + 2), size, buffer, (short) 2);
-                }
-                else {// ciph_op == OP_FINALIZE
-                    sizeout=aes128_cbc.doFinal(buffer, (short) (dataOffset + 2), size, buffer, (short) 2);
+                try {
+                    if (ciph_op == OP_PROCESS){
+                        sizeout=aes128_cbc.update(buffer, (short) (dataOffset + 2), size, buffer, (short) 2);
+                    }
+                    else {// ciph_op == OP_FINALIZE
+                        sizeout=aes128_cbc.doFinal(buffer, (short) (dataOffset + 2), size, buffer, (short) 2);
+                    }
+                } catch (CryptoException e) {
+                    // no OP_INIT in this session (UNINITIALIZED_KEY), or data that is not a whole
+                    // number of blocks at OP_FINALIZE (ILLEGAL_USE): report it instead of 0x6F00
+                    if (e.getReason() == CryptoException.UNINITIALIZED_KEY)
+                        ISOException.throwIt(SW_INCORRECT_INITIALIZATION);
+                    ISOException.throwIt(SW_INVALID_PARAMETER);
                 }
                 // Also copies the Short size information
                 Util.setShort(buffer,(short)0,  sizeout);

@@ -438,6 +438,9 @@ public class SatochipTest {
         assertEquals(SW_OK, cmdSet.cardBip32ImportSeed(Vectors.BIP32_SEED).getSw());
       }
     }
+    // the seed is back, but no key has been derived from it yet: signing with the last derived
+    // key (P1=0xFF) is refused instead of failing with an uncaught exception (0x6F00)
+    assertEquals(0x9C13, cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, 0xFF, 0x00, new byte[32]).getSw());
   }
 
   @Test

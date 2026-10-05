@@ -102,6 +102,11 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * importTrustedPubkey() now refuses the pubkey (SW_UNSUPPORTED_FEATURE) on cards without the RSA engine used by Biginteger.mult_rsa_trick(). On those cards Secp256k1.isOnCurve() cannot check the curve equation and only checks that the coordinates are in range. The trusted pubkey is used in a static ECDH with the authentikey, and importEncryptedSecret() reveals whether a MAC computed with the shared key verifies, so an off-curve point would let an attacker recover the authentikey modulo small orders, one query at a time (invalid-curve attack). The secure channel keeps accepting such points: its card key is ephemeral and used only once.
 
+* Report errors instead of uncaught CryptoExceptions (0x6F00):
+  * Signing with the last derived BIP32 key (P1=0xFF) before any getBIP32ExtendedKey() since the seed was imported now returns SW_INCORRECT_INITIALIZATION (SignTransactionHash, TaprootTweakPrivateKey, Musig2GenerateNonce, Musig2SignHash).
+  * CryptTransaction2FA(): OP_PROCESS/OP_FINALIZE without an OP_INIT now return SW_INCORRECT_INITIALIZATION, and an OP_FINALIZE whose data is not a whole number of AES blocks returns SW_INVALID_PARAMETER.
+  * TaprootTweakPrivateKey() returns SW_TAPROOT_TWEAK_ERROR if the tweaked key is 0, and SignSchnorrHash() returns SW_SCHNORR_INVALID_NONCE if the nonce hash is not smaller than n (both have a negligible probability).
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
