@@ -404,6 +404,43 @@ public class SatochipTest {
   }
 
   @Test
+  @DisplayName("Factory reset requires the PIN (or a blocked PUK), then erases everything")
+  void resetToFactoryTest() throws Exception {
+    final byte INS_RESET_TO_FACTORY = (byte) 0xFD;
+    final int RESET_P1 = 0xAA, RESET_P2 = 0x55;
+
+    // without a validated PIN (and with the PUK not blocked) the reset is refused, and the card
+    // is left untouched
+    cmdSet.forgetSecureChannel();
+    assertEquals(SW_UNAUTHORIZED,
+        cmdSet.sendRawSecure(INS_RESET_TO_FACTORY, RESET_P1, RESET_P2, new byte[0]).getSw());
+    assertEquals(0x01, cmdSet.cardGetStatus().getData()[9], "the card must still be seeded");
+    assertEquals(0x01, cmdSet.cardGetStatus().getData()[10], "the card must still be set up");
+
+    // with the PIN, the magic P1/P2 are still required
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw());
+    assertEquals(0x6A86, cmdSet.sendRawSecure(INS_RESET_TO_FACTORY, RESET_P1, 0x00, new byte[0]).getSw());
+
+    try {
+      assertEquals(SW_OK,
+          cmdSet.sendRawSecure(INS_RESET_TO_FACTORY, RESET_P1, RESET_P2, new byte[0]).getSw());
+      byte[] status = cmdSet.cardGetStatus().getData();
+      assertEquals(0x00, status[8], "2FA must be disabled");
+      assertEquals(0x00, status[9], "the seed must be erased");
+      assertEquals(0x00, status[10], "the card must be back to the not-set-up state");
+    } finally {
+      // restore the baseline: set up again with the same PIN/PUK, and re-import the seed
+      if (cmdSet.cardGetStatus().getData()[10] == 0x00) {
+        setupCard(cmdSet);
+      }
+      resetSession();
+      if (cmdSet.cardGetStatus().getData()[9] == 0x00) {
+        assertEquals(SW_OK, cmdSet.cardBip32ImportSeed(Vectors.BIP32_SEED).getSw());
+      }
+    }
+  }
+
+  @Test
   @DisplayName("Opening a new secure channel logs the PIN out")
   void secureChannelReinitLogsOutTest() {
     // the PIN was verified in init(); a second channel opened in the same card session (e.g. by

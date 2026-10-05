@@ -1081,34 +1081,49 @@ public class Satochip extends javacard.framework.Applet {
      * All PINs and PUKs are reset and unblocked (try counters restored), so that
      * the card can be set up and used again afterwards.
      *
+     * The reset requires either a validated PIN, or a blocked PUK (the PIN and PUK are both
+     * lost and the wallet is unusable anyway). Anyone holding the card can block the PIN and the
+     * PUK, so this does not stop a thief from wiping the card, but it makes the reset no easier
+     * than bricking the card, instead of a single unauthenticated command (e.g. over NFC).
+     *
+     * The data is erased in an order that is safe against card tearing: the secrets first, then
+     * the 2FA, and the setup flag last. Each step only removes capabilities, so a reset that is
+     * interrupted halfway never leaves a card whose secrets are reachable with less protection
+     * than before (e.g. a seeded card with 2FA disabled, or a card that can be set up again with
+     * a new PIN while the keyslots still hold keys).
+     *
      * Note: the personalization PKI data deliberately survives a factory reset:
      * the authentikey keypair (device identity), the authentikey certificate and
      * the personalizationDone flag are kept unchanged, so that the device can still
      * prove its authenticity (genuine personalization) afterwards. The authentikey
      * is generated once at install time and is never modified afterwards.
+     *
+     * ins: 0xFD
+     * p1: FACTORY_RESET_P1_MAGIC (0xAA)
+     * p2: FACTORY_RESET_P2_MAGIC (0x55)
+     * data: (none)
+     * return: (none)
      */
     private short resetToFactory(APDU apdu, byte[] buffer){
         if ((buffer[ISO7816.OFFSET_P1] != FACTORY_RESET_P1_MAGIC) || (buffer[ISO7816.OFFSET_P2] != FACTORY_RESET_P2_MAGIC)) {
             ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
         }
+        // setup is done (checked in process()), so the PIN and PUK exist
+        if (!pin.isValidated() && puk.getTriesRemaining() != (byte)0)
+            ISOException.throwIt(SW_UNAUTHORIZED);
 
-        //2FA
-        needs_2FA= false;
-        key_2FA.clearKey();
-        Util.arrayFillNonAtomic(data2FA, (short)0,(short)data2FA.length, (byte)0);
-
-        //seed & BIP32 data
+        // 1. secrets: seed & BIP32 data (resetSeed() clears bip32_seeded first), taproot, keyslots
         resetSeed();
-
-        //taproot
-        taproot_tweakedkey.clearKey();
-
-        // private keys
         for (byte nb_key=0; nb_key<MAX_NUM_KEYS; nb_key++){
             if (eckeys[nb_key] != null)
                 eckeys[nb_key].clearKey();
         }
         eckeys_flag=(short)0;
+
+        // 2. 2FA: only once the secrets it protects are gone
+        needs_2FA= false;
+        key_2FA.clearKey();
+        Util.arrayFillNonAtomic(data2FA, (short)0,(short)data2FA.length, (byte)0);
 
         // secure channel session key
         secureChannel.clear();
@@ -1129,12 +1144,10 @@ public class Satochip extends javacard.framework.Applet {
 
         // PIN & PUK: reset try counters and unblock them, so that the card can be
         // set up and used again (PIN/PUK values are set again during setup).
-        if (pin != null)
-            pin.resetAndUnblock();
-        if (puk != null)
-            puk.resetAndUnblock();
+        pin.resetAndUnblock();
+        puk.resetAndUnblock();
 
-        // setup
+        // 3. setup flag, last: setup() can only run again once everything above is erased
         setupDone=false;
 
         return (short)0;

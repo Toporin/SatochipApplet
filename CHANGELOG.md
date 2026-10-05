@@ -89,6 +89,11 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
 
 * Log the PIN out when a secure channel is initiated: the PIN validation used to be cleared only on applet select/deselect, so it survived a new INIT_SECURE_CHANNEL in the same card session. Anyone sharing that session (e.g. another process on the same PC/SC reader) could open their own channel and use the PIN validated by the legitimate client, without knowing it. INIT_SECURE_CHANNEL now logs the PIN out and closes the previous channel first. Clients already verify the PIN after opening a channel, so they are not affected.
 
+* Harden resetToFactory():
+  * **Behaviour change:** the reset now requires a validated PIN, or a blocked PUK (when both the PIN and the PUK are lost, the wallet is unusable anyway). It used to need only a secure channel, which anyone can open, so a single unauthenticated command (e.g. from an NFC reader in range) could wipe the card. Anyone holding the card can still block the PIN and the PUK, so this does not stop a thief from wiping the card, but the reset is no longer easier than bricking it. Clients that reset a card with a forgotten PIN must first exhaust the PUK tries, or unblock the PIN with the PUK.
+  * The data is now erased in an order that is safe against card tearing: secrets first (seed, BIP32 and taproot keys, keyslots), then the 2FA, and the setup flag last. The 2FA used to be cleared first, so pulling the card right after that step left a seeded card with 2FA disabled, which defeats the purpose of 2FA for an attacker who knows the PIN.
+  * Removed a redundant `taproot_tweakedkey.clearKey()` after resetSeed(), which also erased the curve parameters that resetSeed() had just restored.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
