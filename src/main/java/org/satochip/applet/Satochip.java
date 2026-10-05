@@ -3086,6 +3086,10 @@ public class Satochip extends javacard.framework.Applet {
                 ISOException.throwIt(SW_INCORRECT_ALG);
             // hmac of 64-bytes msg: ( 32bytes nonce coefficient b | 32bytes 0xEE-padding)
             // b commits to the MuSig2 session (aggnonce, aggpk, message) and plays the role of the signed hash
+            // LIMITATION: the HMAC does not cover e*a, which the client also provides and which carries
+            // the challenge e = H(R|Q|m). A compromised host holding an approval of b for a message m can
+            // submit the e*a of another message m', and with a co-signer it controls, obtain a valid
+            // signature for m'. Fixing this requires the 2FA app to approve [b | e*a | flags] instead.
             // the message is staged after the 144-byte encrypted secnonce in recvBuffer, to keep it intact
             Util.arrayCopyNonAtomic(buffer, (short)ISO7816.OFFSET_CDATA, recvBuffer, (short)144, (short)32);
             Util.arrayFillNonAtomic(recvBuffer, (short)(144+32), (short)32, (byte)0xEE); // 0xEE for MuSig2 partial sig
@@ -3234,7 +3238,9 @@ public class Satochip extends javacard.framework.Applet {
     
     /**
      * This function allows to reset the 2FA key and disable 2FA.
-     * Once activated, 2FA can only be deactivated when the seed is reset and all eckeys cleared.
+     * Since v0.12-0.2, 2FA can be disabled without resetting the seed (requires the 2FA approval).
+     * Note: the approved message is constant for a given 2FA key, so an approval can be replayed
+     * as long as the same 2FA key is in use (e.g. if it is imported again later).
      *  
      *  ins: 0x78
      *  p1: 0x00
