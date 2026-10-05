@@ -107,6 +107,11 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
   * CryptTransaction2FA(): OP_PROCESS/OP_FINALIZE without an OP_INIT now return SW_INCORRECT_INITIALIZATION, and an OP_FINALIZE whose data is not a whole number of AES blocks returns SW_INVALID_PARAMETER.
   * TaprootTweakPrivateKey() returns SW_TAPROOT_TWEAK_ERROR if the tweaked key is 0, and SignSchnorrHash() returns SW_SCHNORR_INVALID_NONCE if the nonce hash is not smaller than n (both have a negligible probability).
 
+* Harden input validation:
+  * setup() now validates its whole input before changing any state: every length field is checked against Lc (a malformed command used to read stale buffer bytes, or walk backwards with a negative size), and the PIN and PUK try limits must be in range [1, 16] (0 used to end in an uncaught PINException, and up to 127 tries were accepted). Only the fields up to the PUK are read; the deprecated fields that follow are ignored and may be omitted. After a factory reset, a setup with different try limits now creates new PIN/PUK objects (the old ones are handed to the platform's object deletion, when supported), instead of silently keeping the previous limits.
+  * setFeaturePolicy() refuses an unknown feature id with SW_INCORRECT_P1, instead of returning success without doing anything.
+  * NDEFApplet: install parameters with a record too large for the shared 224-byte buffer are refused with SW_WRONG_LENGTH, instead of an ArrayIndexOutOfBoundsException.
+
 ## [0.15-0.1]
 
 MuSig2 support (experimental): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.

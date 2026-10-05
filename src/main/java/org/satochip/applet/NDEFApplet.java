@@ -52,6 +52,10 @@ public class NDEFApplet extends Applet {
     c9Off += (short)(bArray[c9Off] + 1); // Skip Privileges and parameter length
 
     short dataLen = Util.makeShort((byte) 0x00, bArray[c9Off]);
+    // [size(1b) | record] must fit in the shared NDEF buffer
+    if (dataLen >= SharedMemory.MAX_NDEF_DATA_FILE_SIZE) {
+      ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+    }
     if ((dataLen > 2) && ((short)(dataLen - 2) == Util.makeShort(bArray[(short)(c9Off + 1)], bArray[(short)(c9Off + 2)]))) {
       Util.arrayCopyNonAtomic(bArray, c9Off, SharedMemory.ndefDataFile, (short) 0, (short)(dataLen + 1));
     }

@@ -428,6 +428,21 @@ public class SatochipTest {
       assertEquals(0x00, status[8], "2FA must be disabled");
       assertEquals(0x00, status[9], "the seed must be erased");
       assertEquals(0x00, status[10], "the card must be back to the not-set-up state");
+
+      // SETUP validates its input before changing anything (the reset closed the secure channel)
+      cmdSet.forgetSecureChannel();
+      byte[] pinLv = concat(new byte[]{(byte) PIN.length}, PIN);
+      byte[] pukLv = concat(new byte[]{(byte) PUK.length}, PUK);
+      byte[] noDefaultPin = {0x00};
+      assertEquals(SW_INVALID_PARAMETER, cmdSet.sendRawSecure(INS_SETUP, 0x00, 0x00,
+          concat(noDefaultPin, new byte[]{0, 5}, pinLv, pukLv)).getSw(), "0 PIN tries must be refused");
+      assertEquals(SW_INVALID_PARAMETER, cmdSet.sendRawSecure(INS_SETUP, 0x00, 0x00,
+          concat(noDefaultPin, new byte[]{5, 17}, pinLv, pukLv)).getSw(), "17 PUK tries must be refused");
+      assertEquals(0x6700, cmdSet.sendRawSecure(INS_SETUP, 0x00, 0x00,
+          concat(noDefaultPin, new byte[]{5, 5}, pinLv, new byte[]{8, 1, 2})).getSw(), "a truncated PUK must be refused");
+      assertEquals(SW_INVALID_PARAMETER, cmdSet.sendRawSecure(INS_SETUP, 0x00, 0x00,
+          concat(noDefaultPin, new byte[]{5, 5}, pinLv, new byte[]{(byte) 0x80})).getSw(), "a negative PUK size must be refused");
+      assertEquals(0x00, cmdSet.cardGetStatus().getData()[10], "a refused SETUP must not set the card up");
     } finally {
       // restore the baseline: set up again with the same PIN/PUK, and re-import the seed
       if (cmdSet.cardGetStatus().getData()[10] == 0x00) {
@@ -588,6 +603,10 @@ public class SatochipTest {
         cmdSet.sendRawSecure(INS_SET_FEATURE_POLICY, FEATURE_ID_RANDOM, FEATURE_ENABLED, new byte[0]).getSw());
     assertEquals(FEATURE_ENABLED, cmdSet.cardGetStatus().getData()[17]);
     assertEquals(SW_OK, cmdSet.sendRawSecure(INS_GET_RANDOM, 16, 0x00, new byte[0]).getSw());
+
+    // an unknown feature id is refused (it used to be silently accepted)
+    assertEquals(SW_INCORRECT_P1,
+        cmdSet.sendRawSecure(INS_SET_FEATURE_POLICY, 5, FEATURE_DISABLED, new byte[0]).getSw());
   }
 
   @Test

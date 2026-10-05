@@ -128,6 +128,8 @@ public class Satochip extends javacard.framework.Applet {
     private final static byte PIN_MIN_SIZE = (byte) 4;
     // Maximum PIN size
     private final static byte PIN_MAX_SIZE = (byte) 16;// TODO: increase size?
+    // Maximum number of tries for the PIN and the PUK (set in setup)
+    private final static byte PIN_MAX_TRIES = (byte) 16;
 
     // code of CLA byte in the command APDU header
     private final static byte CardEdge_CLA = (byte) 0xB0;
@@ -343,8 +345,9 @@ public class Satochip extends javacard.framework.Applet {
     private Key[] eckeys;
     short eckeys_flag=0x0000; //flag bit set to 1 when corresponding key is initialised 
     
-    // PIN and PUK objects, allocated in the constructor (PIN) and during setup (PUK)
+    // PIN and PUK objects, allocated during setup, and their try limits (not readable from OwnerPIN)
     private OwnerPIN pin, puk;
+    private byte pin_try_limit, puk_try_limit;
     
     // card label
     private final static byte MAX_CARD_LABEL_SIZE = (byte) 64;
@@ -988,8 +991,10 @@ public class Satochip extends javacard.framework.Applet {
      * where: 
      *      default_pin: deprecated, the provided value is ignored (but still parsed for backward compatibility)
      *                   before v0.16: {0x4D, 0x75, 0x73, 0x63, 0x6C, 0x65, 0x30, 0x30}
-     *      pin_tries: max number of PIN try allowed before the corresponding PIN is blocked
-     *      ublk_tries:  max number of UBLK(unblock) try allowed before the PUK is blocked
+     *      pin_tries: max number of PIN try allowed before the corresponding PIN is blocked (1 to 16)
+     *      ublk_tries:  max number of UBLK(unblock) try allowed before the PUK is blocked (1 to 16)
+     *      pin0/ublk0: the PIN and the PUK, 4 to 16 bytes each
+     *      the fields following ublk0 are deprecated and ignored (they may be omitted)
      *      pin1/ublk1: deprecated, the provided values are ignored (but still parsed for backward compatibility)
      *      RFU(secmemsize) - deprecated: number of bytes reserved for internal memory (storage of Bip32 objects)
      *      RFU(memsize) - deprecated: number of bytes reserved for memory with external access
@@ -1003,69 +1008,46 @@ public class Satochip extends javacard.framework.Applet {
      */
     private short setup(APDU apdu, byte[] buffer) {
         personalizationDone=true;// perso PKI should be locked once setup is done
-        
-        short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
-        short base = (short) (ISO7816.OFFSET_CDATA);
-        byte numBytes = buffer[base++];
-        bytesLeft--;
 
-        // default PIN is deprecated, the provided value is ignored (but still parsed for backward compatibility)
-        base += numBytes;
-        bytesLeft-=numBytes;
-
+        // validate the whole input before any state change. Only the fields up to the PUK are
+        // read: the following ones (pin1, ublk1, RFU) are deprecated and ignored.
+        short end = (short)(ISO7816.OFFSET_CDATA + Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]));
+        // default PIN: deprecated, the provided value is ignored
+        short base = skipLengthValue(buffer, ISO7816.OFFSET_CDATA, end);
+        // try limits
+        if ((short)(base+2) > end)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         byte pin_tries = buffer[base++];
         byte ublk_tries = buffer[base++];
-        numBytes = buffer[base++];
-        bytesLeft-=3;
-
-        if (!CheckPINPolicy(buffer, base, numBytes))
+        if (pin_tries < 1 || pin_tries > PIN_MAX_TRIES || ublk_tries < 1 || ublk_tries > PIN_MAX_TRIES)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        // PIN
+        short pin_offset = (short)(base+1);
+        base = skipLengthValue(buffer, base, end);
+        byte pin_size = buffer[(short)(pin_offset-1)];
+        if (!CheckPINPolicy(buffer, pin_offset, pin_size))
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        // PUK
+        short puk_offset = (short)(base+1);
+        skipLengthValue(buffer, base, end);
+        byte puk_size = buffer[(short)(puk_offset-1)];
+        if (!CheckPINPolicy(buffer, puk_offset, puk_size))
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
-        if (pin == null)
+        // the PIN objects survive a factory reset: replace them if the try limits change
+        if (pin == null || pin_try_limit != pin_tries){
             pin = new OwnerPIN(pin_tries, PIN_MAX_SIZE);
-        pin.update(buffer, base, numBytes);
-        
-        base += numBytes;
-        bytesLeft-=numBytes;
-        numBytes = buffer[base++];
-        bytesLeft--;
-        
-        if (!CheckPINPolicy(buffer, base, numBytes))
-            ISOException.throwIt(SW_INVALID_PARAMETER);
-        
-        if (puk==null)
+            pin_try_limit = pin_tries;
+            requestObjectDeletion();
+        }
+        pin.update(buffer, pin_offset, pin_size);
+        if (puk == null || puk_try_limit != ublk_tries){
             puk = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
-        puk.update(buffer, base, numBytes);
-        
-        base += numBytes;
-        bytesLeft-=numBytes;
-        
-        pin_tries = buffer[base++];
-        ublk_tries = buffer[base++];
-        numBytes = buffer[base++];
-        bytesLeft-=3;
-        
-        // PIN1 is deprecated, the provided value is ignored (but still parsed for backward compatibility)
-        base += numBytes;
-        bytesLeft-=numBytes;
-        numBytes = buffer[base++];
-        bytesLeft--;
-        
-        // PUK1 is deprecated, the provided value is ignored (but still parsed for backward compatibility)
-        base += numBytes;
-        bytesLeft-=numBytes;
-        
-        short RFU= Util.getShort(buffer, base); // deprecated: secmemsize => RFU
-        base += (short) 2;
-        RFU = Util.getShort(buffer, base); //mem_size deprecated => RFU
-        base += (short) 2;
-        bytesLeft-=4;
-        
-        RFU = buffer[base++]; //create_object_ACL deprecated => RFU
-        RFU = buffer[base++]; //create_key_ACL deprecated => RFU
-        RFU = buffer[base++]; //create_pin_ACL deprecated => RFU
-        bytesLeft-=3;
-            
+            puk_try_limit = ublk_tries;
+            requestObjectDeletion();
+        }
+        puk.update(buffer, puk_offset, puk_size);
+
         // bip32 material
         bip32_seeded= false;
         Secp256k1.setCommonCurveParameters(bip32_extendedkey);
@@ -1074,6 +1056,29 @@ public class Satochip extends javacard.framework.Applet {
 
         setupDone = true;
         return (short)0;//nothing to return
+    }
+
+    /**
+     * Skips a [length(1b) | value] field starting at buffer[offset], checking that it ends
+     * before end.
+     * @return the offset following the field
+     */
+    private static short skipLengthValue(byte[] buffer, short offset, short end){
+        if (offset >= end)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        byte size = buffer[offset];
+        if (size < 0)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
+        offset += (short)(1+size);
+        if (offset > end)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        return offset;
+    }
+
+    /** Lets the platform reclaim objects that are no longer referenced, where it supports it. */
+    private static void requestObjectDeletion(){
+        if (JCSystem.isObjectDeletionSupported())
+            JCSystem.requestObjectDeletion();
     }
 
     /**
@@ -2015,6 +2020,8 @@ public class Satochip extends javacard.framework.Applet {
                     ISOException.throwIt(SW_FEATURE_BLOCKED);
                 feature_random_policy = feature_policy;
                 break;
+            default:
+                ISOException.throwIt(SW_INCORRECT_P1);
         }// end switch
 
         return (short)0;
