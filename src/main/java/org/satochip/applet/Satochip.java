@@ -339,9 +339,9 @@ public class Satochip extends javacard.framework.Applet {
     // Key objects (allocated on demand)
     private Key[] eckeys;
     
-    // PIN and PUK objects, allocated during setup, and their try limits (not readable from OwnerPIN)
+    // PIN and PUK objects: null before setup and after a factory reset (on cards that support object
+    // deletion), allocated during setup. setupDone implies pin != null && puk != null.
     private OwnerPIN pin, puk;
-    private byte pin_try_limit, puk_try_limit;
     
     // card label
     private final static byte MAX_CARD_LABEL_SIZE = (byte) 64;
@@ -1027,18 +1027,13 @@ public class Satochip extends javacard.framework.Applet {
         if (!CheckPINPolicy(buffer, puk_offset, puk_size))
             ISOException.throwIt(SW_INVALID_PARAMETER);
 
-        // the PIN objects survive a factory reset: replace them if the try limits change
-        if (pin == null || pin_try_limit != pin_tries){
+        // the PIN objects are released by a factory reset, except on cards without object deletion,
+        // where they are reused with their previous try limits (see resetToFactory())
+        if (pin == null)
             pin = new OwnerPIN(pin_tries, PIN_MAX_SIZE);
-            pin_try_limit = pin_tries;
-            requestObjectDeletion();
-        }
         pin.update(buffer, pin_offset, pin_size);
-        if (puk == null || puk_try_limit != ublk_tries){
+        if (puk == null)
             puk = new OwnerPIN(ublk_tries, PIN_MAX_SIZE);
-            puk_try_limit = ublk_tries;
-            requestObjectDeletion();
-        }
         puk.update(buffer, puk_offset, puk_size);
 
         // bip32 material
@@ -1068,16 +1063,12 @@ public class Satochip extends javacard.framework.Applet {
         return offset;
     }
 
-    /** Lets the platform reclaim objects that are no longer referenced, where it supports it. */
-    private static void requestObjectDeletion(){
-        if (JCSystem.isObjectDeletionSupported())
-            JCSystem.requestObjectDeletion();
-    }
-
     /**
      * Erase all user data (factory reset).
-     * All PINs and PUKs are reset and unblocked (try counters restored), so that
-     * the card can be set up and used again afterwards.
+     * The PIN and PUK objects are released (their values overwritten first), so that the card
+     * is back to its fresh-install state and the next setup() creates them with its own try
+     * limits. On cards without object deletion they are kept instead, reset and unblocked, and
+     * the next setup() reuses them with the try limits of the first setup.
      *
      * The reset requires either a validated PIN, or a blocked PUK (the PIN and PUK are both
      * lost and the wallet is unusable anyway). Anyone holding the card can block the PIN and the
@@ -1085,10 +1076,10 @@ public class Satochip extends javacard.framework.Applet {
      * than bricking the card, instead of a single unauthenticated command (e.g. over NFC).
      *
      * The data is erased in an order that is safe against card tearing: the secrets first, then
-     * the 2FA, and the setup flag last. Each step only removes capabilities, so a reset that is
-     * interrupted halfway never leaves a card whose secrets are reachable with less protection
-     * than before (e.g. a seeded card with 2FA disabled, or a card that can be set up again with
-     * a new PIN while the keyslots still hold keys).
+     * the 2FA, then the setup flag, and the PIN objects last. Each step only removes
+     * capabilities, so a reset that is interrupted halfway never leaves a card whose secrets are
+     * reachable with less protection than before (e.g. a seeded card with 2FA disabled, or a card
+     * that can be set up again with a new PIN while the keyslots still hold keys).
      *
      * Note: the personalization PKI data deliberately survives a factory reset:
      * the authentikey keypair (device identity), the authentikey certificate and
@@ -1139,14 +1130,29 @@ public class Satochip extends javacard.framework.Applet {
         card_label_size=0;
         Util.arrayFillNonAtomic(card_label, (short)0, (short)card_label.length, (byte)0);
 
-        // PIN & PUK: reset try counters and unblock them, so that the card can be
-        // set up and used again (PIN/PUK values are set again during setup).
-        // Pin and puk cannot be null during reset factory since setup() must have been run before.
-        pin.resetAndUnblock();
-        puk.resetAndUnblock();
-
-        // 3. setup flag, last: setup() can only run again once everything above is erased
+        // 3. setup flag: setup() can only run again once everything above is erased
         setupDone=false;
+
+        // 4. PIN & PUK, after the setup flag: setupDone implies pin != null && puk != null, so a
+        // torn reset must never leave setupDone set with a released PIN object (every handler,
+        // including this one, would throw a NullPointerException and brick the card).
+        // Pin and puk cannot be null here since setup() must have been run before.
+        if (JCSystem.isObjectDeletionSupported()){
+            // release the objects, so that the next setup() creates them with its own try limits.
+            // Freed memory is not necessarily erased: overwrite the PIN and PUK values first.
+            randomData.generateData(tmpBuffer, (short)0, PIN_MAX_SIZE);
+            pin.update(tmpBuffer, (short)0, PIN_MAX_SIZE);
+            puk.update(tmpBuffer, (short)0, PIN_MAX_SIZE);
+            Util.arrayFillNonAtomic(tmpBuffer, (short)0, PIN_MAX_SIZE, (byte)0);
+            pin = null;
+            puk = null;
+            JCSystem.requestObjectDeletion();
+        } else {
+            // the objects cannot be reclaimed, so they are kept and reused by the next setup(), with
+            // the try limits of the first setup: reset the try counters and unblock them
+            pin.resetAndUnblock();
+            puk.resetAndUnblock();
+        }
 
         return (short)0;
     }

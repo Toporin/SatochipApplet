@@ -443,8 +443,32 @@ public class SatochipTest {
       assertEquals(SW_INVALID_PARAMETER, cmdSet.sendRawSecure(INS_SETUP, 0x00, 0x00,
           concat(noDefaultPin, new byte[]{5, 5}, pinLv, new byte[]{(byte) 0x80})).getSw(), "a negative PUK size must be refused");
       assertEquals(0x00, cmdSet.cardGetStatus().getData()[10], "a refused SETUP must not set the card up");
+
+      // a SETUP after a reset applies its own try limits: the reset released the PIN objects
+      // (only on cards that support object deletion; the others keep the limits of the first setup)
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_SETUP, 0x00, 0x00,
+          concat(noDefaultPin, new byte[]{3, 2}, pinLv, pukLv)).getSw());
+      status = cmdSet.cardGetStatus().getData();
+      if (TARGET == TARGET_SIMULATOR) {
+        assertEquals(3, status[4], "the new PIN try limit must apply");
+        assertEquals(2, status[5], "the new PUK try limit must apply");
+      } else {
+        assertTrue(status[4] == 3 || status[4] == 5, "unexpected PIN try limit " + status[4]);
+      }
+      // reset again, so that the baseline is restored below with the baseline try limits
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw());
+      assertEquals(SW_OK,
+          cmdSet.sendRawSecure(INS_RESET_TO_FACTORY, RESET_P1, RESET_P2, new byte[0]).getSw());
+      cmdSet.forgetSecureChannel();
     } finally {
-      // restore the baseline: set up again with the same PIN/PUK, and re-import the seed
+      // restore the baseline: set up again with the same PIN/PUK and tries, and re-import the seed
+      byte[] status = cmdSet.cardGetStatus().getData();
+      if (status[10] == 0x01 && status[4] != 5) {
+        // a failure left the card set up with the test try limits: reset it first
+        resetSession();
+        cmdSet.sendRawSecure(INS_RESET_TO_FACTORY, RESET_P1, RESET_P2, new byte[0]);
+        cmdSet.forgetSecureChannel();
+      }
       if (cmdSet.cardGetStatus().getData()[10] == 0x00) {
         setupCard(cmdSet);
       }
@@ -452,6 +476,9 @@ public class SatochipTest {
       if (cmdSet.cardGetStatus().getData()[9] == 0x00) {
         assertEquals(SW_OK, cmdSet.cardBip32ImportSeed(Vectors.BIP32_SEED).getSw());
       }
+    }
+    if (TARGET == TARGET_SIMULATOR) {
+      assertEquals(5, cmdSet.cardGetStatus().getData()[4], "the baseline PIN try limit must be back");
     }
     // the seed is back, but no key has been derived from it yet: signing with the last derived
     // key (P1=0xFF) is refused instead of failing with an uncaught exception (0x6F00)
