@@ -148,7 +148,7 @@ tasks.register('install', org.satochip.build.InstallTask) {
 tasks.register('lock', org.satochip.build.LockTask)
 
 test {
-  useJUnitPlatform { excludeTags 'manual' }
+  useJUnitPlatform { excludeTags 'manual', 'benchmark' }
   testLogging { events 'passed', 'skipped', 'failed'; showStandardStreams = false }
   systemProperty 'org.satochip.test.target', testTarget
 
@@ -165,4 +165,30 @@ test {
 if (testTarget == 'card') {
   // Like Keycard: build the CAP and flash the card before running the suite.
   tasks.named('test') { dependsOn 'install' }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Benchmark: times the Schnorr/MuSig2 commands (and control commands) on the applet currently on
+// the card, WITHOUT installing anything first, so that CAPs built from other commits can be
+// measured (see scripts/benchmark-commits.sh). Excluded from `test`.
+//   ./gradlew benchmarkCard -Porg.satochip.bench.label=<label> [-Porg.satochip.bench.iterations=50]
+// With -Porg.satochip.test.target=simulator it only checks that the harness works: simulator
+// timings say nothing about a card.
+// ---------------------------------------------------------------------------------------------
+
+tasks.register('benchmarkCard', Test) {
+  group = 'verification'
+  description = 'Times Schnorr/MuSig2 signing on the applet installed on the card (no install)'
+  testClassesDirs = sourceSets.test.output.classesDirs
+  classpath = sourceSets.test.runtimeClasspath
+  useJUnitPlatform { includeTags 'benchmark' }
+  testLogging { events 'passed', 'skipped', 'failed'; showStandardStreams = true }
+  outputs.upToDateWhen { false }
+
+  systemProperty 'org.satochip.test.target', testTarget
+  systemProperty 'org.satochip.bench.label', project.findProperty('org.satochip.bench.label') ?: 'current'
+  systemProperty 'org.satochip.bench.iterations', project.findProperty('org.satochip.bench.iterations') ?: '50'
+  systemProperty 'org.satochip.bench.warmup', project.findProperty('org.satochip.bench.warmup') ?: '5'
+  systemProperty 'org.satochip.bench.out',
+      project.findProperty('org.satochip.bench.out') ?: layout.buildDirectory.dir('benchmark').get().asFile.absolutePath
 }

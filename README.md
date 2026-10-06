@@ -249,6 +249,27 @@ which needs the card's RSA engine for `Biginteger.mult_rsa_trick()`. On the simu
 currently requires a one-line JCardEngine patch (see `jcardengine-pr.md`); without it the Schnorr
 test reports as skipped.
 
+### Benchmark
+
+`scripts/benchmark-commits.sh` measures the performance difference between two applet commits on a
+real card, e.g. the cost of the blinded Schnorr/MuSig2 arithmetic:
+
+```sh
+scripts/benchmark-commits.sh 87761e9^ 87761e9          # -n ITER (default 50), -r ROUNDS (default 2)
+scripts/benchmark-commits.sh --build-only 87761e9^ 87761e9   # only build the two CAPs
+```
+
+It builds the CAP of each revision in a temporary git worktree, then installs each one in turn
+(`./gradlew install -Porg.satochip.install.cap=<file>`) and runs `./gradlew benchmarkCard`, which
+times Schnorr signing, the MuSig2 nonce and signing steps, and two control commands (ECDSA signing,
+GET RANDOM) on whatever applet is on the card, without installing anything. It finally prints the
+median of each operation per revision and the ratio. The control commands should not change between
+revisions: if they do, the measurement is drifting. `benchmarkCard` is excluded from `./gradlew test`.
+
+**Every install deletes the applet and all its data on the card: use a spare development card.**
+At the end the card holds the second revision; run `./gradlew install` to put the current checkout
+back.
+
 ### Client-side tests
 
 Complementing this, the [pysatochip](https://github.com/Toporin/pysatochip) library tests the

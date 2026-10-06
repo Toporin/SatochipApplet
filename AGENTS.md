@@ -101,6 +101,7 @@ gp -uninstall SatoChip-3.0.4.cap        # remove it
 - The suite uses a **shared card**: it is set up once and reused, so every test must restore the baseline it found (PIN `1234`, all feature policies enabled). Never set a policy to BLOCKED or block the PUK in a test — those are irreversible without a factory reset.
 - Negative tests must go through `TestSatochipCommandSet.sendRawSecure`/`sendRawPlain`, never `cardTransmit`: the production `cardTransmit` silently reopens the secure channel and re-verifies the PIN on 0x9C06, which turns an authorization failure into a success.
 - A simulator is not a card. Green tests do not prove hardware behaviour: timing, transient-memory limits and EEPROM tearing all differ. Keep running the card target and the pysatochip hardware tests before a release.
+- `./gradlew benchmarkCard` (tag `benchmark`, excluded from `test`) times Schnorr/MuSig2 and control commands on the applet already on the card, without installing; `scripts/benchmark-commits.sh BASE TARGET` builds both CAPs in temporary worktrees, installs and benchmarks each, and compares. Installs wipe the card: never run it on a card holding real funds.
 - Complementary client-side coverage lives in [pysatochip](https://github.com/Toporin/pysatochip).
 - `./gradlew convertJavacard` is the minimum check for any change; `./gradlew test -Porg.satochip.test.target=simulator` is the next one.
 

@@ -178,7 +178,7 @@ public class SatochipTest {
     return new AID(bytes, (short) 0, (byte) bytes.length);
   }
 
-  private static void setupCard(TestSatochipCommandSet cmd) {
+  static void setupCard(TestSatochipCommandSet cmd) {
     byte[] unusedPin1 = new byte[8];
     byte[] unusedPuk1 = new byte[8];
     APDUResponse r = cmd.cardSetup(
@@ -236,12 +236,12 @@ public class SatochipTest {
     }
   }
 
-  private static boolean isSetupDone(TestSatochipCommandSet cmd) {
+  static boolean isSetupDone(TestSatochipCommandSet cmd) {
     byte[] status = cmd.cardGetStatus().getData();
     return status.length > 10 && status[10] == 0x01;
   }
 
-  private static boolean isSeeded(TestSatochipCommandSet cmd) {
+  static boolean isSeeded(TestSatochipCommandSet cmd) {
     byte[] status = cmd.cardGetStatus().getData();
     return status.length > 9 && status[9] == 0x01;
   }
@@ -1342,7 +1342,7 @@ public class SatochipTest {
     }
   }
 
-  private static byte[] bytes32(java.math.BigInteger v) {
+  static byte[] bytes32(java.math.BigInteger v) {
     byte[] raw = v.toByteArray();
     byte[] out = new byte[32];
     int len = Math.min(32, raw.length);
@@ -1395,7 +1395,7 @@ public class SatochipTest {
    * e = int(tagged_hash("BIP0340/challenge", r || pk.x || m)) mod n; R = s*G - e*P;
    * accept iff R is not infinity, R.y is even and R.x == r.
    */
-  private static boolean verifyBip340(byte[] uncompressedPubkey, byte[] msg, byte[] sig) {
+  static boolean verifyBip340(byte[] uncompressedPubkey, byte[] msg, byte[] sig) {
     if (sig.length != 64 || msg.length != 32) return false;
     ECNamedCurveParameterSpec spec = ECNamedCurveTable.getParameterSpec("secp256k1");
 
@@ -1441,7 +1441,7 @@ public class SatochipTest {
     return sha256(concat(tagHash, tagHash, msg));
   }
 
-  private static byte[] sha256(byte[] input) {
+  static byte[] sha256(byte[] input) {
     try {
       return MessageDigest.getInstance("SHA-256").digest(input);
     } catch (Exception e) {
@@ -1478,7 +1478,7 @@ public class SatochipTest {
         concat(new byte[]{(byte) PUK.length}, PUK, new byte[]{(byte) PIN.length}, PIN));
   }
 
-  private static byte[] concat(byte[]... parts) {
+  static byte[] concat(byte[]... parts) {
     int len = 0;
     for (byte[] p : parts) len += p.length;
     byte[] out = new byte[len];

@@ -15,6 +15,7 @@ import org.gradle.api.logging.Logger;
 import org.gradle.api.tasks.TaskAction;
 
 import javax.smartcardio.*;
+import java.io.File;
 import java.io.InputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -34,8 +35,28 @@ public class InstallTask extends DefaultTask {
   // empty install parameters: the NDEF applet keeps the default record compiled into SharedMemory
   public static final byte[] NDEF_TAG = new byte[0];
 
+  /** Project property selecting the CAP to install, instead of the one built from this checkout. */
+  public static final String CAP_PROPERTY = "org.satochip.install.cap";
+
+  /**
+   * The CAP to install: the file given with -Porg.satochip.install.cap=<file> (e.g. a CAP built
+   * from another commit, see scripts/benchmark-commits.sh), or else the CAP built by convertJavacard.
+   */
+  private File capFile() {
+    Object override = getProject().findProperty(CAP_PROPERTY);
+    File cap = (override != null)
+        ? getProject().file(override.toString())
+        : getProject().file("build/javacard/org/satochip/applet/javacard/applet.cap");
+    if (!cap.isFile()) {
+      throw new GradleException("CAP file not found: " + cap);
+    }
+    return cap;
+  }
+
   @TaskAction
   public void install() {
+    // resolve the CAP before touching the card, so that a wrong path does not delete the applet
+    File capFile = capFile();
     Logger logger = getLogger();
 
     TerminalFactory tf = TerminalManager.getTerminalFactory();
@@ -77,8 +98,9 @@ public class InstallTask extends DefaultTask {
       logger.info("Deleting the old instances and package (if present)");
       cmdSet.delete(PACKAGE_AID, (byte) 0x80).checkSW(APDUResponse.SW_OK, APDUResponse.SW_REFERENCED_DATA_NOT_FOUND);
 
+      logger.lifecycle("Installing " + capFile);
       logger.info("Loading the new package");
-      InputStream in = new FileInputStream(this.getProject().file("build/javacard/org/satochip/applet/javacard/applet.cap"));
+      InputStream in = new FileInputStream(capFile);
       cmdSet.installForLoad(PACKAGE_AID).checkOK();
       Load load = new Load(in);
       byte[] block;
