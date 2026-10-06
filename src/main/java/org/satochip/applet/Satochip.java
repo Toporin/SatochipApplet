@@ -1141,6 +1141,7 @@ public class Satochip extends javacard.framework.Applet {
 
         // PIN & PUK: reset try counters and unblock them, so that the card can be
         // set up and used again (PIN/PUK values are set again during setup).
+        // Pin and puk cannot be null during reset factory since setup() must have been run before.
         pin.resetAndUnblock();
         puk.resetAndUnblock();
 
@@ -1321,30 +1322,38 @@ public class Satochip extends javacard.framework.Applet {
      * client (e, or e*a for MuSig2) on the RSA engine as a public-key operation, and reduces the
      * result with a division whose running time depends on the data. That is the textbook setting
      * for power analysis (DPA) and timing attacks. So each secret scalar x is replaced with
-     * x + r*n, for a fresh random r < 2^63, before entering the computation: the result mod n is
+     * x + r*n, for a fresh random r < 2^119, before entering the computation: the result mod n is
      * unchanged, but all the intermediate values (and the quotient of the final division) are
-     * randomized. The operands then take 40 bytes (320 bits), and the products 72 bytes, which
-     * still fits the 96-byte buffers and the 768-bit RSA modulus of Biginteger.mult_rsa_trick().
+     * randomized.
      *
-     * Scratch: tmpBuffer[0..208), plus Biginteger.buffer1/buffer2.
+     * Sizes: x + r*n < 2^256 + 2^375 < 2^376 takes 47 bytes, and the products a*(x + r*n) stay
+     * below 2^632, so the sums fit the 96-byte buffers. 47 bytes is the largest operand size that
+     * Biginteger.mult_rsa_trick() supports: it squares a + x' < 2^377 on the RSA engine, and
+     * (a + x')^2 < 2^754 must stay below the 768-bit modulus (>= 2^767). The cost does not depend
+     * on the operand size, since mult_rsa_trick() always works on whole 96-byte buffers.
+     *
+     * Scratch: tmpBuffer[0..222), plus Biginteger.buffer1/buffer2.
      */
     private static final short BLIND_OFFSET_PRODUCT = (short)0; // 96b
-    private static final short BLIND_OFFSET_X = (short)96;      // 40b, blinded secret operand
-    private static final short BLIND_OFFSET_A = (short)136;     // 40b, public operand
-    private static final short BLIND_OFFSET_R = (short)176;     // 32b, random multiplier r
-    private static final short BLIND_SIZE = (short)40;
+    private static final short BLIND_OFFSET_X = (short)96;      // 47b, blinded secret operand
+    private static final short BLIND_OFFSET_A = (short)143;     // 47b, public operand
+    private static final short BLIND_OFFSET_R = (short)190;     // 32b, random multiplier r
+    private static final short BLIND_SIZE = (short)47;
+    private static final short BLIND_PADDING = (short)(BLIND_SIZE-32); // zeros before a 32-byte scalar
+    private static final short BLIND_R_SIZE = (short)15;        // r < 2^119
     private static final short BIGNUM_SIZE = (short)96;         // = Biginteger.BUFFER_SIZE
 
-    /** Writes x + r*n (40 bytes) at tmpBuffer[BLIND_OFFSET_X], for a fresh random r < 2^63. */
+    /** Writes x + r*n (47 bytes) at tmpBuffer[BLIND_OFFSET_X], for a fresh random r < 2^119. */
     private void blindScalar(byte[] x, short xOff){
-        Util.arrayFillNonAtomic(tmpBuffer, BLIND_OFFSET_R, (short)24, (byte)0);
-        randomData.generateData(tmpBuffer, (short)(BLIND_OFFSET_R+24), (short)8);
-        tmpBuffer[(short)(BLIND_OFFSET_R+24)] &= (byte)0x7F;
-        // r*n < 2^319 fills the last 40 bytes of the 96-byte product, the others are zero
+        // r = 15 random bytes with the top bit cleared, zero-padded to 32 bytes
+        Util.arrayFillNonAtomic(tmpBuffer, BLIND_OFFSET_R, (short)(32-BLIND_R_SIZE), (byte)0);
+        randomData.generateData(tmpBuffer, (short)(BLIND_OFFSET_R+32-BLIND_R_SIZE), BLIND_R_SIZE);
+        tmpBuffer[(short)(BLIND_OFFSET_R+32-BLIND_R_SIZE)] &= (byte)0x7F;
+        // r*n < 2^375 fills the last 47 bytes of the 96-byte product, the others are zero
         Biginteger.mult_rsa_trick(tmpBuffer, BLIND_OFFSET_R, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32, tmpBuffer, BLIND_OFFSET_PRODUCT);
-        Util.arrayFillNonAtomic(tmpBuffer, BLIND_OFFSET_X, (short)8, (byte)0);
-        Util.arrayCopyNonAtomic(x, xOff, tmpBuffer, (short)(BLIND_OFFSET_X+8), (short)32);
-        // x + r*n < 2^256 + 2^319 < 2^320: no carry
+        Util.arrayFillNonAtomic(tmpBuffer, BLIND_OFFSET_X, BLIND_PADDING, (byte)0);
+        Util.arrayCopyNonAtomic(x, xOff, tmpBuffer, (short)(BLIND_OFFSET_X+BLIND_PADDING), (short)32);
+        // x + r*n < 2^256 + 2^375 < 2^376: no carry
         Biginteger.add_carry(tmpBuffer, BLIND_OFFSET_X, tmpBuffer, (short)(BLIND_OFFSET_PRODUCT+BIGNUM_SIZE-BLIND_SIZE), BLIND_SIZE);
     }
 
@@ -1359,8 +1368,8 @@ public class Satochip extends javacard.framework.Applet {
     /** acc += a * (x + r*n), where a is a 32-byte public value and x a 32-byte secret scalar. */
     private void blindedMulAdd(byte[] acc, short accOff, byte[] a, short aOff, byte[] x, short xOff){
         blindScalar(x, xOff);
-        Util.arrayFillNonAtomic(tmpBuffer, BLIND_OFFSET_A, (short)8, (byte)0);
-        Util.arrayCopyNonAtomic(a, aOff, tmpBuffer, (short)(BLIND_OFFSET_A+8), (short)32);
+        Util.arrayFillNonAtomic(tmpBuffer, BLIND_OFFSET_A, BLIND_PADDING, (byte)0);
+        Util.arrayCopyNonAtomic(a, aOff, tmpBuffer, (short)(BLIND_OFFSET_A+BLIND_PADDING), (short)32);
         Biginteger.mult_rsa_trick(tmpBuffer, BLIND_OFFSET_A, tmpBuffer, BLIND_OFFSET_X, BLIND_SIZE, tmpBuffer, BLIND_OFFSET_PRODUCT);
         Biginteger.add_carry(acc, accOff, tmpBuffer, BLIND_OFFSET_PRODUCT, BIGNUM_SIZE);
     }

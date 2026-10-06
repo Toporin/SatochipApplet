@@ -353,7 +353,8 @@ public class Biginteger {
     
     /**
      * Computes z = x^2 with a single RSA operation (x^2 mod n == x^2, since n is larger than 2^512).
-     * x is a size-byte operand (size <= 48), z receives 96 bytes (BUFFER_SIZE).
+     * x is a size-byte operand (size <= 47: x^2 must stay below the 768-bit modulus, which is
+     * only guaranteed to be >= 2^767), z receives 96 bytes (BUFFER_SIZE).
      * Used by Secp256k1.isOnCurve(), on public operands.
      */
     public static short square_rsa(byte[] x, short offsetx, short size, byte[] z, short offsetz) {
