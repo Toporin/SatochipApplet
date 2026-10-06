@@ -1065,10 +1065,10 @@ public class Satochip extends javacard.framework.Applet {
 
     /**
      * Erase all user data (factory reset).
-     * The PIN and PUK objects are released (their values overwritten first), so that the card
-     * is back to its fresh-install state and the next setup() creates them with its own try
-     * limits. On cards without object deletion they are kept instead, reset and unblocked, and
-     * the next setup() reuses them with the try limits of the first setup.
+     * The PIN and PUK objects are released, so that the card is back to its fresh-install state
+     * and the next setup() creates them with its own try limits. On cards without object deletion
+     * they are kept instead, reset and unblocked, and the next setup() reuses them with the try
+     * limits of the first setup.
      *
      * The reset requires either a validated PIN, or a blocked PUK (the PIN and PUK are both
      * lost and the wallet is unusable anyway). Anyone holding the card can block the PIN and the
@@ -1138,12 +1138,7 @@ public class Satochip extends javacard.framework.Applet {
         // including this one, would throw a NullPointerException and brick the card).
         // Pin and puk cannot be null here since setup() must have been run before.
         if (JCSystem.isObjectDeletionSupported()){
-            // release the objects, so that the next setup() creates them with its own try limits.
-            // Freed memory is not necessarily erased: overwrite the PIN and PUK values first.
-            randomData.generateData(tmpBuffer, (short)0, PIN_MAX_SIZE);
-            pin.update(tmpBuffer, (short)0, PIN_MAX_SIZE);
-            puk.update(tmpBuffer, (short)0, PIN_MAX_SIZE);
-            Util.arrayFillNonAtomic(tmpBuffer, (short)0, PIN_MAX_SIZE, (byte)0);
+            // release the objects, so that the next setup() creates them with its own try limits
             pin = null;
             puk = null;
             JCSystem.requestObjectDeletion();
