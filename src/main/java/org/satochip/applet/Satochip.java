@@ -2487,7 +2487,9 @@ public class Satochip extends javacard.framework.Applet {
      * data: [hash(32b) | option: 2FA-flag(2b)|hmac(20b)]
      * 
      * return: [sig ]
-     * 
+     *   sig is the DER-encoded ECDSA signature as produced by the card, NOT normalized to low-S:
+     *   the client must replace s with n-s when s > n/2 (BIP62/BIP146), or Bitcoin nodes will reject it.
+     *
      */
     private short SignTransactionHash(APDU apdu, byte[] buffer){
         
