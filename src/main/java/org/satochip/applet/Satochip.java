@@ -2744,9 +2744,10 @@ public class Satochip extends javacard.framework.Applet {
             Util.arrayCopyNonAtomic(recvBuffer, OFFSET_BIP340_m, buffer, offset, (short)32);
             schnorr_hash_tag(tags, (short)11, (short)13, buffer, (short)0, (short)96, recvBuffer, OFFSET_BIP340_t); // reuse t to store rand
             // k' = rand mod n must not be 0. BIP340 reduces rand mod n, but rand >= n has a
-            // negligible probability (< 2^-127): refuse it, setS() would throw an uncaught exception
-            if (Biginteger.equalZero(recvBuffer, OFFSET_BIP340_t, (short)32)
-                    || !Biginteger.lessThan(recvBuffer, OFFSET_BIP340_t, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32)){
+            // negligible probability (< 2^-127): refuse it, setS() would throw an uncaught exception.
+            // rand is the secret nonce: compare in constant time, an early exit would leak its top bits
+            if (Biginteger.isZeroCT(recvBuffer, OFFSET_BIP340_t, (short)32)
+                    || !Biginteger.lessThanCT(recvBuffer, OFFSET_BIP340_t, Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_R, (short)32)){
                 ISOException.throwIt(SW_SCHNORR_INVALID_NONCE);
             }
             // compute R = rand*G using the scratch ephemeral key (same pattern as in
