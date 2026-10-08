@@ -1,16 +1,23 @@
 // based on https://github.com/status-im/status-keycard/blob/146c049b45c2c20989214d2b37818e7b6222b0dd/src/main/java/im/status/keycard/SharedMemory.java
 package org.satochip.applet;
 
+import javacard.framework.Util;
+
 /**
  * Keep references to data structures shared across applet instances of this package.
  */
 public class SharedMemory {
 
-  /** The NDEF data file. Read through the NDEFApplet. **/
-  static final short MAX_NDEF_DATA_FILE_SIZE = 224;
+  /**
+   * Maximum size of the NDEF data file [NLEN(2b) | NDEF record], as declared in the capability
+   * container. Bounded so that INS_SET_NDEF can read the buffer back: [size(1b) | file] must fit in
+   * a secure channel response (SecureChannel.MAX_WRAP_SIZE, 223 bytes).
+   **/
+  static final short MAX_NDEF_DATA_FILE_SIZE = 222;
 
-  // The first byte is the size of the remaining (meaningful) bytes, the rest is zero padding.
-  // The record itself is [NLEN(2b) | NDEF record].
+  // The NDEF data file. Read through the NDEFApplet.
+  // The first byte is the size of the remaining (meaningful) bytes, the rest is zero padding,
+  // hence 1 + MAX_NDEF_DATA_FILE_SIZE bytes. The file itself is [NLEN(2b) | NDEF record].
   //
   // Default record: an NDEF URI record (universal link, works on both Android and iOS)
   // pointing to the Satochip quick-start guide.
@@ -50,6 +57,17 @@ public class SharedMemory {
     (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00,
     (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00,
     (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00,
-    (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00
+    (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00
   };
+
+  /**
+   * Checks that buf[off..off+size) is a well-formed NDEF data file that fits in ndefDataFile:
+   * [NLEN(2b) | NDEF record], with a non-empty record of exactly NLEN bytes.
+   */
+  static boolean isValidNdefFile(byte[] buf, short off, short size) {
+    if (size <= 2 || size > MAX_NDEF_DATA_FILE_SIZE) {
+      return false;
+    }
+    return (short)(size - 2) == Util.getShort(buf, off);
+  }
 }

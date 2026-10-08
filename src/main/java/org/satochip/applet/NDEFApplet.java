@@ -18,9 +18,13 @@ public class NDEFApplet extends Applet {
 
   private static final short NDEF_READ_SIZE = (short) 0xff;
 
+  // [size(1b) | CCLEN(2b) | mapping version(1b) | MLe(2b) | MLc(2b) |
+  //  NDEF file control TLV: T=04 L=06 | file id(2b) | max NDEF size(2b) | read access(1b) | write access(1b)]
   private static final byte[] NDEF_CAPS_FILE = {
           (byte) 0x0f, (byte) 0x00, (byte) 0x0f, (byte) 0x20, (byte) 0x00, (byte) 0xff, (byte) 0x00, (byte) 0x01,
-          (byte) 0x04, (byte) 0x06, (byte) 0xe1, (byte) 0x04, (byte) 0x04, (byte) 0x00, (byte) 0x00, (byte) 0xff
+          (byte) 0x04, (byte) 0x06, (byte) 0xe1, (byte) 0x04,
+          (byte) (SharedMemory.MAX_NDEF_DATA_FILE_SIZE >> 8), (byte) SharedMemory.MAX_NDEF_DATA_FILE_SIZE,
+          (byte) 0x00, (byte) 0xff
   };
 
   private short selectedFile;
@@ -52,11 +56,12 @@ public class NDEFApplet extends Applet {
     c9Off += (short)(bArray[c9Off] + 1); // Skip Privileges and parameter length
 
     short dataLen = Util.makeShort((byte) 0x00, bArray[c9Off]);
-    // [size(1b) | record] must fit in the shared NDEF buffer
-    if (dataLen >= SharedMemory.MAX_NDEF_DATA_FILE_SIZE) {
+    // the NDEF file [NLEN(2b) | record] must fit in the shared NDEF buffer
+    if (dataLen > SharedMemory.MAX_NDEF_DATA_FILE_SIZE) {
       ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
     }
-    if ((dataLen > 2) && ((short)(dataLen - 2) == Util.makeShort(bArray[(short)(c9Off + 1)], bArray[(short)(c9Off + 2)]))) {
+    // a malformed file is ignored: the default record is kept
+    if (SharedMemory.isValidNdefFile(bArray, (short)(c9Off + 1), dataLen)) {
       Util.arrayCopyNonAtomic(bArray, c9Off, SharedMemory.ndefDataFile, (short) 0, (short)(dataLen + 1));
     }
 

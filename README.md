@@ -166,7 +166,8 @@ The record can be changed in two ways:
   to get). Like every other Satochip command, it requires the secure channel, a completed setup and
   a validated PIN.
 
-The record is at most 224 bytes and is stored as `[size (1b) | NLEN (2b) | NDEF record]`.
+The NDEF file `[NLEN (2b) | NDEF record]` is at most 222 bytes, and NLEN must match the record size.
+It is stored as `[size (1b) | NLEN (2b) | NDEF record]`.
 
 ## Locking a card (DESTRUCTIVE)
 

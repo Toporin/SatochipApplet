@@ -1931,7 +1931,9 @@ public class Satochip extends javacard.framework.Applet {
                     if (ndef_size != (short)(bytes_left - 1)) {
                         ISOException.throwIt(SW_INVALID_PARAMETER);
                     }
-                    if (bytes_left>SharedMemory.ndefDataFile.length)
+                    // same checks as the NDEFApplet installer: [NLEN(2b) | record], within
+                    // MAX_NDEF_DATA_FILE_SIZE so that the get operation below can return it
+                    if (!SharedMemory.isValidNdefFile(buffer, (short)(buffer_offset + 1), ndef_size))
                         ISOException.throwIt(SW_INVALID_PARAMETER);
                     Util.arrayCopyNonAtomic(buffer, buffer_offset, SharedMemory.ndefDataFile, (short)0, bytes_left);
                 }

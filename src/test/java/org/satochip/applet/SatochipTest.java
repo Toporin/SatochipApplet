@@ -706,6 +706,20 @@ public class SatochipTest {
     // A record whose declared size disagrees with Lc must be refused.
     assertEquals(SW_INVALID_PARAMETER,
         cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x00, new byte[]{0x05, 0x01, 0x02}).getSw());
+    // NLEN must match the record that follows it, and the record must not be empty.
+    assertEquals(SW_INVALID_PARAMETER,
+        cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x00, Hex.decode("050004d00000")).getSw());
+    assertEquals(SW_INVALID_PARAMETER,
+        cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x00, Hex.decode("020000")).getSw());
+
+    // A large record round-trips: the get operation must be able to return it.
+    byte[] big = new byte[150];
+    big[1] = (byte) (big.length - 2);
+    byte[] bigPayload = concat(new byte[]{(byte) big.length}, big);
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x00, bigPayload).getSw());
+    APDUResponse bigRead = cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x01, new byte[0]);
+    assertEquals(SW_OK, bigRead.getSw());
+    assertArrayEquals(bigPayload, bigRead.getData());
 
     // A well-formed record round-trips.
     byte[] record = Hex.decode("0003d00000");           // NLEN(2) + a 3-byte empty NDEF record
@@ -727,7 +741,7 @@ public class SatochipTest {
   void ndefAppletTest() throws Exception {
     // Set a known record through the Satochip applet, then read it back through NDEFApplet, proving
     // SharedMemory really is shared between the two applet instances.
-    byte[] record = Hex.decode("0011d1010d55027361746f636869702e696f");  // URI "https://satochip.io"
+    byte[] record = Hex.decode("0010d1010c55027361746f636869702e696f");  // URI "https://satochip.io"
     byte[] payload = concat(new byte[]{(byte) record.length}, record);
     byte[] original = cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x01, new byte[0]).getData();
     assertEquals(SW_OK, cmdSet.sendRawSecure(INS_SET_NDEF, 0x00, 0x00, payload).getSw());
@@ -742,6 +756,9 @@ public class SatochipTest {
     javax.smartcardio.ResponseAPDU caps = transmitLe(0x00, 0xB0, 0x00, 0x00, 0x0F);
     assertEquals(SW_OK, caps.getSW());
     assertEquals(0x20, caps.getData()[2] & 0xff, "CC should declare mapping version 2.0");
+    assertEquals(SharedMemory.MAX_NDEF_DATA_FILE_SIZE,
+        ((caps.getData()[11] & 0xff) << 8) | (caps.getData()[12] & 0xff),
+        "CC should declare the real maximum NDEF file size");
 
     // NDEF data file, E104.
     assertEquals(SW_OK, transmit(0x00, 0xA4, 0x00, 0x0C, Hex.decode("E104")).getSW());
