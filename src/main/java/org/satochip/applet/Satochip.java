@@ -3108,6 +3108,8 @@ public class Satochip extends javacard.framework.Applet {
             // The 2FA app must recompute these values from the session context (aggnonce, pubkeys,
             // tweaks, message), never take them from the host.
             // the message is staged after the 144-byte encrypted secnonce in recvBuffer, to keep it intact
+            // reset first: importEncryptedSecret() can throw between its update() and doFinal()
+            sha256.reset();
             sha256.doFinal(buffer, ISO7816.OFFSET_CDATA, (short)66, recvBuffer, (short)144);
             Util.arrayFillNonAtomic(recvBuffer, (short)(144+32), (short)32, (byte)0xEE); // 0xEE for MuSig2 partial sig
             HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)144, (short)64, recvBuffer, (short)(144+64));
