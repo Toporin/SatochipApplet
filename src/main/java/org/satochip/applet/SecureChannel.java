@@ -73,8 +73,8 @@ class SecureChannel {
     private static final byte SIZE_SC_IV_COUNTER=SIZE_SC_IV-SIZE_SC_IV_RANDOM;
     private static final byte SIZE_SC_BUFFER=SIZE_SC_MACKEY+SIZE_SC_IV;
 
-    // session state
-    private boolean initialized_secure_channel = false;
+    // session state. The channel is open if and only if sc_sessionkey is initialized: there is no
+    // separate flag, which would have to be stored in EEPROM and written at every select
     private byte[] sc_buffer;
     private AESKey sc_sessionkey;
 
@@ -121,15 +121,12 @@ class SecureChannel {
         sc_sessionkey = Satochip.buildTransientAES128Key();
     }
 
-    /** Closes the channel (e.g. on applet selection): a new one must be initiated. */
+    /**
+     * Closes the channel and erases the session key (e.g. on applet selection or factory reset):
+     * a new channel must be initiated. The key is transient on most cards, so this writes RAM only.
+     */
     void close() {
-        initialized_secure_channel = false;
-    }
-
-    /** Closes the channel and erases the session key (factory reset). */
-    void clear() {
         sc_sessionkey.clearKey();
-        initialized_secure_channel = false;
     }
 
     /**
@@ -153,59 +150,67 @@ class SecureChannel {
         if (!Secp256k1.isOnCurve(buffer, ISO7816.OFFSET_CDATA, recvBuffer, (short)0))
             ISOException.throwIt(Satochip.SW_INVALID_PARAMETER);
 
-        // generate a new ephemeral key
-        if (ephemeral_privkey_transient) {
-            Secp256k1.setCommonCurveParameters(ephemeral_privkey);
+        // the session key is loaded below, before the response is complete: if a later step throws,
+        // the channel must stay closed (the client would not get the card's ephemeral pubkey anyway)
+        boolean opened = false;
+        try {
+            // generate a new ephemeral key
+            if (ephemeral_privkey_transient) {
+                Secp256k1.setCommonCurveParameters(ephemeral_privkey);
+            }
+            randomData.generateData(recvBuffer, (short)0, COORD_SIZE);
+            ephemeral_privkey.setS(recvBuffer, (short)0, COORD_SIZE); //random value first
+
+            // compute the shared secret...
+            keyAgreement.init(ephemeral_privkey);
+            keyAgreement.generateSecret(buffer, ISO7816.OFFSET_CDATA, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form
+            // derive sc_sessionkey & sc_mackey
+            HmacSha160.computeHmacSha160(recvBuffer, (short)1, COORD_SIZE, CST_SC, (short)6, (short)6, recvBuffer, (short)33);
+            Util.arrayCopyNonAtomic(recvBuffer, (short)33, sc_buffer, OFFSET_SC_MACKEY, SIZE_SC_MACKEY);
+            HmacSha160.computeHmacSha160(recvBuffer, (short)1, COORD_SIZE, CST_SC, (short)0, (short)6, recvBuffer, (short)33);
+            sc_sessionkey.setKey(recvBuffer,(short)33); // AES-128: 16-bytes key!!
+            // erase the shared secret and the derived keys from the scratch buffer
+            Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)65, (byte)0);
+
+            //reset IV counter
+            Util.arrayFillNonAtomic(sc_buffer, OFFSET_SC_IV, SIZE_SC_IV, (byte) 0);
+
+            // self signed ephemeral pubkey
+            keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
+            Util.setShort(buffer, (short)0, COORD_SIZE);
+            sigECDSA.init(ephemeral_privkey, Signature.MODE_SIGN);
+            short sign_size= sigECDSA.sign(buffer, (short)0, (short)(COORD_SIZE+2), buffer, (short)(COORD_SIZE+4));
+            Util.setShort(buffer, (short)(COORD_SIZE+2), sign_size);
+            // the ephemeral private key is not needed anymore (forward secrecy within the card
+            // session). A persistent fallback key keeps its value: clearKey() would also erase the
+            // curve parameters, which are only set again for transient keys.
+            if (ephemeral_privkey_transient) {
+                ephemeral_privkey.clearKey();
+            }
+
+            // hash signed by authentikey
+            short offset= (short)(2+COORD_SIZE+2+sign_size);
+            sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
+            short sign2_size= sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
+            Util.setShort(buffer, offset, sign2_size);
+            offset+=(short)(2+sign2_size);
+
+            // add coordx for authentikey (allows for non-ambiguous recovery of pubkey using signature)
+            authentikey_public.getW(buffer, (short)(offset+1));
+            Util.setShort(buffer, offset, COORD_SIZE);
+            offset+=(short)(2+COORD_SIZE);
+
+            opened = true;
+
+            // return x-coordinate of public key+signature
+            // the client can recover full public-key from the signature or
+            // by guessing the compression value () and verifying the signature...
+            // buffer= [coordx_size(2b) | ephemeralkey_coordx | sig_size(2b) | self_sig | sig2_size | authentikey_sig | coordx_size(2b) | authentikey_coordx]
+            return offset;
+        } finally {
+            if (!opened)
+                close();
         }
-        randomData.generateData(recvBuffer, (short)0, COORD_SIZE);
-        ephemeral_privkey.setS(recvBuffer, (short)0, COORD_SIZE); //random value first
-
-        // compute the shared secret...
-        keyAgreement.init(ephemeral_privkey);
-        keyAgreement.generateSecret(buffer, ISO7816.OFFSET_CDATA, (short) 65, recvBuffer, (short)0); //pubkey in uncompressed form
-        // derive sc_sessionkey & sc_mackey
-        HmacSha160.computeHmacSha160(recvBuffer, (short)1, COORD_SIZE, CST_SC, (short)6, (short)6, recvBuffer, (short)33);
-        Util.arrayCopyNonAtomic(recvBuffer, (short)33, sc_buffer, OFFSET_SC_MACKEY, SIZE_SC_MACKEY);
-        HmacSha160.computeHmacSha160(recvBuffer, (short)1, COORD_SIZE, CST_SC, (short)0, (short)6, recvBuffer, (short)33);
-        sc_sessionkey.setKey(recvBuffer,(short)33); // AES-128: 16-bytes key!!
-        // erase the shared secret and the derived keys from the scratch buffer
-        Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)65, (byte)0);
-
-        //reset IV counter
-        Util.arrayFillNonAtomic(sc_buffer, OFFSET_SC_IV, SIZE_SC_IV, (byte) 0);
-
-        // self signed ephemeral pubkey
-        keyAgreement.generateSecret(Secp256k1.SECP256K1, Secp256k1.OFFSET_SECP256K1_G, (short) 65, buffer, (short)1); //pubkey in uncompressed form
-        Util.setShort(buffer, (short)0, COORD_SIZE);
-        sigECDSA.init(ephemeral_privkey, Signature.MODE_SIGN);
-        short sign_size= sigECDSA.sign(buffer, (short)0, (short)(COORD_SIZE+2), buffer, (short)(COORD_SIZE+4));
-        Util.setShort(buffer, (short)(COORD_SIZE+2), sign_size);
-        // the ephemeral private key is not needed anymore (forward secrecy within the card
-        // session). A persistent fallback key keeps its value: clearKey() would also erase the
-        // curve parameters, which are only set again for transient keys.
-        if (ephemeral_privkey_transient) {
-            ephemeral_privkey.clearKey();
-        }
-
-        // hash signed by authentikey
-        short offset= (short)(2+COORD_SIZE+2+sign_size);
-        sigECDSA.init(authentikey_private, Signature.MODE_SIGN);
-        short sign2_size= sigECDSA.sign(buffer, (short)0, offset, buffer, (short)(offset+2));
-        Util.setShort(buffer, offset, sign2_size);
-        offset+=(short)(2+sign2_size);
-
-        // add coordx for authentikey (allows for non-ambiguous recovery of pubkey using signature)
-        authentikey_public.getW(buffer, (short)(offset+1));
-        Util.setShort(buffer, offset, COORD_SIZE);
-        offset+=(short)(2+COORD_SIZE);
-
-        initialized_secure_channel= true;
-
-        // return x-coordinate of public key+signature
-        // the client can recover full public-key from the signature or
-        // by guessing the compression value () and verifying the signature...
-        // buffer= [coordx_size(2b) | ephemeralkey_coordx | sig_size(2b) | self_sig | sig2_size | authentikey_sig | coordx_size(2b) | authentikey_coordx]
-        return offset;
     }
 
     /**
@@ -228,7 +233,7 @@ class SecureChannel {
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         short offset = ISO7816.OFFSET_CDATA;
 
-        if (!initialized_secure_channel){
+        if (!sc_sessionkey.isInitialized()){
             ISOException.throwIt(SW_SECURE_CHANNEL_UNINITIALIZED);
         }
 
@@ -267,7 +272,7 @@ class SecureChannel {
         if (Biginteger.add1_carry(sc_buffer, OFFSET_SC_IV_COUNTER, SIZE_SC_IV_COUNTER)){
             // the counter wrapped to 0, which would make old counters acceptable again:
             // the session is exhausted, a new one must be initiated
-            initialized_secure_channel = false;
+            close();
             ISOException.throwIt(SW_SECURE_CHANNEL_WRONG_IV);
         }
         randomData.generateData(sc_buffer, OFFSET_SC_IV_RANDOM, SIZE_SC_IV_RANDOM);

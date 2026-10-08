@@ -1115,7 +1115,7 @@ public class Satochip extends javacard.framework.Applet {
         Util.arrayFillNonAtomic(data2FA, (short)0,(short)data2FA.length, (byte)0);
 
         // secure channel session key
-        secureChannel.clear();
+        secureChannel.close();
 
         // reset NFC policy to enabled
         nfc_policy = NFC_ENABLED;

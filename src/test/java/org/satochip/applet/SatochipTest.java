@@ -390,6 +390,30 @@ public class SatochipTest {
   }
 
   @Test
+  @DisplayName("SELECT and a failed INIT both close the secure channel")
+  void secureChannelCloseTest() throws Exception {
+    final int SW_SECURE_CHANNEL_UNINITIALIZED = 0x9C21;
+    final byte INS_INIT_SECURE_CHANNEL = (byte) 0x81;
+
+    // a command of the current session, sent after a SELECT: the session key is gone
+    APDUCommand encrypted = cmdSet.encrypt(INS_GET_RANDOM, 8, 0x00, new byte[0]);
+    cmdSet.cardSelect().checkOK();
+    assertEquals(SW_SECURE_CHANNEL_UNINITIALIZED, cmdSet.replay(encrypted).getSw(),
+        "a SELECT must close the secure channel");
+    resetSession();
+
+    // an INIT that fails closes the previous channel too, and does not open a new one
+    encrypted = cmdSet.encrypt(INS_GET_RANDOM, 8, 0x00, new byte[0]);
+    byte[] badPoint = new byte[65];
+    badPoint[0] = 0x05; // not an uncompressed point
+    assertEquals(SW_INVALID_PARAMETER,
+        cmdSet.sendRawPlain(INS_INIT_SECURE_CHANNEL, 0x00, 0x00, badPoint).getSw());
+    assertEquals(SW_SECURE_CHANNEL_UNINITIALIZED, cmdSet.replay(encrypted).getSw(),
+        "a failed INIT must leave the secure channel closed");
+    resetSession();
+  }
+
+  @Test
   @DisplayName("Replaying an encrypted command is rejected")
   void secureChannelReplayTest() throws Exception {
     APDUCommand encrypted = cmdSet.encrypt(INS_GET_RANDOM, 8, 0x00, new byte[0]);
