@@ -1214,11 +1214,21 @@ public class Satochip extends javacard.framework.Applet {
             ISOException.throwIt(SW_INCORRECT_ALG);
         if (key.getSize() != LENGTH_EC_FP_256)
             ISOException.throwIt(SW_INCORRECT_ALG);
-        // check the curve parameters integrity (countermeasure against fault
-        // injection / curve substitution attacks; uses tmpBuffer as scratch)
-        if(!Secp256k1.checkCurveParameters((ECPrivateKey)key, tmpBuffer, (short)0))
-            ISOException.throwIt(SW_INCORRECT_ALG);
+        checkKeyCurve((ECPrivateKey) key);
         return (ECPrivateKey) key;
+    }
+
+    /**
+     * Checks the integrity of the secp256k1 parameters of a private key before it is used:
+     * countermeasure against fault injection / curve substitution attacks. Applied to every key
+     * used for signing: keyslots (getInitializedECKey()), the BIP32 extended key
+     * (getSigningKey()) and the taproot tweaked key (SignSchnorrHash()).
+     * Note: uses tmpBuffer as scratch (first 65 bytes).
+     * @throws ISOException SW_INCORRECT_ALG if the curve parameters have been altered
+     */
+    private void checkKeyCurve(ECPrivateKey key) {
+        if (!Secp256k1.checkCurveParameters(key, tmpBuffer, (short)0))
+            ISOException.throwIt(SW_INCORRECT_ALG);
     }
 
     /**
@@ -1226,12 +1236,14 @@ public class Satochip extends javacard.framework.Applet {
      * last derived BIP32 extended key (0xFF), or the key stored in the given keyslot.
      * Only signing operations accept 0xFF: keyslot management (ImportKey, ResetKey,
      * getPublicKeyFromPrivate) uses getUninitializedKey()/getInitializedECKey() directly.
-     * Note: uses tmpBuffer as scratch (see getInitializedECKey()).
+     * Either way, the curve parameters of the key are checked (see checkKeyCurve()).
+     * Note: uses tmpBuffer as scratch (see checkKeyCurve()).
      *
      * @param key_nb the keyslot number (0x00-0x0F), or 0xFF for the BIP32 extended key
      * @throws ISOException SW_INCORRECT_P1 if key_nb is out of range or the keyslot is empty,
      *         SW_BIP32_UNINITIALIZED_SEED if 0xFF is selected but no seed is imported,
-     *         SW_INCORRECT_INITIALIZATION if 0xFF is selected but no key has been derived yet
+     *         SW_INCORRECT_INITIALIZATION if 0xFF is selected but no key has been derived yet,
+     *         SW_INCORRECT_ALG if the curve parameters of the key have been altered
      */
     private ECPrivateKey getSigningKey(byte key_nb) {
         if (key_nb==(byte)0xFF){
@@ -1241,6 +1253,7 @@ public class Satochip extends javacard.framework.Applet {
             // otherwise using the key would throw an uncaught CryptoException (0x6F00)
             if (!bip32_extendedkey.isInitialized())
                 ISOException.throwIt(SW_INCORRECT_INITIALIZATION);
+            checkKeyCurve(bip32_extendedkey);
             return bip32_extendedkey;
         }
         return getInitializedECKey(key_nb);
@@ -2682,6 +2695,7 @@ public class Satochip extends javacard.framework.Applet {
         // factory reset, which both clear the tweaked key.
         if (!taproot_tweakedkey.isInitialized())
             ISOException.throwIt(SW_INCORRECT_INITIALIZATION);
+        checkKeyCurve(taproot_tweakedkey);
 
         short bytesLeft = Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC]);
         if (bytesLeft<MessageDigest.LENGTH_SHA_256)
