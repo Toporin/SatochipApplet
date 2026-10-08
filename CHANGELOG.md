@@ -127,6 +127,7 @@ This version will be bumped to v0.16-0.1 once all identified issues have been pa
   * HmacSha160 fills and copies its scratch buffer with Util.arrayFillNonAtomic()/arrayCopyNonAtomic() instead of byte loops, like HmacSha512 (it runs twice for every secure channel command).
   * Secp256k1.isOnCurve() computes x^2 and y^2 with one RSA operation each (new Biginteger.square_rsa()) instead of three, saving 4 of the 9 RSA operations of each secure channel initiation.
   * Removed dead code and constants: the `eckeys_flag` field (written on every key import/reset, never read), Biginteger.shrink() and the mod() loop counters, SW_DEBUG_FLAG, the unused constants of Secp256k1, and the local redefinitions of ALG_ECDSA_SHA_256, LENGTH_EC_FP_256 and TYPE_AES_TRANSIENT_* (available in the 3.0.4 API); removed unused imports.
+  * Biginteger: the scratch buffers and FLAG_FAST_MULT_VIA_RSA are now package-private, and the RSA key, cipher and exponent constant private (they were public mutable statics). Removed the unused carry results and stale TODOs of mult_rsa_trick(), whose documentation now describes the actual method. lessThan() and equalZero() are documented as not constant time, for public data only, with lessThanCT() and isZeroCT() to be used on secrets.
   * SecureChannel: the response is copied to the scratch buffer non-atomically, and a redundant length check is removed. The IV counter update stays atomic on purpose (sc_buffer falls back to EEPROM on cards without enough transient memory).
 
 ## [0.15-0.1]

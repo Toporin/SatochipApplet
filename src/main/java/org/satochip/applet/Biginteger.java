@@ -45,15 +45,16 @@ public class Biginteger {
      */
     public static final short positive_double_digit_mask = 0x7fff;
     
-    // tmp array
-    // warning: buffers should be same size to facilitate computations
-    public static final short BUFFER_SIZE = (short)96;//65 is not OK => FLAG_FAST_MULT_VIA_RSA is false; // TODO: optimise size
-    public static byte[] buffer1;
-    public static byte[] buffer2;
+    // scratch buffers, both of the RSA engine size (768 bits): the RSA operations work on whole
+    // buffers. Package-private: Satochip erases them after a signature (clearSigningScratch()).
+    public static final short BUFFER_SIZE = (short)96;
+    static byte[] buffer1;
+    static byte[] buffer2;
     
-    // Helper objects for fast multiplication of two large numbers (without modulo)
-    public static boolean FLAG_FAST_MULT_VIA_RSA = false;
-    public static byte[] CONST_TWO = {0x02};
+    // Helper objects for fast multiplication of two large numbers (without modulo).
+    // The flag is set once by init(), and read by Secp256k1 and Satochip.
+    static boolean FLAG_FAST_MULT_VIA_RSA = false;
+    private static final byte[] CONST_TWO = {0x02};
     /**
      * Modulus of rsa_pubkey_pow2: a 768-bit RSA modulus (two 384-bit primes), generated once offline
      * with its private key discarded. Its factors play no role: the engine only computes exact
@@ -76,8 +77,8 @@ public class Biginteger {
         (byte)0xBD, (byte)0x51, (byte)0xE7, (byte)0xFC, (byte)0xDD, (byte)0xE1, (byte)0x40, (byte)0x07
     };
     
-    public static RSAPublicKey rsa_pubkey_pow2 = null;
-    public static Cipher rsa_cipher = null;
+    private static RSAPublicKey rsa_pubkey_pow2 = null;
+    private static Cipher rsa_cipher = null;
     
     // initialize static objects. Should be done only once, e.g. in applet constructor
     public static void init(){
@@ -201,11 +202,14 @@ public class Biginteger {
      * operands are stored Most Significant Byte First
      * size is the size in bytes of the operands (should be same size, padded with 0..0 if needed) 
      * returns true if x is strictly smaller than y, false otherwise
+     * <P>
+     * NOT constant time: returns at the first differing byte, so its running time reveals the
+     * position of that byte. Use it on public data only (e.g. counters, public keys, hashes of
+     * public data). For secret operands (keys, nonces), use {@link #lessThanCT}.
      */
     public static boolean lessThan(byte[] x, short offsetx, byte[] y, short offsety, short size) {
         
         short xs, ys;
-        //TODO: make it time-constant!
         for(short i = offsetx, j=offsety; i < (short)(offsetx+size); i++, j++) {
             xs= (short)(x[i] & digit_mask);
             ys= (short)(y[j] & digit_mask);
@@ -221,9 +225,11 @@ public class Biginteger {
     * operands are stored Most Significant Byte First (big-endian)
     * size is the size in bytes of the operand 
     * returns true if x is equal to 0, false otherwise
+    * <P>
+    * NOT constant time: returns at the first non-zero byte. Use it on public data only.
+    * For secret operands (keys, nonces), use {@link #isZeroCT}.
     */
     public static boolean equalZero(byte[] x, short offsetx, short size) {
-        // todo: make it time constant!
         for(short i = offsetx; i < (short)(offsetx+size); i++) {
             if(x[i] != 0) return false;
         }
@@ -232,7 +238,9 @@ public class Biginteger {
     
     /*
      * Constant-time variants, for secret operands: no branch and no early exit depends on the
-     * value of the operands (only on their size).
+     * value of the operands (only on their size). They must be used whenever an operand is
+     * sensitive (private keys, nonces, derived secrets): lessThanCT() instead of lessThan(),
+     * isZeroCT() instead of equalZero().
      */
 
     /**
@@ -285,37 +293,24 @@ public class Biginteger {
         }
     }
 
-    /**
-     *  UNDER CONSTRUCTION   
+    /*
      *  Biginteger multiplication and modulo computation
      *  Based on https://github.com/OpenCryptoProject/JCMathLib
      *  Code simplified to only support methods necessary for multiplication and modulo
      */
     
     /**
-     * Performs multiplication of two bignats x and y and stores result into z. 
-     * RSA engine is used to speedup operation for large values.
-     * Idea of speedup: 
-     * We need to mutiply x.y where both x and y are 32B 
-     * (x + y)^2 == x^2 + y^2 + 2xy 
-     * Fast RSA engine is available (a^b mod n) 
-     * n can be set bigger than 64B => a^b mod n == a^b 
-     * [(x + y)^2 mod n] - [x^2 mod n] - [y^2 mod n] => 2xy where [] means single RSA operation 
-     * 2xy / 2 => result of mult(x,y) 
-     * Note: if multiplication is used with either x or y argument same repeatedly, 
-     * [x^2 mod n] or [y^2 mod n] can be precomputed and passed as arguments x_pow_2 or y_pow_2
+     * Computes z = x*y with three squarings on the RSA engine (exponent 2):
+     *      (x + y)^2 - x^2 - y^2 = 2xy, then a one-bit right shift gives xy.
+     * The squares are exact (no reduction) as long as they stay below the modulus (>= 2^767),
+     * i.e. x + y < 2^383: callers keep size <= 47 bytes, so that no subtraction can underflow.
      *
-     * @param x first value to multiply
-     * @param y second value to multiply
-     * @param x_pow_2 if not null, array with precomputed value x^2 is expected
-     * @param y_pow_2 if not null, array with precomputed value y^2 is expected
-     * @return z size
+     * @param x, offsetx first operand (size bytes, Most Significant Byte First)
+     * @param y, offsety second operand (size bytes)
+     * @param z, offsetz receives the product, BUFFER_SIZE (96) bytes
+     * @return BUFFER_SIZE, the size of the product
      */
     public static short mult_rsa_trick(byte[] x, short offsetx, byte[] y, short offsety, short size, byte[] z, short offsetz) {
-        // todo: 
-        //check z size >= sizex*2
-        // check size x, y
-        
         // x+y => buffer1
         Util.arrayFillNonAtomic(buffer1, (short) 0, (short) buffer1.length, (byte) 0);
         
@@ -328,34 +323,26 @@ public class Biginteger {
         Util.arrayFillNonAtomic(buffer2, (short) 0, (short) buffer2.length, (byte) 0);
         Util.arrayCopyNonAtomic(y, offsety, buffer2, offsetb2, size);
         
-        // add y into buffer1
-        boolean carry= add_carry(buffer1, (short)0, buffer2, (short)0, (short)buffer1.length);
-        // should be no carry since buffer are sufficiently large
+        // add y into buffer1 (no carry: the operands are much smaller than the buffers)
+        add_carry(buffer1, (short)0, buffer2, (short)0, (short)buffer1.length);
         
         // ((x+y)^2) => buffer1
-        rsa_cipher.doFinal(buffer1, (byte) 0, (short) buffer1.length, buffer1, (short) 0);
+        rsa_cipher.doFinal(buffer1, (short) 0, (short) buffer1.length, buffer1, (short) 0);
         
-        // y^2 => buffer2
-        // y is already present in buffer2
-        //Util.arrayFillNonAtomic(buffer2, (short) 0, (short) buffer2.length, (byte) 0);
-        //offsetb2= (short) (buffer2.length - size);
-        //Util.arrayCopyNonAtomic(y, offsety, buffer2, offsetb2, size);
-        rsa_cipher.doFinal(buffer2, (byte) 0, (short) buffer2.length, buffer2, (short) 0);
+        // y^2 => buffer2 (y is already present in buffer2)
+        rsa_cipher.doFinal(buffer2, (short) 0, (short) buffer2.length, buffer2, (short) 0);
         
-        // ((x+y)^2) - y^2 => buffer1
-        carry= subtract(buffer1, (short)0, buffer2, (short)0, (short)buffer1.length);
-        // todo: carry should be false
+        // ((x+y)^2) - y^2 => buffer1 (no borrow: (x+y)^2 >= y^2)
+        subtract(buffer1, (short)0, buffer2, (short)0, (short)buffer1.length);
         
         // x^2 => buffer2
-        // todo: support x^2 precomputation if reused multiple times
         Util.arrayFillNonAtomic(buffer2, (short) 0, (short) buffer2.length, (byte) 0);
         offsetb2= (short) (buffer2.length - size);
         Util.arrayCopyNonAtomic(x, offsetx, buffer2, offsetb2, size);
-        rsa_cipher.doFinal(buffer2, (byte) 0, (short) buffer2.length, buffer2, (short) 0);
+        rsa_cipher.doFinal(buffer2, (short) 0, (short) buffer2.length, buffer2, (short) 0);
             
-        // ((x+y)^2) - y^2 - x^2 => buffer1
-        carry= subtract(buffer1, (short)0, buffer2, (short)0, (short)buffer1.length);
-        // todo: carry should be false
+        // ((x+y)^2) - y^2 - x^2 => buffer1 (no borrow: the result is 2xy >= 0)
+        subtract(buffer1, (short)0, buffer2, (short)0, (short)buffer1.length);
         
         // we now have 2xy in buffer1, divide it by 2 => shift by one bit and fill back into z
         short res = 0;
@@ -365,15 +352,13 @@ public class Biginteger {
             res = (short) (res >> 1);
             res2 = (short) (buffer1[(short)(offset - 1)] & 0xff);
             res2 = (short) (res2 << 7);
-            z[(short)(offsetz+offset)] = (byte) (short) (res | res2);
+            z[(short)(offsetz+offset)] = (byte) (res | res2);
         }
         res = (short) (buffer1[0] & 0xff);
         res = (short) (res >> 1);
         z[offsetz]= (byte)res;
         return (short)buffer1.length;
-        
-        // todo: optimization: for 32bytes mult, bytes 0 to 31 (out of 96) should be 0 => skip computations?
-    }    
+    }
     
     /**
      * Computes z = x^2 with a single RSA operation (x^2 mod n == x^2, since n is larger than 2^512).
@@ -588,7 +573,7 @@ public class Biginteger {
      *         {@link #double_digit_len} for {@code x == 0}.
      */
     private static short highest_bit(short x) {
-        // todo: make it time constant!
+        // not constant time, like the rest of mod(): callers blind secret operands (see mod())
         for (short i = 0; i < double_digit_len; i++) {
             if (x < 0) {
                 return i;
