@@ -23,7 +23,7 @@ package org.satochip.applet;
 import javacard.framework.JCSystem;
 import javacard.framework.SystemException;
 import javacard.framework.Util;
-import javacard.security.KeyPair;
+import javacard.security.KeyBuilder;
 import javacard.security.RSAPublicKey;
 import javacardx.crypto.Cipher;
 
@@ -53,10 +53,29 @@ public class Biginteger {
     
     // Helper objects for fast multiplication of two large numbers (without modulo)
     public static boolean FLAG_FAST_MULT_VIA_RSA = false;
-    public static short MULT_RSA_ENGINE_MAX_LENGTH_BITS= (short) 768; 
     public static byte[] CONST_TWO = {0x02};
+    /**
+     * Modulus of rsa_pubkey_pow2: a 768-bit RSA modulus (two 384-bit primes), generated once offline
+     * with its private key discarded. Its factors play no role: the engine only computes exact
+     * squares x^2 < 2^767 < n, which never wrap around. A genuine RSA modulus (odd, composite, no
+     * small prime factor) is used rather than e.g. 2^768-1, which is divisible by 3: implementations
+     * may validate the modulus (BouncyCastle, hence the simulator, refuses a small prime factor).
+     */
+    private static final byte[] RSA_SQUARING_MODULUS = {
+        (byte)0xC0, (byte)0x81, (byte)0x73, (byte)0xB5, (byte)0x3B, (byte)0xB3, (byte)0x1B, (byte)0x96,
+        (byte)0x96, (byte)0x66, (byte)0x56, (byte)0x1E, (byte)0x93, (byte)0x85, (byte)0x2E, (byte)0xBF,
+        (byte)0x32, (byte)0x05, (byte)0xFD, (byte)0x51, (byte)0x7C, (byte)0x31, (byte)0x90, (byte)0x99,
+        (byte)0x02, (byte)0xFF, (byte)0x3F, (byte)0xE4, (byte)0x3F, (byte)0x3B, (byte)0xE0, (byte)0x0D,
+        (byte)0x26, (byte)0x43, (byte)0x08, (byte)0x9E, (byte)0x09, (byte)0xE7, (byte)0xEE, (byte)0x60,
+        (byte)0xB0, (byte)0x8B, (byte)0x13, (byte)0x8D, (byte)0xAF, (byte)0x31, (byte)0xCB, (byte)0x13,
+        (byte)0xD9, (byte)0xDB, (byte)0x36, (byte)0x02, (byte)0xDC, (byte)0xC3, (byte)0xC1, (byte)0x5A,
+        (byte)0xCD, (byte)0xC5, (byte)0xA9, (byte)0x02, (byte)0x33, (byte)0xA7, (byte)0x9F, (byte)0x39,
+        (byte)0x21, (byte)0xAE, (byte)0x8F, (byte)0xEF, (byte)0x0A, (byte)0x89, (byte)0x11, (byte)0x59,
+        (byte)0xE6, (byte)0x05, (byte)0xC7, (byte)0x52, (byte)0x1B, (byte)0x67, (byte)0x15, (byte)0x2E,
+        (byte)0x6F, (byte)0x57, (byte)0xC3, (byte)0x04, (byte)0x9A, (byte)0xC0, (byte)0x53, (byte)0x68,
+        (byte)0xBD, (byte)0x51, (byte)0xE7, (byte)0xFC, (byte)0xDD, (byte)0xE1, (byte)0x40, (byte)0x07
+    };
     
-    public static KeyPair rsa_keypair = null;
     public static RSAPublicKey rsa_pubkey_pow2 = null;
     public static Cipher rsa_cipher = null;
     
@@ -73,23 +92,28 @@ public class Biginteger {
         } catch (SystemException e) {
             buffer2 = new byte[BUFFER_SIZE];
         }
-        // RSA engine for fast multiplication
-        rsa_keypair = new KeyPair(KeyPair.ALG_RSA_CRT, MULT_RSA_ENGINE_MAX_LENGTH_BITS);
-        rsa_keypair.genKeyPair();
-        rsa_pubkey_pow2 = (RSAPublicKey) rsa_keypair.getPublic();
+        // RSA engine for fast squaring: with exponent 2, the engine computes x^2 mod n, which is
+        // x^2 itself whenever x^2 < n. Any 768-bit (BUFFER_SIZE bytes) modulus works, so no key
+        // pair is generated: a public key with a constant modulus is enough. This saves the RSA
+        // key generation at install and the storage of an unused private key.
+        rsa_pubkey_pow2 = (RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_768, false);
+        rsa_pubkey_pow2.setModulus(RSA_SQUARING_MODULUS, (short) 0, (short) RSA_SQUARING_MODULUS.length);
         rsa_pubkey_pow2.setExponent(CONST_TWO, (short) 0, (short) CONST_TWO.length);
         rsa_cipher = Cipher.getInstance(Cipher.ALG_RSA_NOPAD, false);
 
         FLAG_FAST_MULT_VIA_RSA = false; // set true only if succesfully allocated and tested below
         try { // Subsequent code may fail on some real (e.g., Infineon CJTOP80K) cards - catch exception
             rsa_cipher.init(rsa_pubkey_pow2, Cipher.MODE_ENCRYPT);
-            // Try operation - if doesn't work, exception SW_CANTALLOCATE_BIGNAT is emitted
-            Util.arrayFillNonAtomic(buffer1, (short) 0, (short) buffer1.length, (byte) 6);
-            rsa_cipher.doFinal(buffer1, (short) 0, (short) buffer1.length, buffer1, (short) 0);
-            FLAG_FAST_MULT_VIA_RSA = true;
+            // self-test: the engine must really compute a plain square (3^2 = 9), otherwise the
+            // Schnorr/MuSig2 arithmetic would silently produce invalid signatures
+            Util.arrayFillNonAtomic(buffer1, (short) 0, BUFFER_SIZE, (byte) 0);
+            buffer1[(short)(BUFFER_SIZE-1)] = (byte) 3;
+            rsa_cipher.doFinal(buffer1, (short) 0, BUFFER_SIZE, buffer1, (short) 0);
+            buffer1[(short)(BUFFER_SIZE-1)] ^= (byte) 9;
+            FLAG_FAST_MULT_VIA_RSA = equalZero(buffer1, (short) 0, BUFFER_SIZE);
         } catch (Exception ignored) {
-        } // discard exception      
-        
+        } // discard exception
+        Util.arrayFillNonAtomic(buffer1, (short) 0, BUFFER_SIZE, (byte) 0);
     }
     
     /**
@@ -354,7 +378,7 @@ public class Biginteger {
     /**
      * Computes z = x^2 with a single RSA operation (x^2 mod n == x^2, since n is larger than 2^512).
      * x is a size-byte operand (size <= 47: x^2 must stay below the 768-bit modulus, which is
-     * only guaranteed to be >= 2^767), z receives 96 bytes (BUFFER_SIZE).
+     * >= 2^767), z receives 96 bytes (BUFFER_SIZE).
      * Used by Secp256k1.isOnCurve(), on public operands.
      */
     public static short square_rsa(byte[] x, short offsetx, short size, byte[] z, short offsetz) {
