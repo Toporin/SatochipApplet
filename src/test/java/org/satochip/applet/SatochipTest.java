@@ -1001,17 +1001,26 @@ public class SatochipTest {
       assertEquals(SW_INCORRECT_P1, cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, TEST_SLOT, 0x00,
           concat(hash, HMAC_FLAG_2FA, hmac2FA(hash, 0xCC))).getSw(), "the slot should be empty again");
 
-      // --- MuSig2: [b | ea | r | g | 0x8000 | hmac(b | 0xEE*32)]
+      // --- MuSig2: [b | ea | r | g | 0x8000 | hmac(sha256(b | ea | r | g) | 0xEE*32)]
       if (FeaturePolicyCondition.availableCapabilities.contains("musig2")) {
         byte[] secnonce = musig2NewSecnonce("m/86'/0'/0'/0/0");
         byte[] b = sha256("b".getBytes());
         byte[] ctx = concat(b, sha256("ea".getBytes()), new byte[]{0x00, 0x01});
+        byte[] otherEa = concat(b, sha256("ea of another message".getBytes()), new byte[]{0x00, 0x01});
+        byte[] otherFlags = concat(b, sha256("ea".getBytes()), new byte[]{0x00, 0x00});
         assertEquals(SW_OK, cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_INIT, secnonce).getSw());
         assertEquals(SW_SIGNATURE_INVALID, cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_FINALIZE,
-            concat(ctx, HMAC_FLAG_2FA, hmac2FA(b, 0xCC))).getSw());
+            concat(ctx, HMAC_FLAG_2FA, hmac2FA(sha256(ctx), 0xCC))).getSw());
+        // the former format (b alone) is refused, and the approval covers e*a and the flags
+        assertEquals(SW_SIGNATURE_INVALID, cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_FINALIZE,
+            concat(ctx, HMAC_FLAG_2FA, hmac2FA(b, 0xEE))).getSw());
+        assertEquals(SW_SIGNATURE_INVALID, cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_FINALIZE,
+            concat(otherEa, HMAC_FLAG_2FA, hmac2FA(sha256(ctx), 0xEE))).getSw());
+        assertEquals(SW_SIGNATURE_INVALID, cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_FINALIZE,
+            concat(otherFlags, HMAC_FLAG_2FA, hmac2FA(sha256(ctx), 0xEE))).getSw());
         // a failed 2FA attempt must not consume the secnonce id
         sw = cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_FINALIZE,
-            concat(ctx, HMAC_FLAG_2FA, hmac2FA(b, 0xEE))).getSw();
+            concat(ctx, HMAC_FLAG_2FA, hmac2FA(sha256(ctx), 0xEE))).getSw();
         assertNotEquals(SW_BIP327_INVALID_ID, sw);
         assertNotEquals(SW_SIGNATURE_INVALID, sw);
         if (FeaturePolicyCondition.availableCapabilities.contains("rsaMult")) {
@@ -1086,6 +1095,13 @@ public class SatochipTest {
     assertEquals(SW_OK, cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_INIT, tampered).getSw());
     assertEquals(SW_BIP327_WRONG_SECNONCE,
         cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_FINALIZE, ctx).getSw());
+
+    // flags other than 0x00/0x01 are refused, without consuming the id
+    for (byte[] f : new byte[][]{{0x02, 0x01}, {0x00, (byte) 0xFF}}) {
+      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_INIT, secnonce).getSw());
+      assertEquals(SW_INVALID_PARAMETER, cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_FINALIZE,
+          concat(Arrays.copyOf(ctx, 64), f)).getSw(), "flags " + Hex.toHexString(f));
+    }
 
     // the secnonce is bound to the key it was generated for
     cmdSet.cardBip32GetExtendedKeyRaw("m/86'/0'/0'/0/2");

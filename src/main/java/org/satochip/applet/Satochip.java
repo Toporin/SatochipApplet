@@ -494,7 +494,8 @@ public class Satochip extends javacard.framework.Applet {
      * - 2FA reset (reset2FAKey):            [ 20b 2FA_ID  | 44-byte 0xAA-padding ]  
      * - Hash signing (SignTransactionHash): [ 32b Hash | 32-byte 0xCC-padding ]
      * - Schnorr hash (SignSchnorrHash):     [ 32b Hash | 32-byte 0xDD-padding ]
-     * - MuSig2 sign (Musig2SignHash):       [ 32b nonce coefficient b | 32-byte 0xEE-padding ]
+     * - MuSig2 sign (Musig2SignHash):       [ 32b sha256(b | e*a | has_even_y(R) | g*gacc) | 32-byte 0xEE-padding ]
+     *   (the hash covers the 66 bytes of signing data, as sent in the APDU; see Musig2SignHash)
      *  */ 
     
     // 2FA msg encryption
@@ -3048,6 +3049,8 @@ public class Satochip extends javacard.framework.Applet {
      *
      * data (init): [encrypted secnonce(112b) | iv(16b) | mac(16b)]
      * data (finalize): [b(32b) | e*a(32b) | has_even_y(R) (1b) | g*gacc (1b) | (option)2FA-flag(2b) | (option)2FA-hmac(20b)]
+     *   has_even_y(R): 0x00 if R has an even y, 0x01 if odd; g*gacc: 0x01 if 1, 0x00 if -1 (other values are rejected)
+     *   2FA-hmac: over [ sha256(b | e*a | has_even_y(R) | g*gacc) | 32-byte 0xEE-padding ]
      *
      * return (init): []
      * return (finalize): [psig(32b)]
@@ -3083,6 +3086,10 @@ public class Satochip extends javacard.framework.Applet {
         if (bytesLeft<66){
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         }
+        // the flags must be 0x00 or 0x01, so that each signing context has a single encoding
+        // (and a single 2FA hash). Checked before the secnonce is validated, like 2FA below.
+        if (((buffer[OFFSET_BIP327_SIGN_R_EVENNESS] | buffer[OFFSET_BIP327_SIGN_GGAC]) & (byte)0xFE) != 0)
+            ISOException.throwIt(SW_INVALID_PARAMETER);
 
         // check 2FA if required
         // done before secnonce validation, so that a failed 2FA attempt does not invalidate the secnonce id
@@ -3094,14 +3101,14 @@ public class Satochip extends javacard.framework.Applet {
             short hmac_flags= Util.getShort(buffer, (short)(ISO7816.OFFSET_CDATA+66));
             if (hmac_flags!=HMAC_CHALRESP_2FA)
                 ISOException.throwIt(SW_INCORRECT_ALG);
-            // hmac of 64-bytes msg: ( 32bytes nonce coefficient b | 32bytes 0xEE-padding)
-            // b commits to the MuSig2 session (aggnonce, aggpk, message) and plays the role of the signed hash
-            // LIMITATION: the HMAC does not cover e*a, which the client also provides and which carries
-            // the challenge e = H(R|Q|m). A compromised host holding an approval of b for a message m can
-            // submit the e*a of another message m', and with a co-signer it controls, obtain a valid
-            // signature for m'. Fixing this requires the 2FA app to approve [b | e*a | flags] instead.
+            // hmac of 64-bytes msg: ( 32bytes sha256(b | e*a | has_even_y(R) | g*gacc) | 32bytes 0xEE-padding)
+            // the hash covers every client-provided input of the partial signature: b commits to the
+            // nonces and message, e*a carries the challenge e = H(R|Q|m), and the flags set the signs.
+            // Approving b alone would let a compromised host pair it with the e*a of another message.
+            // The 2FA app must recompute these values from the session context (aggnonce, pubkeys,
+            // tweaks, message), never take them from the host.
             // the message is staged after the 144-byte encrypted secnonce in recvBuffer, to keep it intact
-            Util.arrayCopyNonAtomic(buffer, (short)ISO7816.OFFSET_CDATA, recvBuffer, (short)144, (short)32);
+            sha256.doFinal(buffer, ISO7816.OFFSET_CDATA, (short)66, recvBuffer, (short)144);
             Util.arrayFillNonAtomic(recvBuffer, (short)(144+32), (short)32, (byte)0xEE); // 0xEE for MuSig2 partial sig
             HmacSha160.computeHmacSha160(data2FA, OFFSET_2FA_HMACKEY, (short)20, recvBuffer, (short)144, (short)64, recvBuffer, (short)(144+64));
             if (!arrayCompareConstantTime(buffer, (short)(ISO7816.OFFSET_CDATA+66+2), recvBuffer, (short)(144+64), (short)20))
@@ -3159,9 +3166,9 @@ public class Satochip extends javacard.framework.Applet {
             // we don't need pk from recvBuffer anymore
 
             // k1, k2 = k1_, k2_ if has_even_y(R), else n-k1_, n-k2_
-            boolean r_has_odd_y = (buffer[OFFSET_BIP327_SIGN_R_EVENNESS] != 0x00); // even if set to 0, odd otherwise
-            // d = g*gacc*d' mod n: the private key is negated if g*gacc = -1
-            boolean negate_sk = (buffer[OFFSET_BIP327_SIGN_GGAC] != 0x01);
+            boolean r_has_odd_y = (buffer[OFFSET_BIP327_SIGN_R_EVENNESS] == 0x01); // 0x00 if even, 0x01 if odd
+            // d = g*gacc*d' mod n: the private key is negated if g*gacc = -1 (0x00), kept if 1 (0x01)
+            boolean negate_sk = (buffer[OFFSET_BIP327_SIGN_GGAC] == 0x00);
 
             // psig = (k1 + b*k2 + (e*a)*d) mod n, computed twice with independent blinding (see
             // blindScalar()). Both rounds derive d, k1 and k2 again from the key object and the
