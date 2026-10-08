@@ -521,7 +521,6 @@ public class Satochip extends javacard.framework.Applet {
     private final static byte[] SECRET_CST_SC = {'s','e','c','k','e','y','s','e','c','m','a','c'};
     private final static byte SECRET_HEADER_SIZE = (byte) 12;
     private final static byte SECRET_FINGERPRINT_SIZE = (byte) 4;
-    private final static byte MAX_LABEL_SIZE = (byte) 127;
     private final static byte SECRET_OFFSET_FINGERPRINT = (byte) 6;
     private final static byte PUBKEY_SIZE = (byte) 65; 
     private final static byte SECRET_TYPE_MASTER_SEED = (byte) 0x10;
@@ -667,7 +666,6 @@ public class Satochip extends javacard.framework.Applet {
         trusted_pubkey = new byte[PUBKEY_SIZE];
         secret_sc_sessionkey = buildTransientAES128Key();
 
-        // debug
         register();
     } // end of constructor
 
@@ -2821,7 +2819,7 @@ public class Satochip extends javacard.framework.Applet {
      * data (init): [aggpk_size(1b) | aggpk | msg_size (1b) | msg | extra_size(1b) | extra_bytes]
      * data (finalize): []
      *
-     * return (init): [pubnonce(66b)]
+     * return (init): [pubnonce(66b) | id(2b)]
      * return (finalize): [ encrypted_secnonce(144b) ]
      *
      */
