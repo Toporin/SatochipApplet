@@ -406,7 +406,7 @@ public class Satochip extends javacard.framework.Applet {
     // BIP0340/nonce offset 11, length 13
     // BIP0340/challenge offset 24, length 17
     // 'TapTweak' offset 41, length 8
-    public static final byte[] tags = {'B','I','P','0','3','4','0','/','a','u','x',  'B','I','P','0','3','4','0','/','n','o','n','c','e',  'B','I','P','0','3','4','0','/','c','h','a','l','l','e','n','g','e', 'T','a','p','T','w','e','a','k'};
+    private static final byte[] tags = {'B','I','P','0','3','4','0','/','a','u','x',  'B','I','P','0','3','4','0','/','n','o','n','c','e',  'B','I','P','0','3','4','0','/','c','h','a','l','l','e','n','g','e', 'T','a','p','T','w','e','a','k'};
 
     // TaprootTweakPrivateKey() operations, provided in P2
     private final static byte TAPROOT_TWEAK = (byte) 0x00; // BIP341 key tweak
@@ -427,7 +427,7 @@ public class Satochip extends javacard.framework.Applet {
      *********************************************/
     // MuSig/aux offset 0, length 9
     // MuSig/nonce offset 9, length 11
-    public static final byte[] TAGS_MUSIG2 = {'M','u','S','i','g','/','a','u','x',  'M','u','S','i','g','/','n','o','n','c','e'};
+    private static final byte[] TAGS_MUSIG2 = {'M','u','S','i','g','/','a','u','x',  'M','u','S','i','g','/','n','o','n','c','e'};
 
     private AESKey bip327_encryptkey; // used with sc_aes128_cbc to encrypt secnonce for export
     private AESKey bip327_mackey; // used with sigAESMAC to MAC encrypted secnonce for export
@@ -1376,11 +1376,13 @@ public class Satochip extends javacard.framework.Applet {
         Biginteger.add_carry(acc, accOff, tmpBuffer, BLIND_OFFSET_PRODUCT, BIGNUM_SIZE);
     }
 
-    /** Checks if PIN policies are satisfied for a PIN code */
-    private boolean CheckPINPolicy(byte[] pin_buffer, short pin_offset, byte pin_size) {
-        if ((pin_size < PIN_MIN_SIZE) || (pin_size > PIN_MAX_SIZE))
-            return false;
-        return true;
+    /**
+     * Checks if the PIN policy is satisfied by a PIN or PUK code. Currently only the size is checked
+     * (in [PIN_MIN_SIZE, PIN_MAX_SIZE]); the buffer and offset are kept for future constraints on
+     * the code format.
+     */
+    private static boolean CheckPINPolicy(byte[] pin_buffer, short pin_offset, byte pin_size) {
+        return (pin_size >= PIN_MIN_SIZE) && (pin_size <= PIN_MAX_SIZE);
     }
     
     /**
@@ -1727,8 +1729,6 @@ public class Satochip extends javacard.framework.Applet {
         byte pin_nb = buffer[ISO7816.OFFSET_P1];
         if (pin_nb != 0)
             ISOException.throwIt(SW_INCORRECT_P1);
-        if (puk == null)
-            ISOException.throwIt(SW_INTERNAL_ERROR);
         // If the PIN is not blocked, the call is inconsistent
         if (pin.getTriesRemaining() != 0)
             ISOException.throwIt(SW_OPERATION_NOT_ALLOWED);
@@ -1824,20 +1824,11 @@ public class Satochip extends javacard.framework.Applet {
             buffer[pos++] = (byte) 0;
         }
         // 2FA status (offset 8)
-        if (needs_2FA)
-            buffer[pos++] = (byte)0x01;
-        else
-            buffer[pos++] = (byte)0x00;
+        buffer[pos++] = needs_2FA ? (byte)0x01 : (byte)0x00;
         // card is seeded? (offset 9)
-        if (bip32_seeded)
-            buffer[pos++] = (byte)0x01;
-        else
-            buffer[pos++] = (byte)0x00;
+        buffer[pos++] = bip32_seeded ? (byte)0x01 : (byte)0x00;
         // setup status (offset 10)
-        if (setupDone)
-            buffer[pos++] = (byte)0x01;
-        else
-            buffer[pos++] = (byte)0x00;
+        buffer[pos++] = setupDone ? (byte)0x01 : (byte)0x00;
         // secure channel (offset 11)
         buffer[pos++] = (byte)0x01; // always enabled
         // NFC policy (offset 12)
@@ -2183,8 +2174,7 @@ public class Satochip extends javacard.framework.Applet {
         
         // check 2FA if required
         if (needs_2FA){
-            short offset= Util.makeShort((byte)0, ISO7816.OFFSET_CDATA);
-            offset+=pin_size;
+            short offset= (short)(ISO7816.OFFSET_CDATA + pin_size);
             bytesLeft-= pin_size;
             if (bytesLeft < (short)20)
                 ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
