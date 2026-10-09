@@ -19,7 +19,7 @@ The protocol version stays 0.16 for all the changes below. Client developers sho
 
 * **UnblockPIN (0x46):** the data format is now `[PUK_size(1b) | PUK | (optional) PIN_size(1b) | (optional) PIN]`; the previous format (`[PUK]` without size prefix) is refused. See *New features*.
 * **Reset to factory (0xFD):** a single APDU (`P1=0xAA`, `P2=0x55`), sent through the secure channel, and it now requires a validated PIN or a blocked PUK. See *Security fixes* and *Refactoring*.
-* **Removed commands**, which now return `SW_INS_DEPRECATED` (0x9C26): ParseTransaction (0x71), SignTransaction (0x6F), signMessage (0x6E), CreatePIN (0x40) and ListPINs (0x48). Use SignTransactionHash (0x7A) instead of the signing commands. See *Removed and deprecated*.
+* **Removed commands**, which now return `SW_INS_DEPRECATED` (0x9C26): ParseTransaction (0x71), SignTransaction (0x6F), signMessage (0x6E), CreatePIN (0x40), ListPINs (0x48), setBIP32AuthentikeyPubkey (0x75) and setBIP32ExtendedPubkey (0x74). Use SignTransactionHash (0x7A) instead of the signing commands. See *Removed and deprecated*.
 * **Single PIN and PUK:** P1 must be 0x00 in VerifyPIN, ChangePIN and UnblockPIN; the pin1/ublk1 fields of setup are ignored; the GetStatus bytes for PIN1/PUK1 are always 0. See *Refactoring*.
 * **TaprootTweakPrivateKey (0x7C):** the tweak is now BIP341-compliant. Key-path-only (BIP86) keys are unchanged (send `tweak_size=0`), but a tweak with a non-zero merkle root derived by v0.15-0.1 or earlier cannot be reproduced. Unknown P2 values are refused. See *Security fixes*.
 * **Musig2SignHash (0x7F):** with 2FA enabled, OP_FINALIZE now requires the 2FA HMAC, and the two flag bytes must be 0x00 or 0x01. See *Security fixes*.
@@ -114,7 +114,7 @@ The protocol version stays 0.16 for all the changes below. Client developers sho
 
 * Return card status on card select (ported from Seedkeeper-Applet commit [01bc193](https://github.com/Toporin/Seedkeeper-Applet/commit/01bc19376fdc2dd22de4a265ddacb401a709f98f)): the SELECT APDU response now includes the same data as a GET_STATUS command (applet version, PIN/PUK tries remaining, 2FA/seeded/setup flags, NFC & feature policies), saving a round trip for clients. GetStatus() no longer checks P1/P2, since the SELECT command carries its own parameters (P1=0x04). This information was already available to anyone through the unauthenticated GET_STATUS command, so nothing new is disclosed.
 
-* Improve authentikey management (ported from Seedkeeper-Applet commit [29ce8f0](https://github.com/Toporin/Seedkeeper-Applet/commit/29ce8f0984dd6ae02e0689ccf339f3b2865bc543)): the InitiateSecureChannel() response now also returns the authentikey coordx ([coordx_size(2b) | authentikey_coordx] appended), allowing non-ambiguous recovery of the authentikey public key from the signature. The PIN requirement is removed from getAuthentikey() (ins 0xAD) and export_PKI_pubkey() (ins 0x98), since the authentikey public key is public data that can already be recovered from the secure channel initiation. getBIP32AuthentiKey() (ins 0x73) is now documented as deprecated (kept for backward compatibility).
+* Improve authentikey management (ported from Seedkeeper-Applet commit [29ce8f0](https://github.com/Toporin/Seedkeeper-Applet/commit/29ce8f0984dd6ae02e0689ccf339f3b2865bc543)): the InitiateSecureChannel() response now also returns the authentikey coordx ([coordx_size(2b) | authentikey_coordx] appended), allowing non-ambiguous recovery of the authentikey public key from the signature. The PIN requirement is removed from getAuthentikey() (ins 0xAD) and export_PKI_pubkey() (ins 0x98), since the authentikey public key is public data that can already be recovered from the secure channel initiation. The legacy INS_BIP32_GET_AUTHENTIKEY (ins 0x73) is now served by getAuthentikey() too (see *Removed and deprecated*).
 
 ### Removed and deprecated
 
@@ -124,7 +124,11 @@ The protocol version stays 0.16 for all the changes below. Client developers sho
 
 * Remove the CreatePIN (0x40) and ListPINs (0x48) commands, which now return SW_INS_DEPRECATED (see the single PIN/PUK refactoring below).
 
-* Deprecate the getBIP32ExtendedKey() p2 option flags (0x80 reset cache, 0x40 optimize non-hardened derivation, 0x20 store key as object), now silently ignored since the BIP32 cache is gone (see *Refactoring*), and getBIP32AuthentiKey() (ins 0x73), kept for backward compatibility (use getAuthentikey(), ins 0xAD).
+* Remove the setBIP32AuthentikeyPubkey (0x75) and setBIP32ExtendedPubkey (0x74) commands, which now return SW_INS_DEPRECATED. They let the client store externally computed public keys in the BIP32 cache, to speed up non-hardened derivation; they had been no-ops (returning two zero bytes) since the public keys are computed on-card with ALG_EC_SVDP_DH_PLAIN_XY, and the BIP32 cache is gone (see *Refactoring*).
+
+* Merge getBIP32AuthentiKey() (ins 0x73) into getAuthentikey() (ins 0xAD): both instructions now return the authentikey, self-signed. getBIP32AuthentiKey() dates from when the authentikey was derived from the seed, and required a validated PIN and a seeded card. The authentikey is now generated at install and is public data, so ins 0x73 no longer requires the PIN. It still returns SW_BIP32_UNINITIALIZED_SEED (0x9C14) on an unseeded card, since legacy clients (pysatochip's card_bip32_get_authentikey()) use that error to detect the seed state. New clients should use ins 0xAD, and read the seed state from GET_STATUS. The computeAuthentikey() helper is merged into getAuthentikey(), which importBIP32Seed() also uses for its response.
+
+* Deprecate the getBIP32ExtendedKey() p2 option flags (0x80 reset cache, 0x40 optimize non-hardened derivation, 0x20 store key as object), now silently ignored since the BIP32 cache is gone (see *Refactoring*).
 
 ### Optimizations
 
@@ -153,7 +157,7 @@ The protocol version stays 0.16 for all the changes below. Client developers sho
 * Rename the main applet class from `CardEdge` to `Satochip` (`CardEdge.java` -> `Satochip.java`). The old name came from the MUSCLE CardEdge applet this code was derived from in 2015 and no longer described the class; the sibling projects already follow this convention (`SeedKeeper`, `Satodime`, `Satocash`). **No impact on clients or on installed cards:** the applet AID (`5361746F4368697000`), the package AID, the CLA byte and the whole APDU protocol are unchanged, and applets are selected by AID, so the class name never reaches the wire. The MUSCLE attribution header and the `CardEdge_CLA` constant keep the old name on purpose, the latter because it is shared with the other applets and with pysatochip's `JCconstants`.
 
 * Code cleanup (no functional change):
-  * New getPublicKey() and appendAuthentikeySignature() helpers replace 14 copies of the public key computation and 6 copies of the authentikey signature; importBIP32Seed() reuses computeAuthentikey().
+  * New getPublicKey() and appendAuthentikeySignature() helpers replace 14 copies of the public key computation and 6 copies of the authentikey signature; importBIP32Seed() reuses the authentikey response code (now getAuthentikey()).
   * Removed dead code and constants: the `eckeys_flag` field (written on every key import/reset, never read), Biginteger.shrink() and the mod() loop counters, SW_DEBUG_FLAG, the unused constants of Secp256k1, and the local redefinitions of ALG_ECDSA_SHA_256, LENGTH_EC_FP_256 and TYPE_AES_TRANSIENT_* (available in the 3.0.4 API); removed unused imports.
   * Removed a redundant `taproot_tweakedkey.clearKey()` after resetSeed() in resetToFactory(), which also erased the curve parameters that resetSeed() had just restored.
   * Biginteger: the scratch buffers and FLAG_FAST_MULT_VIA_RSA are now package-private, and the RSA key, cipher and exponent constant private (they were public mutable statics). Removed the unused carry results and stale TODOs of mult_rsa_trick(), whose documentation now describes the actual method.

@@ -479,6 +479,10 @@ public class SatochipTest {
       } else {
         assertTrue(status[4] == 3 || status[4] == 5, "unexpected PIN try limit " + status[4]);
       }
+      // set up but not seeded: the legacy GET AUTHENTIKEY (0x73) reports the missing seed, which
+      // legacy clients rely on, while 0xAD returns the authentikey (neither needs the PIN)
+      assertEquals(0x9C14, cmdSet.sendRawSecure(0x73, 0x00, 0x00, new byte[0]).getSw());
+      assertEquals(SW_OK, cmdSet.sendRawSecure(0xAD, 0x00, 0x00, new byte[0]).getSw());
       // reset again, so that the baseline is restored below with the baseline try limits
       assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw());
       assertEquals(SW_OK,
@@ -650,6 +654,23 @@ public class SatochipTest {
   void deprecatedCommandsTest() {
     assertEquals(SW_INS_DEPRECATED, cmdSet.sendRawSecure(INS_CREATE_PIN, 0x00, 0x00, new byte[0]).getSw());
     assertEquals(SW_INS_DEPRECATED, cmdSet.sendRawSecure(INS_LIST_PINS, 0x00, 0x00, new byte[0]).getSw());
+    assertEquals(SW_INS_DEPRECATED, cmdSet.sendRawSecure(0x75, 0x00, 0x00, new byte[0]).getSw(),
+        "BIP32_SET_AUTHENTIKEY_PUBKEY");
+    assertEquals(SW_INS_DEPRECATED, cmdSet.sendRawSecure(0x74, 0x00, 0x00, new byte[0]).getSw(),
+        "BIP32_SET_EXTENDED_PUBKEY");
+  }
+
+  @Test
+  @DisplayName("Legacy GET AUTHENTIKEY (0x73) returns the authentikey like 0xAD, without PIN (on a seeded card)")
+  void legacyGetAuthentikeyTest() throws Exception {
+    cmdSet.forgetSecureChannel(); // a new channel: the PIN is not verified
+    APDUResponse legacy = cmdSet.sendRawSecure(0x73, 0x00, 0x00, new byte[0]);
+    APDUResponse current = cmdSet.sendRawSecure(0xAD, 0x00, 0x00, new byte[0]);
+    assertEquals(SW_OK, legacy.getSw());
+    assertEquals(SW_OK, current.getSw());
+    // [coordx_size(2b) | coordx | sig_size(2b) | sig]: same coordx, the ECDSA signatures differ
+    assertArrayEquals(Arrays.copyOf(current.getData(), 34), Arrays.copyOf(legacy.getData(), 34));
+    resetSession();
   }
 
   @Test

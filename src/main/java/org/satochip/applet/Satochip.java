@@ -165,10 +165,10 @@ public class Satochip extends javacard.framework.Applet {
     // HD wallet
     private final static byte INS_BIP32_IMPORT_SEED= (byte) 0x6C;
     private final static byte INS_BIP32_RESET_SEED= (byte) 0x77;
-    private final static byte INS_BIP32_GET_AUTHENTIKEY= (byte) 0x73;
-    private final static byte INS_BIP32_SET_AUTHENTIKEY_PUBKEY= (byte)0x75;
+    private final static byte INS_BIP32_GET_AUTHENTIKEY= (byte) 0x73; // legacy: INS_EXPORT_AUTHENTIKEY (0xAD) that requires a seed
+    private final static byte INS_BIP32_SET_AUTHENTIKEY_PUBKEY= (byte)0x75; // deprecated
     private final static byte INS_BIP32_GET_EXTENDED_KEY= (byte) 0x6D;
-    private final static byte INS_BIP32_SET_EXTENDED_PUBKEY= (byte) 0x74;
+    private final static byte INS_BIP32_SET_EXTENDED_PUBKEY= (byte) 0x74; // deprecated
 
     // signatures
     private final static byte INS_SIGN_MESSAGE= (byte) 0x6E;
@@ -859,16 +859,19 @@ public class Satochip extends javacard.framework.Applet {
             sizeout= resetBIP32Seed(apdu, buffer);
             break;
         case INS_BIP32_GET_AUTHENTIKEY:
-            sizeout= getBIP32AuthentiKey(apdu, buffer);
+            // legacy instruction: clients (e.g. pysatochip) detect an unseeded card from this error
+            if (!bip32_seeded)
+                ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
+            sizeout= getAuthentikey(apdu, buffer);
             break;
         case INS_BIP32_SET_AUTHENTIKEY_PUBKEY:
-            sizeout= setBIP32AuthentikeyPubkey(apdu, buffer);
+            ISOException.throwIt(SW_INS_DEPRECATED);
             break;
         case INS_BIP32_GET_EXTENDED_KEY:
             sizeout= getBIP32ExtendedKey(apdu, buffer);
             break;
         case INS_BIP32_SET_EXTENDED_PUBKEY:
-            sizeout= setBIP32ExtendedPubkey(apdu, buffer);
+            ISOException.throwIt(SW_INS_DEPRECATED);
             break;
         case INS_BIP32_GET_LIQUID_MASTER_BLINDING_KEY:
             sizeout= getBIP32LiquidMasterBlindingKey(apdu, buffer);
@@ -2146,7 +2149,7 @@ public class Satochip extends javacard.framework.Applet {
         Util.arrayFillNonAtomic(recvBuffer, (short)0, (short)128, (byte)0);
         
         // return the self-signed authentikey: [coordx_size(2) | coordx | sigsize(2) | sig]
-        return computeAuthentikey(buffer);
+        return getAuthentikey(apdu, buffer);
     }
     
     /**
@@ -2207,43 +2210,18 @@ public class Satochip extends javacard.framework.Applet {
     }
     
     /**
-     * DEPRECATED - use getAuthentikey() (ins 0xAD) instead.
-     * This function is kept for backward compatibility with legacy satochip cards
-     * (where the authentikey was derived from the seed).
-     *
      * This function returns the authentikey public key.
      * The function returns the x-coordinate of the authentikey, self-signed.
      * The authentikey full public key can be recovered from the signature.
      * 
-     *  ins: 0x73
-     *  p1: 0x00 
-     *  p2: 0x00 
-     *  data: none
-     *  return: [coordx_size(2b) | coordx | sig_size(2b) | sig]
-     */
-    private short getBIP32AuthentiKey(APDU apdu, byte[] buffer){
-        // check that PIN has been entered previously
-        if (!pin.isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
-        
-        // check whether the seed is initialized
-        if (!bip32_seeded)
-            ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
-        
-        return computeAuthentikey(buffer);
-    }
-    
-    /**
-     * This function returns the authentikey public key.
-     * The function returns the x-coordinate of the authentikey, self-signed.
-     * The authentikey full public key can be recovered from the signature.
+     * The authentikey is generated on-card in the constructor and is available even if the card
+     * is not seeded: for SeedKeeper encrypted seed import, it is used as a Trusted Pubkey for the
+     * ECDH key exchange, so it must be available before the Satochip is seeded.
+     * It is also returned by importBIP32Seed().
      * 
-     * Compared to getBIP32AuthentiKey(), this method returns the Authentikey even if the card is not seeded (for legacy satochip cards).
-     * For SeedKeeper encrypted seed import, we use the authentikey as a Trusted Pubkey for the ECDH key exchange, 
-     * thus the authentikey must be available before the Satochip is seeded. 
-     * Before a seed is available, the authentiey is generated oncard randomly in the constructor
-     * 
-     *  ins: 0xAD
+     *  ins: 0xAD (also 0x73, the legacy INS_BIP32_GET_AUTHENTIKEY, from when the authentikey was
+     *       derived from the seed: it still returns SW_BIP32_UNINITIALIZED_SEED on an unseeded card,
+     *       which legacy clients use to detect the seed state, but no longer requires the PIN)
      *  p1: 0x00 
      *  p2: 0x00 
      *  data: none
@@ -2253,10 +2231,6 @@ public class Satochip extends javacard.framework.Applet {
         // We don't require PIN for this functionality, since the authentikey can also be recovered
         // from the authentikey coordx & signature in InitiateSecureChannel()
         
-        return computeAuthentikey(buffer);
-    }
-    
-    private short computeAuthentikey(byte[] buffer){        
         // compute the partial authentikey public key...
         authentikey_public.getW(buffer, (short)1);
         Util.setShort(buffer, (short)0, BIP32_KEY_SIZE);
@@ -2267,34 +2241,6 @@ public class Satochip extends javacard.framework.Applet {
         return appendAuthentikeySignature(buffer, (short)(2+BIP32_KEY_SIZE));
     }
     
-    /**
-     * DEPRECATED - Not necessary anymore when recovering the pubkey with ALG_EC_SVDP_DH_PLAIN_XY
-     * A minimalist API is maintained for backward compatibility.
-     * 
-     * This function allowed to compute the authentikey pubkey externally and
-     * store it in the secure memory cache for future use. 
-     * This allowed to speed up computation during derivation of non-hardened child.
-     * 
-     * ins: 0x75
-     * p1: 
-     * p2:
-     * data: [coordx_size(2b) | coordx | sig_size(2b) | sig][coordy_size(2b) | coordy]
-     *
-     * return: none
-     */
-    private short setBIP32AuthentikeyPubkey(APDU apdu, byte[] buffer){
-        // check that PIN has been entered previously
-        if (!pin.isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
-        
-        short pos=0;
-        Util.setShort(buffer, pos, (short)0); // deprecated - number of slot available
-        pos += (short) 2;
-        Util.setShort(buffer, pos, (short)0); // deprecated - number of slot used
-        pos += (short) 2;
-        return pos;
-    }// end of setBIP32AuthentikeyPubkey
-
     /**
      * The function computes the Bip32 extended key derived from the master key and returns either the 
      * 32-bytes x-coordinate of the public key, or the 32-bytes private key, signed by the authentikey.
@@ -2411,34 +2357,6 @@ public class Satochip extends javacard.framework.Applet {
 
     }// end of getBip32ExtendedKey()
     
-    /**
-     * DEPRECATED - Not necessary anymore when recovering the pubkey with ALG_EC_SVDP_DH_PLAIN_XY
-     * A minimalist API is maintained for backward compatibility.
-     * 
-     * This function allowed to compute an extended pubkey externally and
-     * store it in the secure BIP32 memory cache for future use. 
-     * This allowed to speed up computation during derivation of non-hardened child.
-     * 
-     * ins: 0x74
-     * p1: 
-     * p2:
-     * data: [chaincode(32b) | coordx_size(2b) | coordx | sig_size(2b) | sig | sig_size(2b) | sig2 ]
-     *          [ coordy_size(2b) | coordy]
-     *  return: none
-     */
-    private short setBIP32ExtendedPubkey(APDU apdu, byte[] buffer){
-        // check that PIN has been entered previously
-        if (!pin.isValidated())
-            ISOException.throwIt(SW_UNAUTHORIZED);
-        
-        short pos=0;
-        Util.setShort(buffer, pos, (short)0); // deprecated - number of slot available
-        pos += (short) 2;
-        Util.setShort(buffer, pos, (short)0); // deprecated - number of slot used
-        pos += (short) 2;
-        return pos;
-    }// end of setBIP32ExtendedPubkey
-
     /**
      * This function returns the Master Blinding Key used in Liquid-Bitcoin for confidential transactions
      *
