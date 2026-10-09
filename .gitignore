@@ -1,3 +1,17 @@
 bin/
 dist/
+.idea/
 SatoChip-*.cap
+
+# IntelliJ IDEA project files
+.idea
+*.iml
+/.vscode
+
+# Gradle output
+/.gradle
+/build
+/bin
+buildSrc/build
+buildSrc/.gradle
+/gradle.properties

@@ -1,0 +1,735 @@
+// SatoChip Bitcoin Hardware Wallet based on javacard
+// (c) 2015-2019 by Toporin
+// Sources available on https://github.com/Toporin
+//
+// Code below is based on the OV-chip 2.0 project
+// Digital Security (DS) group at Radboud Universiteit Nijmegen
+// Copyright (C) 2008, 2009
+//
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU General Public License as
+// published by the Free Software Foundation; either version 2 of
+// the License, or (at your option) any later version.
+// 
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License in file COPYING in this or one of the
+// parent directories for more details.
+//
+
+package org.satochip.applet;
+
+import javacard.framework.JCSystem;
+import javacard.framework.SystemException;
+import javacard.framework.Util;
+import javacard.security.KeyBuilder;
+import javacard.security.RSAPublicKey;
+import javacardx.crypto.Cipher;
+
+public class Biginteger {
+
+    // used for +-< operations on byte arrays
+    public static final short digit_mask = 0xff;
+    public static final short digit_len = 8;
+    /**
+     * Size in bits of a double digit. 16 for the short/short configuration, 64
+     * for the int/long configuration.
+     */
+    public static final short double_digit_len = 16;
+    
+    /**
+     * Bitmask for erasing the sign bit in a double digit. short 0x7fff for the
+     * short/short configuration, long 0x7fffffffffffffffL for the int/long
+     * configuration.
+     */
+    public static final short positive_double_digit_mask = 0x7fff;
+    
+    // scratch buffers, both of the RSA engine size (768 bits): the RSA operations work on whole
+    // buffers. Package-private: Satochip erases them after a signature (clearSigningScratch()).
+    public static final short BUFFER_SIZE = (short)96;
+    static byte[] buffer1;
+    static byte[] buffer2;
+    
+    // Helper objects for fast multiplication of two large numbers (without modulo).
+    // The flag is set once by init(), and read by Secp256k1 and Satochip.
+    static boolean FLAG_FAST_MULT_VIA_RSA = false;
+    private static final byte[] CONST_TWO = {0x02};
+    /**
+     * Modulus of rsa_pubkey_pow2: a 768-bit RSA modulus (two 384-bit primes), generated once offline
+     * with its private key discarded. Its factors play no role: the engine only computes exact
+     * squares x^2 < 2^767 < n, which never wrap around. A genuine RSA modulus (odd, composite, no
+     * small prime factor) is used rather than e.g. 2^768-1, which is divisible by 3: implementations
+     * may validate the modulus (BouncyCastle, hence the simulator, refuses a small prime factor).
+     */
+    private static final byte[] RSA_SQUARING_MODULUS = {
+        (byte)0xC0, (byte)0x81, (byte)0x73, (byte)0xB5, (byte)0x3B, (byte)0xB3, (byte)0x1B, (byte)0x96,
+        (byte)0x96, (byte)0x66, (byte)0x56, (byte)0x1E, (byte)0x93, (byte)0x85, (byte)0x2E, (byte)0xBF,
+        (byte)0x32, (byte)0x05, (byte)0xFD, (byte)0x51, (byte)0x7C, (byte)0x31, (byte)0x90, (byte)0x99,
+        (byte)0x02, (byte)0xFF, (byte)0x3F, (byte)0xE4, (byte)0x3F, (byte)0x3B, (byte)0xE0, (byte)0x0D,
+        (byte)0x26, (byte)0x43, (byte)0x08, (byte)0x9E, (byte)0x09, (byte)0xE7, (byte)0xEE, (byte)0x60,
+        (byte)0xB0, (byte)0x8B, (byte)0x13, (byte)0x8D, (byte)0xAF, (byte)0x31, (byte)0xCB, (byte)0x13,
+        (byte)0xD9, (byte)0xDB, (byte)0x36, (byte)0x02, (byte)0xDC, (byte)0xC3, (byte)0xC1, (byte)0x5A,
+        (byte)0xCD, (byte)0xC5, (byte)0xA9, (byte)0x02, (byte)0x33, (byte)0xA7, (byte)0x9F, (byte)0x39,
+        (byte)0x21, (byte)0xAE, (byte)0x8F, (byte)0xEF, (byte)0x0A, (byte)0x89, (byte)0x11, (byte)0x59,
+        (byte)0xE6, (byte)0x05, (byte)0xC7, (byte)0x52, (byte)0x1B, (byte)0x67, (byte)0x15, (byte)0x2E,
+        (byte)0x6F, (byte)0x57, (byte)0xC3, (byte)0x04, (byte)0x9A, (byte)0xC0, (byte)0x53, (byte)0x68,
+        (byte)0xBD, (byte)0x51, (byte)0xE7, (byte)0xFC, (byte)0xDD, (byte)0xE1, (byte)0x40, (byte)0x07
+    };
+    
+    private static RSAPublicKey rsa_pubkey_pow2 = null;
+    private static Cipher rsa_cipher = null;
+    
+    // initialize static objects. Should be done only once, e.g. in applet constructor
+    public static void init(){
+        // init arrays
+        try {
+            buffer1 = JCSystem.makeTransientByteArray(BUFFER_SIZE, JCSystem.CLEAR_ON_DESELECT);
+        } catch (SystemException e) {
+            buffer1 = new byte[BUFFER_SIZE];
+        }
+        try {
+            buffer2 = JCSystem.makeTransientByteArray(BUFFER_SIZE, JCSystem.CLEAR_ON_DESELECT);
+        } catch (SystemException e) {
+            buffer2 = new byte[BUFFER_SIZE];
+        }
+        // RSA engine for fast squaring: with exponent 2, the engine computes x^2 mod n, which is
+        // x^2 itself whenever x^2 < n. Any 768-bit (BUFFER_SIZE bytes) modulus works, so no key
+        // pair is generated: a public key with a constant modulus is enough. This saves the RSA
+        // key generation at install and the storage of an unused private key.
+        rsa_pubkey_pow2 = (RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_768, false);
+        rsa_pubkey_pow2.setModulus(RSA_SQUARING_MODULUS, (short) 0, (short) RSA_SQUARING_MODULUS.length);
+        rsa_pubkey_pow2.setExponent(CONST_TWO, (short) 0, (short) CONST_TWO.length);
+        rsa_cipher = Cipher.getInstance(Cipher.ALG_RSA_NOPAD, false);
+
+        FLAG_FAST_MULT_VIA_RSA = false; // set true only if succesfully allocated and tested below
+        try { // Subsequent code may fail on some real (e.g., Infineon CJTOP80K) cards - catch exception
+            rsa_cipher.init(rsa_pubkey_pow2, Cipher.MODE_ENCRYPT);
+            // self-test: the engine must really compute a plain square (3^2 = 9), otherwise the
+            // Schnorr/MuSig2 arithmetic would silently produce invalid signatures
+            Util.arrayFillNonAtomic(buffer1, (short) 0, BUFFER_SIZE, (byte) 0);
+            buffer1[(short)(BUFFER_SIZE-1)] = (byte) 3;
+            rsa_cipher.doFinal(buffer1, (short) 0, BUFFER_SIZE, buffer1, (short) 0);
+            buffer1[(short)(BUFFER_SIZE-1)] ^= (byte) 9;
+            FLAG_FAST_MULT_VIA_RSA = equalZero(buffer1, (short) 0, BUFFER_SIZE);
+        } catch (Exception ignored) {
+        } // discard exception
+        Util.arrayFillNonAtomic(buffer1, (short) 0, BUFFER_SIZE, (byte) 0);
+    }
+    
+    /**
+     * Addition with carry report. Adds other to this number. If this
+     * is too small for the result (i.e., an overflow occurs) the
+     * method returns true. Further, the result in {@code this} will
+     * then be the correct result of an addition modulo the first
+     * number that does not fit into {@code this} ({@code 2^(}{@link
+     * #digit_len}{@code * }{@link #size this.size}{@code )}), i.e.,
+     * only one leading 1 bit is missing. If there is no overflow the
+     * method will return false.
+     * <P>
+     * 
+     * compute x= x+y
+     * operands are stored Most Significant Byte First
+     * size is the size in bytes of the operands (should be same size, padded with 0..0 if needed)
+     * @param other 
+     */
+    public static boolean add_carry(byte[] x, short offsetx, byte[] y, short offsety, short size)
+    {
+        short akku = 0;
+        short j = (short)(offsetx+size-1); 
+        for(short i = (short)(offsety+size-1); i >= offsety; i--, j--) {
+            akku = (short)(akku + (x[j] & digit_mask) + (y[i] & digit_mask));
+
+            x[j] = (byte)(akku & digit_mask);
+            akku = (short)((akku >>> digit_len) & digit_mask);
+        }
+        
+        return akku != 0;
+    }
+    
+    /**
+     * compute x= x+1
+     * operands are stored Most Significant Byte First
+     * size is the size in bytes of the operand x
+     */
+    public static boolean add1_carry(byte[] x, short offsetx, short size)
+    {
+        //short digit_mask = (short)0xff;
+        //short digit_len = 8;
+        short akku = 1; // first carry set to 1 for increment
+        for(short i = (short)(offsetx+size-1); i >= offsetx; i--) {
+            akku = (short) ((x[i] & digit_mask) + akku);
+
+            x[i] = (byte)(akku & digit_mask);
+            akku = (short)((akku >>> digit_len) & digit_mask);
+        }
+        
+        return akku != 0;
+    }
+    
+    /**
+     * 
+     * Subtraction. Subtract {@code other} from {@code this} and store
+     * the result in {@code this}. If an overflow occurs the return
+     * value is true and the value of this is the correct negative
+     * result in two's complement. If there is no overflow the return
+     * value is false.
+     * <P>
+     *
+     * compute x= x-y
+     * operands are stored Most Significant Byte First
+     * size is the size in bytes of the operands (should be same size, padded with 0..0 if needed) 
+     */
+    public static boolean subtract(byte[] x, short offsetx, byte[] y, short offsety, short size) {
+        
+        short subtraction_result = 0;
+        short carry = 0;
+
+        short i = (short)(offsetx+size-1);
+        short j = (short)(offsety+size-1);
+        for(; i >= offsetx && j >= offsety; i--, j--) {
+            subtraction_result = (short) ((x[i] & digit_mask) - (y[j] & digit_mask) - carry);
+            x[i] = (byte)(subtraction_result & digit_mask);
+            // borrow = sign bit of the result, without a branch (subtract() is used on secrets)
+            carry = (short)((subtraction_result >> 8) & 1);
+        }
+
+        return carry > 0;
+    }
+    
+    /**
+     * Check whether (unsigned)x is strictly smaller than (unsigned)y 
+     * operands are stored Most Significant Byte First
+     * size is the size in bytes of the operands (should be same size, padded with 0..0 if needed) 
+     * returns true if x is strictly smaller than y, false otherwise
+     * <P>
+     * NOT constant time: returns at the first differing byte, so its running time reveals the
+     * position of that byte. Use it on public data only (e.g. counters, public keys, hashes of
+     * public data). For secret operands (keys, nonces), use {@link #lessThanCT}.
+     */
+    public static boolean lessThan(byte[] x, short offsetx, byte[] y, short offsety, short size) {
+        
+        short xs, ys;
+        for(short i = offsetx, j=offsety; i < (short)(offsetx+size); i++, j++) {
+            xs= (short)(x[i] & digit_mask);
+            ys= (short)(y[j] & digit_mask);
+            
+            if(xs < ys) return true;
+            if(xs > ys) return false;
+        }
+        return false; // in case of equality
+    }
+    
+    /**
+    * Check whether x is strictly equal to 0 
+    * operands are stored Most Significant Byte First (big-endian)
+    * size is the size in bytes of the operand 
+    * returns true if x is equal to 0, false otherwise
+    * <P>
+    * NOT constant time: returns at the first non-zero byte. Use it on public data only.
+    * For secret operands (keys, nonces), use {@link #isZeroCT}.
+    */
+    public static boolean equalZero(byte[] x, short offsetx, short size) {
+        for(short i = offsetx; i < (short)(offsetx+size); i++) {
+            if(x[i] != 0) return false;
+        }
+        return true;
+    }
+    
+    /*
+     * Constant-time variants, for secret operands: no branch and no early exit depends on the
+     * value of the operands (only on their size). They must be used whenever an operand is
+     * sensitive (private keys, nonces, derived secrets): lessThanCT() instead of lessThan(),
+     * isZeroCT() instead of equalZero().
+     */
+
+    /**
+     * Returns true if (unsigned)x is strictly smaller than (unsigned)y, in constant time.
+     * operands are stored Most Significant Byte First, size is the size in bytes of both operands
+     */
+    public static boolean lessThanCT(byte[] x, short offsetx, byte[] y, short offsety, short size) {
+        short borrow = 0;
+        for (short i = (short)(size-1); i >= 0; i--) {
+            short r = (short)((x[(short)(offsetx+i)] & digit_mask) - (y[(short)(offsety+i)] & digit_mask) - borrow);
+            borrow = (short)((r >> digit_len) & 1);
+        }
+        return borrow != 0;
+    }
+
+    /** Returns true if x is equal to 0, in constant time. */
+    public static boolean isZeroCT(byte[] x, short offsetx, short size) {
+        byte acc = 0;
+        for (short i = 0; i < size; i++) {
+            acc |= x[(short)(offsetx+i)];
+        }
+        return acc == 0;
+    }
+
+    /**
+     * Computes x = (x + y) mod n in constant time, for x, y < n (all operands of the same size,
+     * stored Most Significant Byte First). Uses scratch[offsets..offsets+size).
+     */
+    public static void addModCT(byte[] x, short offsetx, byte[] y, short offsety, byte[] n, short offsetn,
+            short size, byte[] scratch, short offsets) {
+        short i;
+        // x = x + y, carry = overflow bit
+        short carry = 0;
+        for (i = (short)(size-1); i >= 0; i--) {
+            carry = (short)((x[(short)(offsetx+i)] & digit_mask) + (y[(short)(offsety+i)] & digit_mask) + carry);
+            x[(short)(offsetx+i)] = (byte)carry;
+            carry = (short)((carry >> digit_len) & 1);
+        }
+        // scratch = x - n, borrow = underflow bit
+        short borrow = 0;
+        for (i = (short)(size-1); i >= 0; i--) {
+            short r = (short)((x[(short)(offsetx+i)] & digit_mask) - (n[(short)(offsetn+i)] & digit_mask) - borrow);
+            scratch[(short)(offsets+i)] = (byte)r;
+            borrow = (short)((r >> digit_len) & 1);
+        }
+        // the sum is >= n if it overflowed or if subtracting n did not underflow: then keep x - n
+        byte mask = (byte)(-(carry | (short)(1 - borrow)));
+        for (i = 0; i < size; i++) {
+            x[(short)(offsetx+i)] = (byte)((x[(short)(offsetx+i)] & ~mask) | (scratch[(short)(offsets+i)] & mask));
+        }
+    }
+
+    /*
+     *  Biginteger multiplication and modulo computation
+     *  Based on https://github.com/OpenCryptoProject/JCMathLib
+     *  Code simplified to only support methods necessary for multiplication and modulo
+     */
+    
+    /**
+     * Computes z = x*y with three squarings on the RSA engine (exponent 2):
+     *      (x + y)^2 - x^2 - y^2 = 2xy, then a one-bit right shift gives xy.
+     * The squares are exact (no reduction) as long as they stay below the modulus (>= 2^767),
+     * i.e. x + y < 2^383: callers keep size <= 47 bytes, so that no subtraction can underflow.
+     *
+     * @param x, offsetx first operand (size bytes, Most Significant Byte First)
+     * @param y, offsety second operand (size bytes)
+     * @param z, offsetz receives the product, BUFFER_SIZE (96) bytes
+     * @return BUFFER_SIZE, the size of the product
+     */
+    public static short mult_rsa_trick(byte[] x, short offsetx, byte[] y, short offsety, short size, byte[] z, short offsetz) {
+        // x+y => buffer1
+        Util.arrayFillNonAtomic(buffer1, (short) 0, (short) buffer1.length, (byte) 0);
+        
+        // copy x (retains MSBF order)
+        short offsetb1= (short)(buffer1.length-size);
+        Util.arrayCopyNonAtomic(x, offsetx, buffer1, offsetb1, size);
+        
+        // copy y
+        short offsetb2= (short)(buffer2.length-size);
+        Util.arrayFillNonAtomic(buffer2, (short) 0, (short) buffer2.length, (byte) 0);
+        Util.arrayCopyNonAtomic(y, offsety, buffer2, offsetb2, size);
+        
+        // add y into buffer1 (no carry: the operands are much smaller than the buffers)
+        add_carry(buffer1, (short)0, buffer2, (short)0, (short)buffer1.length);
+        
+        // ((x+y)^2) => buffer1
+        rsa_cipher.doFinal(buffer1, (short) 0, (short) buffer1.length, buffer1, (short) 0);
+        
+        // y^2 => buffer2 (y is already present in buffer2)
+        rsa_cipher.doFinal(buffer2, (short) 0, (short) buffer2.length, buffer2, (short) 0);
+        
+        // ((x+y)^2) - y^2 => buffer1 (no borrow: (x+y)^2 >= y^2)
+        subtract(buffer1, (short)0, buffer2, (short)0, (short)buffer1.length);
+        
+        // x^2 => buffer2
+        Util.arrayFillNonAtomic(buffer2, (short) 0, (short) buffer2.length, (byte) 0);
+        offsetb2= (short) (buffer2.length - size);
+        Util.arrayCopyNonAtomic(x, offsetx, buffer2, offsetb2, size);
+        rsa_cipher.doFinal(buffer2, (short) 0, (short) buffer2.length, buffer2, (short) 0);
+            
+        // ((x+y)^2) - y^2 - x^2 => buffer1 (no borrow: the result is 2xy >= 0)
+        subtract(buffer1, (short)0, buffer2, (short)0, (short)buffer1.length);
+        
+        // we now have 2xy in buffer1, divide it by 2 => shift by one bit and fill back into z
+        short res = 0;
+        short res2 = 0;
+        for (short offset = (short)(buffer1.length - 1); offset >= 1; offset--) {
+            res = (short) (buffer1[offset] & 0xff);
+            res = (short) (res >> 1);
+            res2 = (short) (buffer1[(short)(offset - 1)] & 0xff);
+            res2 = (short) (res2 << 7);
+            z[(short)(offsetz+offset)] = (byte) (res | res2);
+        }
+        res = (short) (buffer1[0] & 0xff);
+        res = (short) (res >> 1);
+        z[offsetz]= (byte)res;
+        return (short)buffer1.length;
+    }
+    
+    /**
+     * Computes z = x^2 with a single RSA operation (x^2 mod n == x^2, since n is larger than 2^512).
+     * x is a size-byte operand (size <= 47: x^2 must stay below the 768-bit modulus, which is
+     * >= 2^767), z receives 96 bytes (BUFFER_SIZE).
+     * Used by Secp256k1.isOnCurve(), on public operands.
+     */
+    public static short square_rsa(byte[] x, short offsetx, short size, byte[] z, short offsetz) {
+        Util.arrayFillNonAtomic(buffer1, (short) 0, (short) buffer1.length, (byte) 0);
+        Util.arrayCopyNonAtomic(x, offsetx, buffer1, (short)(buffer1.length-size), size);
+        rsa_cipher.doFinal(buffer1, (short) 0, (short) buffer1.length, z, offsetz);
+        return (short)buffer1.length;
+    }
+
+    /**
+     * Compute x mod y
+     * <P>
+     * x and y are copied to local arrays Biginteger.buffer1 and Biginteger.buffer2.
+     * After computation, modulo is located in x buffer, at provided offset and size.
+     * After computation, x may contain many leading zeros (the modulo is in its last sizey bytes).
+     * <P>
+     * Uses schoolbook division inside and has O^2 complexity in the difference
+     * of significant digits of the divident (in this number) and the divisor.
+     * For numbers of equal size complexity is linear.
+     * 
+     * @param x
+     * @param y must be non-zero
+     * 
+     * @return size of Biginteger x
+     */
+    // computes x mod y store to z at offsetz
+    public static short mod(byte[] x, short offsetx, short sizex, byte[] y, short offsety, short sizey) {
+        // todo: check sizex and sizey < buffer1.length
+        
+        
+        // copy x to buffer1 in RAM memory if needed
+        if (x != buffer1 || offsetx != (short)0){
+            Util.arrayCopyNonAtomic(x, offsetx, buffer1, (short)0, sizex);
+        }
+        //x= buffer1;
+        //offsetx= 0;
+        byte[] dividend= buffer1;
+        short dividend_offset= 0;
+        short dividend_size= sizex;
+        
+        // copy y to buffer2 in RAM memory if needed
+        if (y != buffer2 || offsety != (short)0){
+            Util.arrayCopyNonAtomic(y, offsety, buffer2, (short)0, sizey);
+        }
+        byte[] divisor= buffer2;
+        short divisor_offset= 0;
+        short divisor_size= sizey;
+        
+         // divisor_index is the first nonzero digit (short) in the divisor
+         short divisor_index = 0;
+         while (divisor[divisor_index] == 0) {
+             divisor_index++;
+         }
+
+         // The size of this might be different from divisor. Therefore,
+         // for the first subtraction round we have to shift the divisor
+         // divisor_shift = this.size - divisor.size + divisor_index
+         // digits to the left. If this amount is negative, then
+         // this is already smaller then divisor and we are done.
+         // Below we do divisor_shift + 1 subtraction rounds. As an
+         // additional loop index we also count the rounds (from
+         // zero upwards) in division_round. This gives access to the
+         // first remaining divident digits.
+         short divisor_shift = (short) (dividend_size - divisor_size + divisor_index);
+         short division_round = 0;
+
+         // We could express now a size constraint, namely that
+         // divisor_shift + 1 <= quotient.size
+         // However, in the proof protocol we divide x / v, where
+         // x has 2*n digits when v has n digits. There the above size
+         // constraint is violated, the division is however valid, because
+         // it will always hold that x < v * (v - 1) and therefore the
+         // quotient will always fit into n digits.
+         // System.out.format("XX this size %d div ind %d div shift %d " +
+         // "quo size %d\n" +
+         // "%s / %s\n",
+         // this.size,
+         // divisor_index,
+         // divisor_shift,
+         // quotient != null ? quotient.size : -1,
+         // this.to_hex_string(),
+         // divisor.to_hex_string());
+         // The first digits of the divisor are needed in every
+         // subtraction round.
+         short first_divisor_digit = (short) (divisor[divisor_index] & digit_mask);
+         short divisor_bit_shift = (short) (highest_bit((short) (first_divisor_digit + 1)) - 1);
+         byte second_divisor_digit = divisor_index < (short) (divisor_size - 1) ? divisor[(short) (divisor_index + 1)]
+                 : 0;
+         byte third_divisor_digit = divisor_index < (short) (divisor_size - 2) ? divisor[(short) (divisor_index + 2)]
+                 : 0;
+
+         // The following variables are used inside the loop only.
+         // Declared here as optimization.
+         // divident_digits and divisor_digit hold the first one or two
+         // digits. Needed to compute the multiple of the divisor to
+         // subtract from this.
+         short divident_digits, divisor_digit;
+
+         // To increase precision the first digits are shifted to the
+         // left or right a bit. The following variables compute the shift.
+         short divident_bit_shift, bit_shift;
+
+         // Declaration of the multiple, with which the divident is
+         // multiplied in each round and the quotient_digit. Both are
+         // a single digit, but declared as a double digit to avoid the
+         // trouble with negative numbers. If quotient != null multiple is
+         // added to the quotient. This addition is done with quotient_digit.
+         short multiple, quotient_digit;
+         while (divisor_shift >= 0) {
+             // Keep subtracting from this until
+             // divisor * 2^(8 * divisor_shift) is bigger than this.
+             while (!shift_lesser(dividend, dividend_offset, dividend_size, 
+                                 divisor, divisor_offset, divisor_size, 
+                                 divisor_shift, (short) (division_round > 0 ? division_round - 1 : 0))) 
+             {
+                 // not constant time: the number of these loops depends on the data (callers blind secret operands)
+                 // this is bigger or equal than the shifted divisor.
+                 // Need to subtract some multiple of divisor from this.
+                 // Make a conservative estimation of the multiple to subtract.
+                 // We estimate a lower bound to avoid underflow, and continue
+                 // to subtract until the remainder in this gets smaller than
+                 // the shifted divisor.
+                 // For the estimation get first the two relevant digits
+                 // from this and the first relevant digit from divisor.
+                 divident_digits = division_round == 0 ? 0
+                         : (short) ((short) (dividend[(short) (division_round - 1)]) << digit_len);
+                 divident_digits |= (short) (dividend[division_round] & digit_mask);
+
+                 // The multiple to subtract from this is
+                 // divident_digits / divisor_digit, but there are two
+                 // complications:
+                 // 1. divident_digits might be negative,
+                 // 2. both might be very small, in which case the estimated
+                 // multiple is very inaccurate.
+                 if (divident_digits < 0) {
+                         // case 1: shift both one bit to the right
+                     // In standard java (ie. in the test frame) the operation
+                     // for >>= and >>>= seems to be done in integers,
+                     // even if the left hand side is a short. Therefore,
+                     // for a short left hand side there is no difference
+                     // between >>= and >>>= !!!
+                     // Do it the complicated way then.
+                     divident_digits = (short) ((divident_digits >>> 1) & positive_double_digit_mask);
+                     divisor_digit = (short) ((first_divisor_digit >>> 1) & positive_double_digit_mask);
+                 } else {
+                         // To avoid case 2 shift both to the left
+                     // and add relevant bits.
+                     divident_bit_shift = (short) (highest_bit(divident_digits) - 1);
+                         // Below we add one to divisor_digit to avoid underflow.
+                     // Take therefore the highest bit of divisor_digit + 1
+                     // to avoid running into the negatives.
+                     bit_shift = divident_bit_shift <= divisor_bit_shift ? divident_bit_shift
+                             : divisor_bit_shift;
+
+                     divident_digits = shift_bits(
+                             divident_digits,
+                             division_round < (short) (dividend_size - 1) ? dividend[(short) (division_round + 1)]
+                                     : 0,
+                             division_round < (short) (dividend_size - 2) ? dividend[(short) (division_round + 2)]
+                                     : 0, bit_shift);
+                     divisor_digit = shift_bits(first_divisor_digit,
+                             second_divisor_digit, third_divisor_digit,
+                             bit_shift);
+
+                 }
+
+                 // add one to divisor to avoid underflow
+                 multiple = (short) (divident_digits / (short) (divisor_digit + 1));
+
+                 // Our strategy to avoid underflow might yield multiple == 0.
+                 // We know however, that divident >= divisor, therefore make
+                 // sure multiple is at least 1.
+                 if (multiple < 1) {
+                     multiple = 1;
+                 }
+
+                 //times_minus(divisor, divisor_shift, multiple);
+                 times_minus(dividend, dividend_offset, dividend_size, divisor, divisor_offset, divisor_size, divisor_shift, multiple);
+             }
+
+             // treat loop indices
+             division_round++;
+             divisor_shift--;
+         }
+         // at this point, mod is in buffer1, copy back to x
+         if (buffer1 != x || offsetx != (short)0){
+             Util.arrayCopyNonAtomic(buffer1, (short)0, x, offsetx, sizex);
+         }
+         return sizex;
+     }
+    
+    /**
+     * Helper functions for mod() function
+     */
+    
+    
+    /**
+     * Index of the most significant 1 bit.
+     * <P>
+     * {@code x} has type short.
+     * <P>
+     * Utility method, used in division.
+     * 
+     * @param x
+     *            of type short
+     * @return index of the most significant 1 bit in {@code x}, returns
+     *         {@link #double_digit_len} for {@code x == 0}.
+     */
+    private static short highest_bit(short x) {
+        // not constant time, like the rest of mod(): callers blind secret operands (see mod())
+        for (short i = 0; i < double_digit_len; i++) {
+            if (x < 0) {
+                return i;
+            }
+            x <<= 1;
+        }
+        return double_digit_len;
+    }
+    
+    /**
+     * Shift to the left and fill. Takes {@code high} {@code middle} {@code low}
+     * as 4 digits, shifts them {@code shift} bits to the left and returns the
+     * most significant {@link #double_digit_len} bits.
+     * <P>
+     * Utility method, used in division.
+     * 
+     * 
+     * @param high
+     *            of type short, most significant {@link #double_digit_len} bits
+     * @param middle
+     *            of type byte, middle {@link #digit_len} bits
+     * @param low
+     *            of type byte, least significant {@link #digit_len} bits
+     * @param shift
+     *            amount of left shift
+     * @return most significant {@link #double_digit_len} as short
+     */
+     private static short shift_bits(short high, byte middle, byte low,
+                     short shift) {
+         // shift high
+         high <<= shift;
+
+         // merge middle bits
+         byte mask = (byte) (digit_mask << (shift >= digit_len ? 0 : digit_len
+                         - shift));
+         short bits = (short) ((short) (middle & mask) & digit_mask);
+         if (shift > digit_len) {
+             bits <<= shift - digit_len;
+         }
+         else {
+             bits >>>= digit_len - shift;
+         }
+         high |= bits;
+
+         if (shift <= digit_len) {
+             return high;
+         }
+
+         // merge low bits
+         mask = (byte) (digit_mask << double_digit_len - shift);
+         bits = (short) ((((short) (low & mask) & digit_mask) >> double_digit_len - shift));
+         high |= bits;
+
+         return high;
+     }
+    
+    /**
+     * Scaled comparison. Compares this number with {@code other * 2^(}
+     * {@link #digit_len} {@code * shift)}. That is, shifts {@code other}
+     * {@code shift} digits to the left and compares then. This bignat and
+     * {@code other} will not be modified inside this method.
+     * <P>
+     * 
+     * As optimization {@code start} can be greater than zero to skip the first
+     * {@code start} digits in the comparison. These first digits must be zero
+     * then, otherwise an assertion is thrown. (So the optimization takes only
+     * effect when <a
+     * href="../../../overview-summary.html#NO_CARD_ASSERT">NO_CARD_ASSERT</a>
+     * is defined.)
+     * 
+     * @param x, offsetx, sizex
+     *            First Biginteger to compare
+     * @param other, offset_other, size_other
+     *            Bignat to compare to
+     * @param shift
+     *            left shift of other before the comparison
+     * @param start
+     *            digits to skip at the beginning
+     * @return true if this number is strictly less than the shifted
+     *         {@code other}, false otherwise.
+     */
+     public static boolean shift_lesser(byte[] x, short offsetx, short sizex, byte[] other, short offset_other, short size_other, short shift, short start) {
+         short j = (short) (size_other + shift - sizex + start);
+         short x_short, other_short;
+         for (short i = start; i < sizex; i++, j++) {
+             x_short = (short) (x[i] & digit_mask);
+             if (j >= 0 && j < size_other) {
+                 other_short = (short) (other[j] & digit_mask);
+             }
+             else {
+                 other_short = 0;
+             }
+             if (x_short < other_short) {
+                 return true; // CTO
+             }
+             if (x_short > other_short) {
+                 return false;
+             }
+         }
+         return false;
+     }
+           
+      /**
+       * Scaled subtraction. Subtracts {@code mult * 2^(}{@link #digit_len}
+       * {@code  * shift) * other} from this.
+       * <P>
+       * That is, shifts {@code mult * other} precisely {@code shift} digits to
+       * the left and subtracts that value from this. {@code mult} must be less
+       * than {@link #bignat_base}, that is, it must fit into one digit. It is
+       * only declared as short here to avoid negative values.
+       * <P>
+       * {@code mult} has type short.
+       * <P>
+       * No size constraint. However, an assertion is thrown, if the result would
+       * be negative. {@code other} can have more digits than this object, but
+       * then sufficiently many leading digits must be zero to avoid the
+       * underflow.
+       * <P>
+       * Used in division.
+       * 
+       * @param x, offsetx, sizex: 
+       *            First Biginteger operand
+       * @param other, other_offset, other_size
+       *            Biginteger to subtract from first Biginteger
+       * @param shift
+       *            number of digits to shift {@code other} to the left
+       * @param mult
+       *            of type short, multiple of {@code other} to subtract from this
+       *            object. Must be below {@link #bignat_base}.
+       */
+     public static void times_minus(byte[] x, short offsetx, short sizex, byte[] other, short other_offset, short other_size, short shift, short mult) {
+       short akku = 0;
+       short subtraction_result;
+       short i = (short) (sizex - 1 - shift);
+       short j = (short) (other_size - 1);
+       for (; i >= 0 && j >= 0; i--, j--) {
+           akku = (short) (akku + (short) (mult * (other[j] & digit_mask)));
+           subtraction_result = (short) ((x[i] & digit_mask) - (akku & digit_mask));
+    
+           x[i] = (byte) (subtraction_result & digit_mask);
+           akku = (short) ((akku >> digit_len) & digit_mask);
+           if (subtraction_result < 0) {
+               akku++;
+           }
+       }
+    
+       // deal with carry as long as there are digits left in this
+       while (i >= 0 && akku != 0) {
+           subtraction_result = (short) ((x[i] & digit_mask) - (akku & digit_mask));
+           x[i] = (byte) (subtraction_result & digit_mask);
+           akku = (short) ((akku >> digit_len) & digit_mask);
+           if (subtraction_result < 0) {
+               akku++;
+           }
+           i--;
+       }
+     }
+    
+}

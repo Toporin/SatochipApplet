@@ -21,7 +21,7 @@
 package org.satochip.applet;
 
 import javacard.framework.ISOException;
-import javacard.framework.JCSystem;
+import javacard.framework.Util;
 import javacard.security.MessageDigest;
 
 // very limited Hmac-SHA160 implementation
@@ -45,22 +45,18 @@ public class HmacSha160 {
             byte[] mac, short mac_offset){
         
         if (key_length>BLOCKSIZE || key_length<0){
-            ISOException.throwIt(CardEdge.SW_HMAC_UNSUPPORTED_KEYSIZE); // don't accept keys bigger than block size 
+            ISOException.throwIt(Satochip.SW_HMAC_UNSUPPORTED_KEYSIZE); // don't accept keys bigger than block size 
         }
         if (message_length>MAXMSGSIZE || message_length<0){
-            ISOException.throwIt(CardEdge.SW_HMAC_UNSUPPORTED_MSGSIZE); 
+            ISOException.throwIt(Satochip.SW_HMAC_UNSUPPORTED_MSGSIZE); 
         }
         
         // compute inner hash
         for (short i=0; i<key_length; i++){
             data[i]= (byte) (key[(short)(key_offset+i)] ^ (0x36));
         }
-        for (short i=key_length; i<BLOCKSIZE; i++){
-            data[i]= (byte) 0x36;
-        }
-        for (short i=0; i<message_length; i++){
-            data[(short)(BLOCKSIZE+i)]= message[(short)(message_offset+i)];
-        }
+        Util.arrayFillNonAtomic(data, key_length, (short)(BLOCKSIZE-key_length), (byte)0x36);
+        Util.arrayCopyNonAtomic(message, message_offset, data, BLOCKSIZE, message_length);
         sha160.reset();
         sha160.doFinal(data, (short)0, (short)(BLOCKSIZE+message_length), data, BLOCKSIZE); // copy hash result to data buffer!
         
@@ -68,12 +64,12 @@ public class HmacSha160 {
         for (short i=0; i<key_length; i++){
             data[i]= (byte) (key[(short)(key_offset+i)] ^ (0x5c));
         }
-        for (short i=key_length; i<BLOCKSIZE; i++){
-            data[i]= (byte) 0x5c;
-        }
+        Util.arrayFillNonAtomic(data, key_length, (short)(BLOCKSIZE-key_length), (byte)0x5c);
         // previous hash already copied to correct offset in data
         sha160.reset();
         sha160.doFinal(data, (short)0, (short)(BLOCKSIZE+HASHSIZE), mac, mac_offset);
+        // erase the scratch area: it holds key^opad, the inner hash and the end of the message
+        Util.arrayFillNonAtomic(data, (short)0, (short)(BLOCKSIZE + ((message_length > HASHSIZE) ? message_length : HASHSIZE)), (byte)0);
         return HASHSIZE;
     }   
     

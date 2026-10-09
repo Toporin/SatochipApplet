@@ -21,7 +21,6 @@
 package org.satochip.applet;
 
 import javacard.framework.ISOException;
-import javacard.framework.JCSystem;
 import javacard.framework.Util;
 import javacard.security.CryptoException;
 import javacard.security.MessageDigest;
@@ -40,7 +39,7 @@ public class HmacSha512 {
         try {
             sha512 = MessageDigest.getInstance(MessageDigest.ALG_SHA_512, false); 
         } catch (CryptoException e) {
-            ISOException.throwIt(CardEdge.SW_UNSUPPORTED_FEATURE); // unsupported feature => use a more recent card!
+            ISOException.throwIt(Satochip.SW_UNSUPPORTED_FEATURE); // unsupported feature => use a more recent card!
         }
     }
     
@@ -49,10 +48,10 @@ public class HmacSha512 {
             byte[] mac, short mac_offset){
         
         if (key_length>BLOCKSIZE || key_length<0){
-            ISOException.throwIt(CardEdge.SW_HMAC_UNSUPPORTED_KEYSIZE); // don't accept keys bigger than block size 
+            ISOException.throwIt(Satochip.SW_HMAC_UNSUPPORTED_KEYSIZE); // don't accept keys bigger than block size 
         }
         if (message_length>HASHSIZE || message_length<0){
-            ISOException.throwIt(CardEdge.SW_HMAC_UNSUPPORTED_MSGSIZE); // don't accept message bigger than block size (should be sufficient for BIP32)
+            ISOException.throwIt(Satochip.SW_HMAC_UNSUPPORTED_MSGSIZE); // don't accept message bigger than block size (should be sufficient for BIP32)
         }
         
         // compute inner hash
@@ -73,6 +72,10 @@ public class HmacSha512 {
         sha512.reset();
         sha512.doFinal(data, (short)0, (short)(BLOCKSIZE+HASHSIZE), mac, mac_offset);
         
+        // erase the scratch area: it holds key^opad, the inner hash and the end of the message
+        // (e.g. the parent private key for a hardened BIP32 child)
+        // (message_length <= HASHSIZE, checked above)
+        Util.arrayFillNonAtomic(data, (short)0, (short)(BLOCKSIZE + HASHSIZE), (byte)0);
         return HASHSIZE;
     }   
     
