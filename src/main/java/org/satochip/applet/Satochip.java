@@ -53,6 +53,7 @@ import javacard.framework.ISOException;
 import javacard.framework.JCSystem;
 import javacard.framework.OwnerPIN;
 import javacard.framework.SystemException;
+import javacard.framework.CardRuntimeException;
 import javacard.framework.Util;
 import javacard.security.AESKey;
 import javacard.security.ECPrivateKey;
@@ -61,7 +62,6 @@ import javacard.security.CryptoException;
 import javacard.security.Key;
 import javacard.security.KeyAgreement;
 import javacard.security.KeyBuilder;
-//import javacard.security.KeyPair;
 import javacard.security.Signature;
 import javacard.security.MessageDigest;
 import javacard.security.RandomData;
@@ -680,11 +680,11 @@ public class Satochip extends javacard.framework.Applet {
     static ECPrivateKey buildTransientECKey() {
         try {
             return (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE_TRANSIENT_DESELECT, LENGTH_EC_FP_256, false);
-        } catch (CryptoException e) {
+        } catch (CardRuntimeException e) {
             try {
                 // survives a deselect, but not a card reset (e.g. loss of the NFC field)
                 return (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE_TRANSIENT_RESET, LENGTH_EC_FP_256, false);
-            } catch (CryptoException e1) {
+            } catch (CardRuntimeException e1) {
                 return (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
             }
         }
@@ -709,11 +709,11 @@ public class Satochip extends javacard.framework.Applet {
         try {
             // Put the AES key in RAM if we can.
             return (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_128, false);
-        } catch (CryptoException e) {
+        } catch (CardRuntimeException e) {
             try {
                 // This uses a bit more RAM, but at least it isn't using flash.
                 return (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_RESET, KeyBuilder.LENGTH_AES_128, false);
-            } catch (CryptoException e1) {
+            } catch (CardRuntimeException e1) {
                 // Last option as it will wear out the flash eventually
                 return (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
             }
