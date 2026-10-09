@@ -395,13 +395,15 @@ public class Satochip extends javacard.framework.Applet {
     private boolean bip32_seeded= false;
     private AESKey bip32_masterkey; 
     private AESKey bip32_masterchaincode;
-    private ECPrivateKey bip32_extendedkey; // object storing last extended key used
+    // last derived extended key, in RAM cleared on deselect if the card supports it (see buildTransientECKey())
+    private ECPrivateKey bip32_extendedkey;
     
     /*********************************************
      *             Schnorr signatures            *
      *********************************************/
     
-    private ECPrivateKey taproot_tweakedkey; // object storing last tweaked key used
+    // last tweaked key, in RAM cleared on deselect if the card supports it (see buildTransientECKey())
+    private ECPrivateKey taproot_tweakedkey;
     // BIP0340/aux offset 0, length 11
     // BIP0340/nonce offset 11, length 13
     // BIP0340/challenge offset 24, length 17
@@ -627,7 +629,7 @@ public class Satochip extends javacard.framework.Applet {
         // BIP32 material
         bip32_masterkey= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
         bip32_masterchaincode= (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_256, false);
-        bip32_extendedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false); // todo: use transient
+        bip32_extendedkey= buildTransientECKey();
         //Secp256k1.setCommonCurveParameters(bip32_extendedkey); => done in setup() as it must be performed after each reset_to_factory!
 
         // Liquid-Bitcoin Master Binding Key from slip77
@@ -637,11 +639,11 @@ public class Satochip extends javacard.framework.Applet {
         eckeys = new Key[MAX_NUM_KEYS];
         
         // Schnorr signatures
-        taproot_tweakedkey= (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+        taproot_tweakedkey= buildTransientECKey();
         //Secp256k1.setCommonCurveParameters(taproot_tweakedkey); => done in setup() as it must be performed after each reset_to_factory!
         // initialize Biginteger static data (required for Schnorr signatures)
         Biginteger.init();
-        
+
         // 2FA
         data2FA= new byte[OFFSET_2FA_SIZE];
         aes128_cbc= Cipher.getInstance(Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
@@ -668,6 +670,36 @@ public class Satochip extends javacard.framework.Applet {
 
         register();
     } // end of constructor
+
+    /**
+     * Builds a secp256k1 private key, in RAM if the card supports it, otherwise in EEPROM.
+     * Used for the derived keys (BIP32 extended key, taproot tweaked key), which are rewritten
+     * at each derivation: in RAM, they do not wear the flash and do not outlive the session.
+     * The curve parameters of a transient key are cleared with it: setDerivedKey() sets them again.
+     */
+    static ECPrivateKey buildTransientECKey() {
+        try {
+            return (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE_TRANSIENT_DESELECT, LENGTH_EC_FP_256, false);
+        } catch (CryptoException e) {
+            try {
+                // survives a deselect, but not a card reset (e.g. loss of the NFC field)
+                return (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE_TRANSIENT_RESET, LENGTH_EC_FP_256, false);
+            } catch (CryptoException e1) {
+                return (ECPrivateKey) KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, LENGTH_EC_FP_256, false);
+            }
+        }
+    }
+
+    /**
+     * Stores a 32-byte private key in a key built by buildTransientECKey(). The curve parameters
+     * of a transient key are set again first, as they are cleared on deselect or reset; those of
+     * a persistent key are set once in setup(), so that the flash is not rewritten each time.
+     */
+    private static void setDerivedKey(ECPrivateKey key, byte[] buf, short off) {
+        if (key.getType() != KeyBuilder.TYPE_EC_FP_PRIVATE)
+            Secp256k1.setCommonCurveParameters(key);
+        key.setS(buf, off, BIP32_KEY_SIZE);
+    }
 
     /**
      * Builds an AES-128 key, in RAM if the card supports it, otherwise in EEPROM.
@@ -1245,15 +1277,16 @@ public class Satochip extends javacard.framework.Applet {
      * @param key_nb the keyslot number (0x00-0x0F), or 0xFF for the BIP32 extended key
      * @throws ISOException SW_INCORRECT_P1 if key_nb is out of range or the keyslot is empty,
      *         SW_BIP32_UNINITIALIZED_SEED if 0xFF is selected but no seed is imported,
-     *         SW_INCORRECT_INITIALIZATION if 0xFF is selected but no key has been derived yet,
+     *         SW_INCORRECT_INITIALIZATION if 0xFF is selected but no key has been derived in this session,
      *         SW_INCORRECT_ALG if the curve parameters of the key have been altered
      */
     private ECPrivateKey getSigningKey(byte key_nb) {
         if (key_nb==(byte)0xFF){
             if (!bip32_seeded)
                 ISOException.throwIt(SW_BIP32_UNINITIALIZED_SEED);
-            // getBIP32ExtendedKey() must be called first (the key is cleared on seed reset),
-            // otherwise using the key would throw an uncaught CryptoException (0x6F00)
+            // getBIP32ExtendedKey() must be called first, in the same session: the key is cleared
+            // on seed reset, and also on deselect or card reset when it is transient.
+            // Otherwise using the key would throw an uncaught CryptoException (0x6F00)
             if (!bip32_extendedkey.isInitialized())
                 ISOException.throwIt(SW_INCORRECT_INITIALIZATION);
             checkKeyCurve(bip32_extendedkey);
@@ -2335,7 +2368,7 @@ public class Satochip extends javacard.framework.Applet {
         // the scratch EC key holds the last parent key of a non-hardened child
         clearEphemeralKey();
         // instantiate elliptic curve with last extended key
-        bip32_extendedkey.setS(recvBuffer, BIP32_OFFSET_PARENT_KEY, BIP32_KEY_SIZE);
+        setDerivedKey(bip32_extendedkey, recvBuffer, BIP32_OFFSET_PARENT_KEY);
 
         // save chaincode to buffer then clear recvBuffer
         Util.arrayCopyNonAtomic(recvBuffer, BIP32_OFFSET_PARENT_CHAINCODE, buffer, (short)0, BIP32_KEY_SIZE);
@@ -2455,7 +2488,7 @@ public class Satochip extends javacard.framework.Applet {
      * See also https://bitcoinops.org/img/posts/taproot-workshop/taproot-workshop.pdf
      * 
      * A private key must first be available, either from a keyslot or 
-     * derived from a BIP32 seed using getBIP32ExtendedKey().
+     * derived from a BIP32 seed using getBIP32ExtendedKey() in the same session.
      * 
      * The tweaked key is then stored in a dedicated keyslot and available next for schnorr signing.
      * The function returns the corresponding public key, signed by the authentikey.
@@ -2567,7 +2600,7 @@ public class Satochip extends javacard.framework.Applet {
 
         // save tweaked secret key 
         // we use a different ECPrivateKey 'taproot_tweakedkey' to avoid mixing ECDSA and Schnorr signatures
-        taproot_tweakedkey.setS(recvBuffer, seckeyOffset, (short)32);
+        setDerivedKey(taproot_tweakedkey, recvBuffer, seckeyOffset);
         // clear privkey from buffer
         Util.arrayFillNonAtomic(recvBuffer, seckeyOffset, (short)64, (byte)0x00);
 
@@ -2589,7 +2622,7 @@ public class Satochip extends javacard.framework.Applet {
      * If 2FA is enabled, a HMAC must be provided as an additional security layer. 
      * 
      * Before using this method to sign a tx hash, a tweaked privkey must be derived 
-     * from a (BIP32 or simple) privkey using TaprootTweakPrivateKey().
+     * from a (BIP32 or simple) privkey using TaprootTweakPrivateKey(), in the same session.
      * 
      * ins: 0x7B
      * p1: 0x00  
@@ -2612,7 +2645,8 @@ public class Satochip extends javacard.framework.Applet {
         // a key must have been staged by TaprootTweakPrivateKey() first,
         // otherwise keyAgreement.init() below would throw an uncaught
         // CryptoException (0x6F00). This is the state after a seed reset or a
-        // factory reset, which both clear the tweaked key.
+        // factory reset, which both clear the tweaked key, and in a new session
+        // when the tweaked key is transient (see buildTransientECKey()).
         if (!taproot_tweakedkey.isInitialized())
             ISOException.throwIt(SW_INCORRECT_INITIALIZATION);
         checkKeyCurve(taproot_tweakedkey);
@@ -2740,7 +2774,7 @@ public class Satochip extends javacard.framework.Applet {
      * See https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki
      *
      * A private key must first be available, either from a keyslot or
-     * derived from a BIP32 seed using getBIP32ExtendedKey().
+     * derived from a BIP32 seed using getBIP32ExtendedKey() in the same session.
      *
      * The function returns the corresponding public nonce (pubnonce).
      * The secret nonce secnonce is stored for use in the signing phase.
@@ -2962,7 +2996,7 @@ public class Satochip extends javacard.framework.Applet {
      * See https://github.com/bitcoin/bips/blob/master/bip-0327.mediawiki
      *
      * A private key must first be available, either from a keyslot or
-     * derived from a BIP32 seed using getBIP32ExtendedKey().
+     * derived from a BIP32 seed using getBIP32ExtendedKey() in the same session.
      *
      * The function returns the partial psig signature for corresponding key and given secnonce & session context.
      * The secret nonce secnonce must be generated from the Musig2GenerateNonce().

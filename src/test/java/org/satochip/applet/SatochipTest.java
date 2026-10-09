@@ -902,6 +902,34 @@ public class SatochipTest {
   }
 
   @Test
+  @DisplayName("The derived and tweaked keys do not survive a new session")
+  @FeaturePolicies({"schnorr"})
+  void derivedKeysClearedOnDeselectTest() throws Exception {
+    // both keys are staged and usable in the session that derived them
+    cmdSet.cardBip32GetExtendedKeyRaw("m/86'/0'/0'/0/0");
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, 0xFF, 0x00, new byte[32]).getSw());
+    assertEquals(SW_OK,
+        cmdSet.sendRawSecure(INS_TAPROOT_TWEAK_PRIVKEY, 0xFF, 0x00, new byte[]{0x00}).getSw());
+
+    // a re-select deselects the applet: the keys are transient (cleared on deselect), so a client
+    // must derive (and tweak) again in the new session. This fails on a card that only supports
+    // the CLEAR_ON_RESET or persistent fallback of buildTransientECKey().
+    resetSession();
+    assertEquals(0x9C13, cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, 0xFF, 0x00, new byte[32]).getSw(),
+        "the BIP32 extended key must be cleared on deselect");
+    assertEquals(0x9C13, cmdSet.sendRawSecure(INS_TAPROOT_TWEAK_PRIVKEY, 0xFF, 0x00, new byte[]{0x00}).getSw(),
+        "the tweak needs the BIP32 extended key");
+    assertEquals(0x9C13, cmdSet.sendRawSecure(INS_SIGN_SCHNORR_HASH, 0x00, 0x00, new byte[32]).getSw(),
+        "the taproot tweaked key must be cleared on deselect");
+
+    // deriving again restores both, with the curve parameters set again
+    cmdSet.cardBip32GetExtendedKeyRaw("m/86'/0'/0'/0/0");
+    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, 0xFF, 0x00, new byte[32]).getSw());
+    assertEquals(SW_OK,
+        cmdSet.sendRawSecure(INS_TAPROOT_TWEAK_PRIVKEY, 0xFF, 0x00, new byte[]{0x00}).getSw());
+  }
+
+  @Test
   @DisplayName("Blinded Schnorr signatures verify for many keys and messages")
   @FeaturePolicies({"schnorr", "rsaMult"})
   void signSchnorrHashManyTest() {
@@ -1127,7 +1155,8 @@ public class SatochipTest {
       }
       reset2FA();
     }
-    // 2FA is gone: the plain form works again
+    // 2FA is gone: the plain form works again (the re-select in resetSession() cleared the derived key)
+    cmdSet.cardBip32GetExtendedKeyRaw("m/44'/0'/0'/0/0");
     assertEquals(SW_OK, cmdSet.sendRawSecure(INS_SIGN_TRANSACTION_HASH, 0xFF, 0x00,
         concat(sha256("x".getBytes()), new byte[2])).getSw());
   }

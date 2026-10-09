@@ -4,7 +4,7 @@ Guidance for AI coding agents working on the SatoChipApplet repository.
 
 ## Project overview
 
-SatoChipApplet is an open-source **JavaCard applet** implementing a **Bitcoin hardware wallet** with full BIP32 (hierarchical deterministic) support. "SatoChip" stands for Secure Anonymous Trustless and Open Chip. The applet runs on a smartcard (e.g. Yubikey Neo dev cards, NXP JCOP J2D081, J3D081 JCOP v2.4.2); a BIP32 seed is imported once, private keys are derived on demand and **never leave the chip** — only signatures come out. Derived keys are cached in secure memory.
+SatoChipApplet is an open-source **JavaCard applet** implementing a **Bitcoin hardware wallet** with full BIP32 (hierarchical deterministic) support. "SatoChip" stands for Secure Anonymous Trustless and Open Chip. The applet runs on a smartcard (e.g. Yubikey Neo dev cards, NXP JCOP J2D081, J3D081 JCOP v2.4.2); a BIP32 seed is imported once, private keys are derived on demand and **never leave the chip** — only signatures come out. The last derived key is kept in RAM until the end of the session (cleared on deselect).
 
 Upstream repository: https://github.com/Toporin/SatochipApplet
 
