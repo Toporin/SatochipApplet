@@ -18,7 +18,7 @@ The protocol version stays 0.16 for all the changes below. Client developers sho
 ### Breaking changes (summary)
 
 * **UnblockPIN (0x46):** the data format is now `[PUK_size(1b) | PUK | (optional) PIN_size(1b) | (optional) PIN]`; the previous format (`[PUK]` without size prefix) is refused. See *New features*.
-* **Reset to factory (0xFD):** a single APDU (`P1=0xAA`, `P2=0x55`), sent through the secure channel, and it now requires a validated PIN or a blocked PUK. See *Security fixes* and *Refactoring*.
+* **Reset to factory (0xFD):** a single APDU (`P1=0xAA`, `P2=0x55`), sent through the secure channel, and it now requires a blocked PUK. See *Security fixes* and *Refactoring*.
 * **Removed commands**, which now return `SW_INS_DEPRECATED` (0x9C26): ParseTransaction (0x71), SignTransaction (0x6F), signMessage (0x6E), CreatePIN (0x40), ListPINs (0x48), setBIP32AuthentikeyPubkey (0x75) and setBIP32ExtendedPubkey (0x74). Use SignTransactionHash (0x7A) instead of the signing commands. See *Removed and deprecated*.
 * **Single PIN and PUK:** P1 must be 0x00 in VerifyPIN, ChangePIN and UnblockPIN; the pin1/ublk1 fields of setup are ignored; the GetStatus bytes for PIN1/PUK1 are always 0. See *Refactoring*.
 * **TaprootTweakPrivateKey (0x7C):** the tweak is now BIP341-compliant. Key-path-only (BIP86) keys are unchanged (send `tweak_size=0`), but a tweak with a non-zero merkle root derived by v0.15-0.1 or earlier cannot be reproduced. Unknown P2 values are refused. See *Security fixes*.

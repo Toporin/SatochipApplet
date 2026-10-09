@@ -1104,7 +1104,7 @@ public class Satochip extends javacard.framework.Applet {
      * they are kept instead, reset and unblocked, and the next setup() reuses them with the try
      * limits of the first setup.
      *
-     * The reset requires either a validated PIN, or a blocked PUK (the PIN and PUK are both
+     * The reset requires a blocked PUK (the PIN and PUK are both
      * lost and the wallet is unusable anyway). Anyone holding the card can block the PIN and the
      * PUK, so this does not stop a thief from wiping the card, but it makes the reset no easier
      * than bricking the card, instead of a single unauthenticated command (e.g. over NFC).
@@ -1132,7 +1132,7 @@ public class Satochip extends javacard.framework.Applet {
             ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
         }
         // setup is done (checked in process()), so the PIN and PUK exist
-        if (!pin.isValidated() && puk.getTriesRemaining() != (byte)0)
+        if (puk.getTriesRemaining() != (byte)0)
             ISOException.throwIt(SW_UNAUTHORIZED);
 
         // 1. secrets: seed & BIP32 data (resetSeed() clears bip32_seeded first), taproot, keyslots
