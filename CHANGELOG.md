@@ -8,10 +8,9 @@ Satochip applet full versions follows this format: vX.Y-Z.W where:
 * X.Y refers to the PROTOCOL VERSION: changes that impact compatibility with the client side (e.g new functionalities, major patch...)
 * Z.W refers to changes with no impact on compatibility of the client (e.g minor patches, optimizations...)
 
-## [0.16-0.0]
+## [0.16-0.1]
 
-Work-in-progress version (NOT for production): security fixes and hardening patches following a security code review of the applet.
-This version will be bumped to v0.16-0.1 once all identified issues have been patched and thoroughly tested.
+Security fixes and hardening patches following a security code review of the applet.
 
 The protocol version stays 0.16 for all the changes below. Client developers should read the breaking changes first: each one is detailed in the section where it belongs.
 
