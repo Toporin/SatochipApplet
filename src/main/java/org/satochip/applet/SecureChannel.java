@@ -223,9 +223,10 @@ class SecureChannel {
      *  p2: 0x00 (RFU)
      *  data: [IV(16b) | data_size(2b) | encrypted_command | mac_size(2b) | mac]
      *
-     *  return: [decrypted command] in buffer, and the decrypted size. The decrypted command is
-     *          guaranteed to hold a complete header [CLA | INS | P1 | P2 | Lc] and Lc data bytes,
+     *  return: [decrypted command] in buffer, and its size without the padding (at least 5+Lc).
+     *          The decrypted command is guaranteed to hold a complete header [CLA | INS | P1 | P2 | Lc] and Lc data bytes,
      *          so that handlers can trust buffer[OFFSET_LC] (the CLA is checked by the applet).
+     *          A command without data sent without Lc ([CLA | INS | P1 | P2]) is accepted, with Lc set to 0.
      *
      */
     short unwrap(byte[] buffer){
@@ -286,12 +287,30 @@ class SecureChannel {
         // validate the decrypted command: [CLA | INS | P1 | P2 | Lc | data(Lc) | padding]
         // Lc must not exceed the decrypted data, otherwise the handlers would read stale buffer
         // content. The padding added by the client is not removed (the cipher is NOPAD), so
-        // sizeout may exceed 5+Lc: only check the bound.
-        if (sizeout < (short)ISO7816.OFFSET_CDATA)
+        // sizeout may exceed 5+Lc: only check the bound, against the unpadded size.
+        // the padding must be valid PKCS#7 (it was authenticated by the MAC above, so a padding
+        // error reveals nothing to an attacker)
+        if (sizeout <= 0)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        if ((short)(ISO7816.OFFSET_CDATA + Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC])) > sizeout)
+        short padsize = Util.makeShort((byte) 0x00, buffer[(short)(sizeout-1)]);
+        if (padsize < 1 || padsize > SIZE_SC_IV || padsize > sizeout)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        return sizeout;
+        short plainsize = (short)(sizeout-padsize);
+        for (short i = plainsize; i < sizeout; i++){
+            if (buffer[i] != (byte)padsize)
+                ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
+        // a command without data may be sent without Lc ([CLA | INS | P1 | P2], e.g. by pysatochip):
+        // buffer[OFFSET_LC] then holds the first padding byte, so set Lc to 0 explicitly
+        if (plainsize == (short)ISO7816.OFFSET_LC){
+            buffer[ISO7816.OFFSET_LC] = (byte)0x00;
+            plainsize = (short)ISO7816.OFFSET_CDATA;
+        }
+        if (plainsize < (short)ISO7816.OFFSET_CDATA)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        if ((short)(ISO7816.OFFSET_CDATA + Util.makeShort((byte) 0x00, buffer[ISO7816.OFFSET_LC])) > plainsize)
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        return plainsize;
     }
 
     /**

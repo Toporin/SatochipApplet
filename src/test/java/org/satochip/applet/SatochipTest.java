@@ -329,14 +329,16 @@ public class SatochipTest {
     assertEquals(SW_CLA_NOT_SUPPORTED,
         cmdSet.sendRawSecureBytes(new byte[]{0x00, INS_GET_RANDOM, 8, 0, 0}).getSw());
 
-    // Lc must not point past the decrypted data. The card does not strip the PKCS#7 padding, so
-    // the bound is the padded size: a 32-byte plaintext is padded to 48 bytes.
+    // Lc must not point past the decrypted data, without its PKCS#7 padding: a 32-byte plaintext
+    // is padded to 48 bytes, but only its 32 bytes count.
     byte[] inner = new byte[32];
     inner[0] = cla; inner[1] = INS_GET_RANDOM; inner[2] = 8;
-    inner[4] = (byte) (48 - 5);
-    assertEquals(SW_OK, cmdSet.sendRawSecureBytes(inner).getSw(), "Lc up to the padded size is accepted");
-    inner[4] = (byte) (48 - 5 + 1);
+    inner[4] = (byte) (32 - 5);
+    assertEquals(SW_OK, cmdSet.sendRawSecureBytes(inner).getSw(), "Lc up to the plaintext size is accepted");
+    inner[4] = (byte) (32 - 5 + 1);
     assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawSecureBytes(inner).getSw(), "one byte past is refused");
+    inner[4] = (byte) (48 - 5);
+    assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawSecureBytes(inner).getSw(), "the padding does not count");
     assertEquals(SW_WRONG_LENGTH, cmdSet.sendRawSecureBytes(
         new byte[]{cla, INS_GET_RANDOM, 8, 0, (byte) 200, 1, 2, 3}).getSw());
 
@@ -669,6 +671,20 @@ public class SatochipTest {
     assertEquals(SW_OK, legacy.getSw());
     assertEquals(SW_OK, current.getSw());
     // [coordx_size(2b) | coordx | sig_size(2b) | sig]: same coordx, the ECDSA signatures differ
+    assertArrayEquals(Arrays.copyOf(current.getData(), 34), Arrays.copyOf(legacy.getData(), 34));
+    resetSession();
+  }
+
+  @Test
+  @DisplayName("A command without data is accepted without Lc ([CLA | INS | P1 | P2], as sent by pysatochip)")
+  void secureChannelNoLcTest() throws Exception {
+    byte cla = TestSatochipCommandSet.CLA;
+    cmdSet.forgetSecureChannel(); // a new channel: the PIN is not verified
+    // the PKCS#7 padding (0x0C) follows P2, where Lc would be: it must not be read as Lc
+    APDUResponse legacy = cmdSet.sendRawSecureBytes(new byte[]{cla, 0x73, 0x00, 0x00});
+    APDUResponse current = cmdSet.sendRawSecureBytes(new byte[]{cla, (byte) 0xAD, 0x00, 0x00});
+    assertEquals(SW_OK, legacy.getSw());
+    assertEquals(SW_OK, current.getSw());
     assertArrayEquals(Arrays.copyOf(current.getData(), 34), Arrays.copyOf(legacy.getData(), 34));
     resetSession();
   }
