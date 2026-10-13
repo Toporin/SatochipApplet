@@ -430,26 +430,23 @@ public class SatochipTest {
   }
 
   @Test
-  @DisplayName("Factory reset requires the PIN (or a blocked PUK), then erases everything")
+  @DisplayName("Factory reset needs no PIN, and erases everything")
   void resetToFactoryTest() throws Exception {
     final byte INS_RESET_TO_FACTORY = (byte) 0xFD;
     final int RESET_P1 = 0xAA, RESET_P2 = 0x55;
 
-    // without a validated PIN (and with the PUK not blocked) the reset is refused, and the card
-    // is left untouched
-    cmdSet.forgetSecureChannel();
-    assertEquals(SW_UNAUTHORIZED,
-        cmdSet.sendRawSecure(INS_RESET_TO_FACTORY, RESET_P1, RESET_P2, new byte[0]).getSw());
+    // the magic P1/P2 are required, and a refused reset leaves the card untouched
+    assertEquals(0x6A86, cmdSet.sendRawSecure(INS_RESET_TO_FACTORY, RESET_P1, 0x00, new byte[0]).getSw());
+    assertEquals(0x6A86, cmdSet.sendRawSecure(INS_RESET_TO_FACTORY, 0x00, RESET_P2, new byte[0]).getSw());
     assertEquals(0x01, cmdSet.cardGetStatus().getData()[9], "the card must still be seeded");
     assertEquals(0x01, cmdSet.cardGetStatus().getData()[10], "the card must still be set up");
 
-    // with the PIN, the magic P1/P2 are still required
-    assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw());
-    assertEquals(0x6A86, cmdSet.sendRawSecure(INS_RESET_TO_FACTORY, RESET_P1, 0x00, new byte[0]).getSw());
-
     try {
+      // a new secure channel starts unauthenticated: the reset does not need the PIN
+      cmdSet.forgetSecureChannel();
       assertEquals(SW_OK,
-          cmdSet.sendRawSecure(INS_RESET_TO_FACTORY, RESET_P1, RESET_P2, new byte[0]).getSw());
+          cmdSet.sendRawSecure(INS_RESET_TO_FACTORY, RESET_P1, RESET_P2, new byte[0]).getSw(),
+          "the reset must not require the PIN");
       byte[] status = cmdSet.cardGetStatus().getData();
       assertEquals(0x00, status[8], "2FA must be disabled");
       assertEquals(0x00, status[9], "the seed must be erased");
@@ -485,17 +482,21 @@ public class SatochipTest {
       // legacy clients rely on, while 0xAD returns the authentikey (neither needs the PIN)
       assertEquals(0x9C14, cmdSet.sendRawSecure(0x73, 0x00, 0x00, new byte[0]).getSw());
       assertEquals(SW_OK, cmdSet.sendRawSecure(0xAD, 0x00, 0x00, new byte[0]).getSw());
-      // reset again, so that the baseline is restored below with the baseline try limits
-      assertEquals(SW_OK, cmdSet.sendRawSecure(INS_VERIFY_PIN, 0x00, 0x00, PIN).getSw());
+      // reset again, so that the baseline is restored below with the baseline try limits; this
+      // time with the PIN blocked (a forgotten PIN), which must not prevent the reset either
+      blockPin();
       assertEquals(SW_OK,
-          cmdSet.sendRawSecure(INS_RESET_TO_FACTORY, RESET_P1, RESET_P2, new byte[0]).getSw());
+          cmdSet.sendRawSecure(INS_RESET_TO_FACTORY, RESET_P1, RESET_P2, new byte[0]).getSw(),
+          "a blocked PIN must not prevent the reset");
       cmdSet.forgetSecureChannel();
     } finally {
       // restore the baseline: set up again with the same PIN/PUK and tries, and re-import the seed
       byte[] status = cmdSet.cardGetStatus().getData();
       if (status[10] == 0x01 && status[4] != 5) {
-        // a failure left the card set up with the test try limits: reset it first
-        resetSession();
+        // a failure left the card set up with the test try limits, or with its PIN blocked:
+        // reset it first (no PIN needed)
+        cmdSet.cardSelect().checkOK();
+        cmdSet.forgetSecureChannel();
         cmdSet.sendRawSecure(INS_RESET_TO_FACTORY, RESET_P1, RESET_P2, new byte[0]);
         cmdSet.forgetSecureChannel();
       }

@@ -1104,10 +1104,9 @@ public class Satochip extends javacard.framework.Applet {
      * they are kept instead, reset and unblocked, and the next setup() reuses them with the try
      * limits of the first setup.
      *
-     * The reset requires a blocked PUK (the PIN and PUK are both
-     * lost and the wallet is unusable anyway). Anyone holding the card can block the PIN and the
-     * PUK, so this does not stop a thief from wiping the card, but it makes the reset no easier
-     * than bricking the card, instead of a single unauthenticated command (e.g. over NFC).
+     * The reset deliberately requires neither the PIN nor a blocked PUK: anyone holding the card
+     * can block the PIN and the PUK first, so such a check would only make the reset slower, not
+     * harder.
      *
      * The data is erased in an order that is safe against card tearing: the secrets first, then
      * the 2FA, then the setup flag, and the PIN objects last. Each step only removes
@@ -1131,10 +1130,6 @@ public class Satochip extends javacard.framework.Applet {
         if ((buffer[ISO7816.OFFSET_P1] != FACTORY_RESET_P1_MAGIC) || (buffer[ISO7816.OFFSET_P2] != FACTORY_RESET_P2_MAGIC)) {
             ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
         }
-        // setup is done (checked in process()), so the PIN and PUK exist
-        if (puk.getTriesRemaining() != (byte)0)
-            ISOException.throwIt(SW_UNAUTHORIZED);
-
         // 1. secrets: seed & BIP32 data (resetSeed() clears bip32_seeded first), taproot, keyslots
         resetSeed();
         for (byte nb_key=0; nb_key<MAX_NUM_KEYS; nb_key++){
