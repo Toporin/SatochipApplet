@@ -3348,7 +3348,9 @@ public class CardEdge extends javacard.framework.Applet {
         // save the 2-byte id next to pk. This id is also stored in the card and erased after the signature phase, to avoid nonce reuse.
         Util.setShort(recvBuffer, OFFSET_BIP327_ID, bip327_counter);
         // save id to internal state to track reuse of secnonce, new entry overwite older entries if necessary.
-        bip327_valid_ids[(short) (bip327_counter % BIP327_MAX_NB_ID)] = bip327_counter;
+        // The counter is an unsigned 2-byte ID stored in a signed short.
+        // Masking keeps the slot nonnegative after 0x7fff (slot count is a power of 2).
+        bip327_valid_ids[(short) (bip327_counter & (BIP327_MAX_NB_ID - 1))] = bip327_counter;
         // increment counter
         bip327_counter++;
 
