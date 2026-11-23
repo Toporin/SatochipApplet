@@ -1,7 +1,9 @@
 package org.satochip.applet;
 
 import javacard.framework.AID;
+import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.jce.spec.ECNamedCurveParameterSpec;
 import org.bouncycastle.util.encoders.Hex;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -18,6 +20,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.math.BigInteger;
+import java.security.SecureRandom;
 import java.security.Security;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -48,6 +51,8 @@ import static org.satochip.applet.SatochipTest.*;
 @DisplayName("Benchmark the Satochip applet")
 public class SatochipBenchmark {
 
+  private static final byte INS_INIT_SECURE_CHANNEL = (byte) 0x81;
+
   private final String label = System.getProperty("org.satochip.bench.label", "current");
   private final int iterations = Integer.getInteger("org.satochip.bench.iterations", 50);
   private final int warmup = Integer.getInteger("org.satochip.bench.warmup", 5);
@@ -73,26 +78,39 @@ public class SatochipBenchmark {
     byte[] tweak = ok(cmdSet.sendRawSecure(INS_TAPROOT_TWEAK_PRIVKEY, 0xFF, 0x00, new byte[]{0x00}), "taproot tweak");
     byte[] tweakedPubkey = Arrays.copyOfRange(tweak, 2, 2 + 65);
     byte[] hash = sha256("satochip benchmark".getBytes());
-    byte[] sig = ok(cmdSet.sendRawSecure(INS_SIGN_SCHNORR_HASH, 0x00, 0x00, hash), "Schnorr signature");
-    assertTrue(verifyBip340(tweakedPubkey, hash, sig), "the Schnorr signature does not verify");
-    for (int i = -warmup; i < iterations; i++) {
-      time("schnorr_sign", i, () -> cmdSet.sendRawSecure(INS_SIGN_SCHNORR_HASH, 0x00, 0x00, hash));
+    BigInteger n = Vectors.SECP256K1_N;
+    APDUResponse firstSig = cmdSet.sendRawSecure(INS_SIGN_SCHNORR_HASH, 0x00, 0x00, hash);
+    // Schnorr and MuSig2 need the RSA squaring trick (Biginteger.mult_rsa_trick). JCardEngine runs RSA
+    // through BouncyCastle, which refuses the even public exponent 2, so the applet's self-test turns
+    // the trick off and these commands cannot run there: skip them, as SatochipTest does ("rsaMult").
+    // A real card without the trick still fails below, rather than silently skipping.
+    boolean rsaMult = firstSig.getSw() == SW_OK;
+    if (!rsaMult && simulator) {
+      System.out.println("Skipping Schnorr and MuSig2: no RSA squaring on the simulator (SW "
+          + Integer.toHexString(firstSig.getSw()) + ")");
+    } else {
+      byte[] sig = ok(firstSig, "Schnorr signature");
+      assertTrue(verifyBip340(tweakedPubkey, hash, sig), "the Schnorr signature does not verify");
+      for (int i = -warmup; i < iterations; i++) {
+        time("schnorr_sign", i, () -> cmdSet.sendRawSecure(INS_SIGN_SCHNORR_HASH, 0x00, 0x00, hash));
+      }
     }
 
     // MuSig2: nonce generation then partial signature, as in musig2PartialSignatureTest
-    BigInteger n = Vectors.SECP256K1_N;
     byte[] b = bytes32(new BigInteger(1, sha256("musig2 b".getBytes())).mod(n));
     byte[] ea = bytes32(new BigInteger(1, sha256("musig2 ea".getBytes())).mod(n));
     byte[] finalizeData = concat(b, ea, new byte[]{0x00, 0x01});
-    for (int i = -warmup; i < iterations; i++) {
-      time("musig2_nonce_init", i, () -> cmdSet.sendRawSecure(INS_MUSIG2_GENERATE_NONCE, 0xFF, OP_INIT,
-          new byte[]{0x00, (byte) 0xFF, 0x00}));
-      byte[] secnonce = time("musig2_nonce_final", i,
-          () -> cmdSet.sendRawSecure(INS_MUSIG2_GENERATE_NONCE, 0xFF, OP_FINALIZE, new byte[0]));
-      time("musig2_sign_init", i, () -> cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_INIT, secnonce));
-      byte[] psig = time("musig2_sign_final", i,
-          () -> cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_FINALIZE, finalizeData));
-      assertEquals(32, psig.length, "a MuSig2 partial signature is 32 bytes");
+    if (rsaMult) {
+      for (int i = -warmup; i < iterations; i++) {
+        time("musig2_nonce_init", i, () -> cmdSet.sendRawSecure(INS_MUSIG2_GENERATE_NONCE, 0xFF, OP_INIT,
+            new byte[]{0x00, (byte) 0xFF, 0x00}));
+        byte[] secnonce = time("musig2_nonce_final", i,
+            () -> cmdSet.sendRawSecure(INS_MUSIG2_GENERATE_NONCE, 0xFF, OP_FINALIZE, new byte[0]));
+        time("musig2_sign_init", i, () -> cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_INIT, secnonce));
+        byte[] psig = time("musig2_sign_final", i,
+            () -> cmdSet.sendRawSecure(INS_MUSIG2_SIGN_HASH, 0xFF, OP_FINALIZE, finalizeData));
+        assertEquals(32, psig.length, "a MuSig2 partial signature is 32 bytes");
+      }
     }
 
     // controls: not affected by the blinded Schnorr/MuSig2 arithmetic
@@ -102,6 +120,17 @@ public class SatochipBenchmark {
     for (int i = -warmup; i < iterations; i++) {
       time("get_random (control)", i, () -> cmdSet.sendRawSecure(INS_GET_RANDOM, 32, 0x00, new byte[0]));
     }
+
+    // secure channel setup, sent raw so that only the card side is timed (no client ECDH or
+    // signature check). Last on purpose: each INIT logs the PIN out and replaces the session key.
+    ECNamedCurveParameterSpec spec = ECNamedCurveTable.getParameterSpec("secp256k1");
+    SecureRandom rng = new SecureRandom();
+    for (int i = -warmup; i < iterations; i++) {
+      BigInteger k = new BigInteger(256, rng).mod(n.subtract(BigInteger.ONE)).add(BigInteger.ONE);
+      byte[] clientPubkey = spec.getG().multiply(k).normalize().getEncoded(false);
+      time("init_secure_channel", i, () -> cmdSet.sendRawPlain(INS_INIT_SECURE_CHANNEL, 0x00, 0x00, clientPubkey));
+    }
+    cmdSet.forgetSecureChannel();
 
     report();
   }
