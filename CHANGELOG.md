@@ -8,6 +8,19 @@ Satochip applet full versions follows this format: vX.Y-Z.W where:
 * X.Y refers to the PROTOCOL VERSION: changes that impact compatibility with the client side (e.g new functionalities, major patch...)
 * Z.W refers to changes with no impact on compatibility of the client (e.g minor patches, optimizations...)
 
+## [0.16-0.2]
+
+Faster secure channel initiation. No change to the protocol or to the APDU formats.
+
+### Optimizations
+
+* Secp256k1.isOnCurve() reduces modulo p with the special form of the secp256k1 field prime (p = 2^256 - 2^32 - 977) instead of the generic schoolbook division of Biginteger.mod(): a 512-bit value H·2^256 + L is folded into H·(2^32 + 977) + L, in a single linear pass over the bytes, at most three times, followed by at most one subtraction of p. The check is unchanged (same canonical-encoding and curve-equation conditions), and still applies to both callers: the secure channel client pubkey and the SeedKeeper trusted pubkey. The new Secp256k1.reduceModP() is not constant time, which is fine for the public points it handles. On a test card, over a contact reader, InitiateSecureChannel (0x81) takes 374 ms instead of 1024 ms (median of 40); the slower version could exceed the default Android NFC transceive timeout. For reference, the same command without the on-curve check takes 186 ms.
+
+### Build, tests and tooling
+
+* New Secp256k1ReduceTest: checks Secp256k1.reduceModP() against BigInteger (edge values around 0, p, 2^256 and 2^512, an input that needs the third fold, and random products and 512-bit values). It calls the function directly, so it also runs on the simulator, where isOnCurve() never reaches the reduction.
+* The benchmark (`./gradlew benchmarkCard`) also times InitiateSecureChannel (0x81), sent raw so that only the card side is measured. On the simulator, it skips the Schnorr and MuSig2 timings instead of failing: JCardEngine runs RSA through BouncyCastle, which refuses the even public exponent 2, so the applet's RSA squaring trick is disabled there (SatochipTest already skips those tests for the same reason).
+
 ## [0.16-0.1]
 
 Security fixes and hardening patches following a security code review of the applet.

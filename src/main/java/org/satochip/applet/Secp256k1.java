@@ -137,19 +137,23 @@ public class Secp256k1 {
             return true;
         }
         
+        // the products below are 96-byte buffers whose 32 leading bytes are zero (both factors are
+        // < p < 2^256): reduceModP() works on the 64 trailing bytes, the result is in the last 32
+        short offset_product_low = (short)(offset_product+32);
+
         // y^2 mod p
         Biginteger.square_rsa(pubkey, (short)(pubkey_offset+33), (short)32, scratch, offset_product);
-        Biginteger.mod(scratch, offset_product, (short)96, SECP256K1, OFFSET_SECP256K1_P, (short)32);
+        reduceModP(scratch, offset_product_low);
         Util.arrayCopyNonAtomic(scratch, (short)(offset_product+64), scratch, offset_y2, (short)32);
-        
+
         // x^2 mod p
         Biginteger.square_rsa(pubkey, (short)(pubkey_offset+1), (short)32, scratch, offset_product);
-        Biginteger.mod(scratch, offset_product, (short)96, SECP256K1, OFFSET_SECP256K1_P, (short)32);
+        reduceModP(scratch, offset_product_low);
         Util.arrayCopyNonAtomic(scratch, (short)(offset_product+64), scratch, offset_x3, (short)32);
-        
+
         // x^3 = x^2 * x mod p
         Biginteger.mult_rsa_trick(scratch, offset_x3, pubkey, (short)(pubkey_offset+1), (short)32, scratch, offset_product);
-        Biginteger.mod(scratch, offset_product, (short)96, SECP256K1, OFFSET_SECP256K1_P, (short)32);
+        reduceModP(scratch, offset_product_low);
         Util.arrayCopyNonAtomic(scratch, (short)(offset_product+64), scratch, offset_x3, (short)32);
         
         // x^3 + 7 mod p (no carry possible: (x^3 mod p) + 7 <= (p-1)+7 < 2^256)
@@ -165,5 +169,61 @@ public class Secp256k1 {
         // clear scratch
         Util.arrayFillNonAtomic(scratch, scratch_offset, (short)192, (byte)0);
         return is_on_curve;
+    }
+
+    /**
+     * Reduces a 64-byte number modulo the secp256k1 field prime p, in place.
+     *
+     * p = 2^256 - c with c = 2^32 + 977 = 0x1000003D1, so H*2^256 + L == H*c + L (mod p). Each fold
+     * replaces [H | L] by H*c + L, which is linear in the size, unlike the schoolbook division of
+     * Biginteger.mod(). From any 64-byte input, H*c + L < 2^290 (37 bytes); a second fold leaves
+     * H <= 1, and then L < 2^67, so a third fold ends with H = 0. A final subtraction brings
+     * L < 2^256 < 2p below p.
+     *
+     * NOT constant time (the number of folds and the final subtraction depend on the value):
+     * for public operands only, such as the coordinates checked by isOnCurve().
+     *
+     * @param x      buffer holding [H(32b) | L(32b)], big-endian
+     * @param offset offset of H in x
+     *               on return, x[offset..offset+32) is zero and x[offset+32..offset+64) holds x mod p
+     */
+    static void reduceModP(byte[] x, short offset) {
+        short offset_low = (short)(offset+32);
+        while (!Biginteger.equalZero(x, offset, (short)32)) {
+            // one pass over the columns of H*c + L, least significant byte first. Column m (byte m
+            // counted from the least significant one) adds l_m + h_m*0xD1 + h_(m-1)*0x03 + h_(m-4).
+            // Each column fits in an unsigned 16-bit accumulator: at most 255*(1+209+3+1) + carry,
+            // with carry <= 215, i.e. < 55100 < 2^16. The short arithmetic wraps modulo 2^16, so
+            // the low byte and (acc >> 8) & 0xFF are exact even when acc reads as negative.
+            // The result is written in place: column m overwrites l_m (m < 32), only read at
+            // column m, or h_(m-32) (m >= 32), whose last use is at column m-28.
+            short carry = (short)0;
+            for (short m = (short)0; m < (short)37; m++) {
+                short acc = carry;
+                if (m < (short)32) {
+                    acc += (short)(x[(short)(offset_low+31-m)] & 0xFF);
+                    acc += (short)((short)(x[(short)(offset+31-m)] & 0xFF) * (short)0xD1);
+                }
+                if (m >= (short)1 && m <= (short)32) {
+                    acc += (short)((short)(x[(short)(offset+32-m)] & 0xFF) * (short)0x03);
+                }
+                if (m >= (short)4 && m <= (short)35) {
+                    acc += (short)(x[(short)(offset+35-m)] & 0xFF);
+                }
+                if (m < (short)32) {
+                    x[(short)(offset_low+31-m)] = (byte)acc;
+                } else {
+                    x[(short)(offset+63-m)] = (byte)acc;
+                }
+                carry = (short)((short)(acc >> 8) & 0xFF);
+            }
+            // the result holds in 37 bytes (carry is 0 here): H is now its 5 high bytes, the other
+            // bytes of H still hold their old value and must be cleared
+            Util.arrayFillNonAtomic(x, offset, (short)27, (byte)0);
+        }
+        // L < 2^256 < 2p: at most one subtraction
+        if (!Biginteger.lessThan(x, offset_low, SECP256K1, OFFSET_SECP256K1_P, (short)32)) {
+            Biginteger.subtract(x, offset_low, SECP256K1, OFFSET_SECP256K1_P, (short)32);
+        }
     }
 }

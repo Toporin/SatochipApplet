@@ -112,10 +112,11 @@ public class Satochip extends javacard.framework.Applet {
     // 0.15-0.0: add MuSig2 support (beta dev)
     // 0.15-0.1: MuSig2 support (beta): add mechanism to ensure that the BIP327 encrypted secnonce cannot be reused.
     // 0.16-0.1: security fixes & hardening (ResetKey 2FA HMAC fix, EC point validation, Musig2SignHash 2FA fix, MuSig2 nonce counter overflow fix, resetToFactory completion, BIP341 taproot tweak fix, ImportKey hardening, constant-time MAC comparisons, reset-to-factory refactoring, authentikey mgmt, transient AES session keys, removal of ParseTransaction/SignTransaction/signMessage, add GET_RANDOM, single PIN/PUK mgmt, ...)
+    // 0.16-0.2: faster secure channel initiation (fast secp256k1 reduction in the client pubkey curve check)
     private final static byte PROTOCOL_MAJOR_VERSION = (byte) 0; 
     private final static byte PROTOCOL_MINOR_VERSION = (byte) 16;
     private final static byte APPLET_MAJOR_VERSION = (byte) 0;
-    private final static byte APPLET_MINOR_VERSION = (byte) 1;
+    private final static byte APPLET_MINOR_VERSION = (byte) 2;
 
     // Maximum number of keys handled by the Cardlet
     private final static byte MAX_NUM_KEYS = (byte) 16;
